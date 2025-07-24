@@ -1,0 +1,132 @@
+[build-system]
+requires = ["flit_core >=3.2"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "metadata-crawler"
+authors = [{name = "DKRZ, Clint", email = "freva@dkrz.de"}]
+readme = "README.md"
+license = {file = "LICENSE"}
+classifiers = [
+               "Development Status :: 5 - Production/Stable",
+               "Environment :: Console",
+               "Intended Audience :: Developers",
+               "Intended Audience :: Science/Research",
+               "License :: OSI Approved :: BSD License",
+               "Operating System :: POSIX :: Linux",
+               "Programming Language :: Python :: 3",
+]
+dynamic = ["version"]
+description="Crawl, extract and push climate metadata for indexing."
+requires-python = ">=3.8"
+dependencies = [
+        "aiohttp",
+        "appdirs",
+        "anyio",
+        "fsspec",
+        "s3fs",
+        "h5netcdf",
+        "rich",
+        "tomli",
+        "tomlkit",
+        "typing_extensions",
+        "zarr",
+        "xarray",
+        "httpx",
+        "uvloop",
+]
+[project.optional-dependencies]
+dev = ["flit", "tox"]
+doc = [
+    "furo",
+    "sphinx",
+    "sphinxcontrib_github_alt",
+    "sphinx-execute-code-python3",
+]
+tests = [
+    "types-appdirs",
+    "black",
+    "isort",
+    "mock",
+    "mypy",
+    "pandas",
+    "pytest-asyncio",
+    "pytest-cov",
+    "pytest-env",
+    "requests",
+    "pre-commit",
+]
+deploy = [ "pyinstaller"]
+
+[project.urls]
+Documentation = "https://github.com/freva-org/freva-admin"
+Issues = "https://github.com/freva-org/freva-admin/issues"
+Source = "https://github.com/freva-org/freva-admin"
+Home = "https://github.com/freva-org/freva-admin"
+
+[project.scripts]
+metadata-crawler = "metadata_crawler.cli:cli"
+
+[project.entry-points."metadata_crawler.ingester"]
+solr = "metadata_crawler.ingester.solr:SolrIngest"
+mongo = "metadata_crawler.ingester.mongo:MongoIngest"
+file = "metadata_crawler.ingester.file:FileIngest"
+
+[project.entry-points."metadata_crawler.storage"]
+posix = "metadata_crawler.backends.posix:PosixPath"
+swift = "metadata_crawler.backends.swift:SwiftPath"
+s3 = "metadata_crawler.backends.s3:S3Path"
+intake = "metadata_crawler.backends.intake:IntakePath"
+
+[package-data]
+freva_deployment = ["py.typed", "*.toml"]
+
+[tool.tox]
+legacy_tox_ini = """
+[tox]
+min_version = 4.0
+env_list = types, lint, test
+[testenv]
+parallel_show_output = false
+[testenv:test]
+deps = -e .
+
+commands =
+    deploy-freva cmd --help
+    deploy-freva --help
+
+[testenv:docs]
+deps = .[doc]
+setenv =
+    LC_ALL = C
+    LANG = C
+allowlist_externals = make
+commands = make -C docs clean
+           make -C docs html
+[testenv:lint]
+deps = .
+       black
+       isort
+commands =
+    isort --check --profile black -t py311 -l 79 src
+[testenv:types]
+deps = .
+       mypy
+       types-paramiko
+       types-requests
+       types-toml
+       pytest-stub
+       types-PyMySQL
+commands = mypy --install-types --non-interactive
+[testenv:release]
+deps = git-python
+       packaging
+       tomli
+       requests
+commands = python3 release.py tag freva_deployment
+[testenv:build]
+deps = -e .
+       pyinstaller
+       cryptography
+commands = pyinstaller --clean --noconfirm deploy-freva.spec
+       """

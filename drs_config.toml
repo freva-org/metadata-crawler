@@ -1,0 +1,158 @@
+[nextGems]
+root_path = "test_intake.json"
+drs_format = "nextgems"
+fs_type = "intake"
+
+
+[catalogue_intake_local]
+root_path = "./data/intake/catalog/catalog.yaml"
+drs_format = "nextgems"
+fs_type = "intake"
+[catalogue_intake_local.defaults]
+time_min = "1970-01-01T00:00:00"
+time_max = "2024-01-01T00:00:00"
+project = "nextgems"
+experiment_id = "historical"
+institution_id = "MPI-M"
+source_id = "no_source_id"
+simulation_id = "no_simulation_id"
+frequency = "mon"
+realm = "atmos"
+grid_id = "gn"
+grid_label = "gn"
+bbox = [-10,30,30,60]
+
+[drs_settings.dialect.obs-fs.path_specs]
+dir_parts = [
+    "product", "institute", "instrument", "experiment", "time_frequency",
+    "realm", "cmor_table", "ensemble", "version", "variable",
+]
+file_parts = [
+    "variable", "time_frequency", "instrument", "experiment", "ensemble", "time"
+]
+[obs-fs]
+root_path = "./data/observations"
+drs_format = "obs-fs"
+[obs-fs.defaults]
+project = "observations"
+
+[foo]
+root_path = "./data/observations"
+drs_format = "foo"
+[foo.defaults]
+project = "observations"
+[drs_settings.dialect.foo]
+sources    = ["data"]
+[drs_settings.dialect.foo.data_specs.read_kws]
+engine = "h5netcdf"
+[drs_settings.dialect.foo.data_specs.globals]
+institute = "institution_id"
+experiment = "experiment_id"
+ensemble = "ensemble"
+project = "project_id"
+resolution = "nominal_resolution"
+grid_label = "grid_label"
+vars = "__variable__"
+[drs_settings.dialect.foo.data_specs.var_attrs]
+variable = { var="{vars}", attr="long_name", default="__name__" }
+
+[cmip6-fs]
+root_path = "./data/model/global/cmip6"
+drs_format = "cmip6"
+
+[reana-fs]
+root_path = "./data/model/obs"
+drs_format = "reana"
+[reana-fs.defaults]
+project = "observations"
+
+[drs_settings.dialect.reana]
+inherits_from = "cmip5"
+[drs_settings.dialect.reana.data_specs.read_kws]
+engine = "h5netcdf"
+
+[cordex-fs]
+root_path = "./data/model/regional"
+drs_format = "cordex"
+[cordex-fs.defaults]
+bbox."domain"."EUR-11" = [-10, 30, 30, 60]
+time_frequency = "mon"
+
+[obs-swfit]
+root_path = "https://swift.dkrz.de/v1/dkrz_a32dc0e8-2299-4239-a47d-6bf45c8b0160/freva_test/observations"
+fs_type = "swift"
+[obs-swfit.defaults]
+project = "observations"
+
+[drs_settings.dialect.obs-swift]
+specs_dir = [
+    "product", "institute", "model", "experiment", "time_frequency",
+    "realm", "cmor_table", "ensemble", "version", "variable",
+]
+specs_file = ["variable", "time_frequency", "model", "experiment", "ensemble", "time"]
+
+[cmip6-swfit]
+root_path = "https://swift.dkrz.de/v1/dkrz_a32dc0e8-2299-4239-a47d-6bf45c8b0160/freva_test/model/global/cmip6"
+drs_format = "cmip6"
+fs_type = "swift"
+
+[reana-swfit]
+root_path = "https://swift.dkrz.de/v1/dkrz_a32dc0e8-2299-4239-a47d-6bf45c8b0160/freva_test/model/obs"
+drs_format = "cmip5"
+fs_type = "swift"
+[reana-swfit.defaults]
+project = "observations"
+
+[cordex-swfit]
+root_path = "https://swift.dkrz.de/v1/dkrz_a32dc0e8-2299-4239-a47d-6bf45c8b0160/freva_test/model/regional"
+drs_format = "cordex"
+fs_type = "swift"
+
+[mpi-ge]
+root_path = "/ch1187/public/work/mh1007/CMOR"
+drs_format = "mpi-ge"
+fs_type = "s3"
+[mpi-ge.storage_options]
+endpoint_url = "https://s3.eu-dkrz-1.dkrz.cloud"
+key = "hE5iPXDt9oYkGMIdZRg9"
+secret = "AeKu1BCQE3W9rbcAresOYcGFWlobXFg2grKtYtWO"
+[drs_settings.dialect.mpi-ge]
+inherits_from = "cmip6"
+special = {}
+[drs_settings.dialect.mpi-ge.path_specs]
+dir_parts = ["activity_id", "mip_era", "institution", "source_id", "experiment_id", "time_frequency", "table_id", "variable_id", "member_id", "version"]
+file_parts = ["variable_id", "table_id", "source_id", "experiment_id", "member_id","time"]
+
+
+[obs-s3]
+root_path = "https://play.min.io/freva/data/observations"
+fs_type = "s3"
+[obs-s3.defaults]
+project = "observations"
+
+[drs_settings.dialect.obs-s3]
+specs_dir = [
+    "product", "institute", "model", "experiment", "time_frequency",
+    "realm", "cmor_table", "ensemble", "version", "variable",
+]
+specs_file = ["variable", "time_frequency", "model", "experiment", "ensemble", "time"]
+
+[cmip6-s3]
+root_path = "https://play.min.io/freva/data/model/global/cmip6"
+drs_format = "cmip6"
+fs_type = "s3"
+[cmip6-s3.storage_options]
+endpoint_url = "https://s3.eu-dkrz-1.dkrz.cloud"
+[reana-s3]
+root_path = "https://play.min.io/freva/data/model/obs"
+drs_format = "cmip5"
+fs_type = "s3"
+[reana-s3.storage_options]
+endpoint_url = "https://play.min.io/freva/data/model/global/cmip6"
+[reana-s3.defaults]
+project = "observations"
+
+[cordex-s3]
+root_path = "https://play.min.io/freva/data/model/regional"
+drs_format = "cordex"
+fs_type = "s3"
