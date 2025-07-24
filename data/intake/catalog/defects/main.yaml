@@ -1,0 +1,17 @@
+sources:
+  defects_list:
+    args:
+      chunks: auto
+      storage_options:
+        lazy: true
+        remote_protocol: file
+      urlpath:
+      - data/intake/work/bm1235/a270046/cycle3/tco2559l137/hzfy/hres/intel.levante.openmpi/lvt.intel.sp/Cycle3_012020/sss.fesom.2020_cropped_restricted_compressed.nc
+      - data/intake/work/bm1235/ifs-grids/multio_grids_cdoPython/0.25_griddes.nc
+      - data/intake/work/bm1235/ifs-grids/prod/z_hpx512_c3_cropped_restricted_compressed.nc
+      - data/intake/work/bm1235/a270046/cycle3/tco2559l137/hzfy/hres/intel.levante.openmpi/lvt.intel.sp/Cycle3_012020/atmoce_y.fesom.2020_cropped_restricted_compressed.nc
+      - data/intake/work/bm1235/ifs-grids/tco_grids/tco1279_grid_cropped_restricted_compressed.nc
+      - data/intake/work/bm1235/a270046/cycle3/tco2559l137/hzfy/hres/intel.levante.openmpi/lvt.intel.sp/Cycle3_012020/runoff.fesom.2020_cropped_restricted_compressed.nc
+      - data/intake/pool/data/AWICM/FESOM2/MESHES_FESOM2.1/orca25/orca25_griddes_nodes_IFS_cropped_restricted_compressed.nc
+      - data/intake/work/bm1235/a270046/meshes/NG5_griddes_nodes_IFS_cropped_restricted_compressed.nc
+    driver: netcdf

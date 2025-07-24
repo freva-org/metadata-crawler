@@ -1,0 +1,14 @@
+{
+    "_ARRAY_DIMENSIONS": [
+        "time",
+        "level_full",
+        "cell"
+    ],
+    "cell_methods": "time: point cell: mean",
+    "component": "atmo",
+    "coordinates": "zg",
+    "grid_mapping": "crs",
+    "long_name": "specific graupel content",
+    "units": "kg kg-1",
+    "vgrid": "reference"
+}

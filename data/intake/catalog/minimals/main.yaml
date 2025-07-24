@@ -1,0 +1,49 @@
+sources:
+  minimal_zarr_source:
+    args:
+      chunks: auto
+      storage_options:
+        lazy: true
+        remote_protocol: file
+      urlpath: data/intake/work/minimals/minimal.zarr
+    driver: zarr
+  minimal_nc:
+    args:
+      chunks: auto
+      storage_options:
+        lazy: true
+        remote_protocol: file
+      urlpath: data/intake/work/minimals/minimal.nc
+    driver: netcdf
+  minimal_incorrect_units:
+    args:
+      chunks: auto
+      storage_options:
+        lazy: true
+        remote_protocol: file
+      urlpath: data/intake/work/minimals/minimal_incorrect_units.nc
+    driver: netcdf
+  minimal_no_units:
+    args:
+      chunks: auto
+      storage_options:
+        lazy: true
+        remote_protocol: file
+      urlpath: data/intake/work/minimals/minimal_no_units.nc
+    driver: netcdf
+  minimal_nc_no_variables:
+    args:
+      chunks: auto
+      storage_options:
+        lazy: true
+        remote_protocol: file
+      urlpath: data/intake/work/minimals/no_variables.nc
+    driver: netcdf
+  minimal_zarr_no_units:
+    args:
+      chunks: auto
+      storage_options:
+        lazy: true
+        remote_protocol: file
+      urlpath: data/intake/work/minimals/no_variables.zarr
+    driver: zarr

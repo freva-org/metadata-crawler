@@ -1,0 +1,15 @@
+[catalogue]
+catalogue = "{data_dir}/test_catalogue.json"
+drs_format = "nextgems"
+[catalogue_intake_local]
+catalogue = "{data_dir}/data/intake/catalog.yaml"
+drs_format = "nextgems"
+search_keys = "{data_dir}/intake_config.json"
+[catalogue_intake_local_wrong_file]
+catalogue = "{data_dir}/data/intake/catalog1.yaml"
+[catalogue_intake_local_regular_yaml]
+catalogue = "{data_dir}/data/intake/catalog_nonintake.yaml"
+[catalogue_intake_online]
+catalogue = "{data_dir}/data/intake/catalog.yaml"
+drs_format = "nextgems"
+search_keys = "{data_dir}/intake_config.json"

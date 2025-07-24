@@ -1,0 +1,16 @@
+metadata:
+  access_url: https://eerie.cloud.dkrz.de/intake.yaml
+  source: Served via `xpublish-intake`
+sources:
+  era5-dkrz.pressure-level_analysis_daily:
+    args:
+      path: https://eerie.cloud.dkrz.de/datasets/era5-dkrz.pressure-level_analysis_daily/catalog.yaml
+    description: ''
+    driver: intake.catalog.local.YAMLFileCatalog
+    metadata: {}
+  except_wrong:
+    args:
+      path: data/intake/catalog/eerie_catalog/wrong.yaml
+    description: ''
+    driver: intake.catalog.local.YAMLFileCatalog
+    metadata: {}

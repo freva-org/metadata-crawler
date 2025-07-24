@@ -1,0 +1,744 @@
+{
+    "metadata": {
+        ".zattrs": {},
+        ".zgroup": {
+            "zarr_format": 2
+        },
+        "cli/.zarray": {
+            "chunks": [
+                8,
+                90,
+                12
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                2,
+                90,
+                12
+            ],
+            "zarr_format": 2
+        },
+        "cli/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "time",
+                "level_full",
+                "cell"
+            ],
+            "cell_methods": "time: mean cell: mean",
+            "component": "atmo",
+            "coordinates": "zg",
+            "grid_mapping": "crs",
+            "long_name": "specific cloud ice content",
+            "units": "kg kg-1",
+            "vgrid": "reference"
+        },
+        "clw/.zarray": {
+            "chunks": [
+                8,
+                90,
+                12
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                2,
+                90,
+                12
+            ],
+            "zarr_format": 2
+        },
+        "clw/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "time",
+                "level_full",
+                "cell"
+            ],
+            "cell_methods": "time: mean cell: mean",
+            "component": "atmo",
+            "coordinates": "zg",
+            "grid_mapping": "crs",
+            "long_name": "specific cloud water content",
+            "units": "kg kg-1",
+            "vgrid": "reference"
+        },
+        "crs/.zarray": {
+            "chunks": [
+                1
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1
+            ],
+            "zarr_format": 2
+        },
+        "crs/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "crs"
+            ],
+            "grid_mapping_name": "healpix",
+            "healpix_nside": 1,
+            "healpix_order": "nest"
+        },
+        "dzghalf/.zarray": {
+            "chunks": [
+                90,
+                12
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                90,
+                12
+            ],
+            "zarr_format": 2
+        },
+        "dzghalf/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "level_full",
+                "cell"
+            ],
+            "coordinates": "clat clon",
+            "long_name": "vertical extent of model full layer",
+            "standard_name": "cell_thickness",
+            "units": "m"
+        },
+        "hus/.zarray": {
+            "chunks": [
+                8,
+                90,
+                12
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                2,
+                90,
+                12
+            ],
+            "zarr_format": 2
+        },
+        "hus/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "time",
+                "level_full",
+                "cell"
+            ],
+            "cell_methods": "time: mean cell: mean",
+            "component": "atmo",
+            "coordinates": "zg",
+            "grid_mapping": "crs",
+            "long_name": "Specific humidity",
+            "standard_name": "specific_humidity",
+            "vgrid": "reference"
+        },
+        "level_full/.zarray": {
+            "chunks": [
+                90
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<i4",
+            "fill_value": null,
+            "filters": null,
+            "order": "C",
+            "shape": [
+                90
+            ],
+            "zarr_format": 2
+        },
+        "level_full/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "level_full"
+            ],
+            "axis": "Z",
+            "long_name": "generalized_height",
+            "positive": "down",
+            "standard_name": "height"
+        },
+        "level_half/.zarray": {
+            "chunks": [
+                91
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<i4",
+            "fill_value": null,
+            "filters": null,
+            "order": "C",
+            "shape": [
+                91
+            ],
+            "zarr_format": 2
+        },
+        "level_half/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "level_half"
+            ],
+            "axis": "Z",
+            "long_name": "generalized_height",
+            "positive": "down",
+            "standard_name": "height"
+        },
+        "pfull/.zarray": {
+            "chunks": [
+                8,
+                90,
+                12
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                2,
+                90,
+                12
+            ],
+            "zarr_format": 2
+        },
+        "pfull/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "time",
+                "level_full",
+                "cell"
+            ],
+            "cell_methods": "time: mean cell: mean",
+            "component": "atmo",
+            "coordinates": "zg",
+            "grid_mapping": "crs",
+            "standard_name": "air_pressure",
+            "units": "Pa",
+            "vgrid": "reference"
+        },
+        "pr/.zarray": {
+            "chunks": [
+                8,
+                12
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                2,
+                12
+            ],
+            "zarr_format": 2
+        },
+        "pr/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "time",
+                "cell"
+            ],
+            "cell_methods": "time: mean cell: mean",
+            "component": "atmo",
+            "grid_mapping": "crs",
+            "long_name": "precipitation flux",
+            "units": "kg m-2 s-1",
+            "vgrid": "surface"
+        },
+        "qg/.zarray": {
+            "chunks": [
+                8,
+                90,
+                12
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                2,
+                90,
+                12
+            ],
+            "zarr_format": 2
+        },
+        "qg/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "time",
+                "level_full",
+                "cell"
+            ],
+            "cell_methods": "time: mean cell: mean",
+            "component": "atmo",
+            "coordinates": "zg",
+            "grid_mapping": "crs",
+            "long_name": "specific graupel content",
+            "units": "kg kg-1",
+            "vgrid": "reference"
+        },
+        "qr/.zarray": {
+            "chunks": [
+                8,
+                90,
+                12
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                2,
+                90,
+                12
+            ],
+            "zarr_format": 2
+        },
+        "qr/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "time",
+                "level_full",
+                "cell"
+            ],
+            "cell_methods": "time: mean cell: mean",
+            "component": "atmo",
+            "coordinates": "zg",
+            "grid_mapping": "crs",
+            "long_name": "specific rain content",
+            "units": "kg kg-1",
+            "vgrid": "reference"
+        },
+        "qs/.zarray": {
+            "chunks": [
+                8,
+                90,
+                12
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                2,
+                90,
+                12
+            ],
+            "zarr_format": 2
+        },
+        "qs/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "time",
+                "level_full",
+                "cell"
+            ],
+            "cell_methods": "time: mean cell: mean",
+            "component": "atmo",
+            "coordinates": "zg",
+            "grid_mapping": "crs",
+            "long_name": "specific snow content",
+            "units": "kg kg-1",
+            "vgrid": "reference"
+        },
+        "rlut/.zarray": {
+            "chunks": [
+                8,
+                12
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                2,
+                12
+            ],
+            "zarr_format": 2
+        },
+        "rlut/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "time",
+                "cell"
+            ],
+            "cell_methods": "time: mean cell: mean",
+            "component": "atmo",
+            "grid_mapping": "crs",
+            "long_name": "toa outgoing longwave radiation",
+            "standard_name": "toa_outgoing_longwave_flux",
+            "units": "W m-2",
+            "vgrid": "toa"
+        },
+        "ta/.zarray": {
+            "chunks": [
+                8,
+                90,
+                12
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                2,
+                90,
+                12
+            ],
+            "zarr_format": 2
+        },
+        "ta/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "time",
+                "level_full",
+                "cell"
+            ],
+            "cell_methods": "time: mean cell: mean",
+            "component": "atmo",
+            "coordinates": "zg",
+            "grid_mapping": "crs",
+            "long_name": "Temperature",
+            "standard_name": "air_temperature",
+            "units": "K",
+            "vgrid": "reference"
+        },
+        "time/.zarray": {
+            "chunks": [
+                35120
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<i8",
+            "fill_value": null,
+            "filters": null,
+            "order": "C",
+            "shape": [
+                2
+            ],
+            "zarr_format": 2
+        },
+        "time/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "time"
+            ],
+            "axis": "T",
+            "calendar": "proleptic_gregorian",
+            "units": "seconds since 1970-01-01"
+        },
+        "ts/.zarray": {
+            "chunks": [
+                8,
+                12
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                2,
+                12
+            ],
+            "zarr_format": 2
+        },
+        "ts/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "time",
+                "cell"
+            ],
+            "cell_methods": "time: mean cell: mean",
+            "component": "atmo",
+            "grid_mapping": "crs",
+            "long_name": "surface temperature",
+            "standard_name": "surface_temperature",
+            "units": "K",
+            "vgrid": "surface"
+        },
+        "ua/.zarray": {
+            "chunks": [
+                8,
+                90,
+                12
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                2,
+                90,
+                12
+            ],
+            "zarr_format": 2
+        },
+        "ua/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "time",
+                "level_full",
+                "cell"
+            ],
+            "cell_methods": "time: mean cell: mean",
+            "component": "atmo",
+            "coordinates": "zg",
+            "grid_mapping": "crs",
+            "long_name": "Zonal wind",
+            "standard_name": "eastward_wind",
+            "units": "m s-1",
+            "vgrid": "reference"
+        },
+        "va/.zarray": {
+            "chunks": [
+                8,
+                90,
+                12
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                2,
+                90,
+                12
+            ],
+            "zarr_format": 2
+        },
+        "va/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "time",
+                "level_full",
+                "cell"
+            ],
+            "cell_methods": "time: mean cell: mean",
+            "component": "atmo",
+            "coordinates": "zg",
+            "grid_mapping": "crs",
+            "long_name": "Meridional wind",
+            "standard_name": "northward_wind",
+            "units": "m s-1",
+            "vgrid": "reference"
+        },
+        "wa_phy/.zarray": {
+            "chunks": [
+                8,
+                91,
+                12
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                2,
+                91,
+                12
+            ],
+            "zarr_format": 2
+        },
+        "wa_phy/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "time",
+                "level_half",
+                "cell"
+            ],
+            "cell_methods": "time: mean cell: mean",
+            "component": "atmo",
+            "coordinates": "zghalf",
+            "grid_mapping": "crs",
+            "long_name": "vertical velocity",
+            "units": "m s-1",
+            "vgrid": "reference_half"
+        },
+        "zg/.zarray": {
+            "chunks": [
+                90,
+                12
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                90,
+                12
+            ],
+            "zarr_format": 2
+        },
+        "zg/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "level_full",
+                "cell"
+            ],
+            "coordinates": "clat clon",
+            "long_name": "geometric height at full level center",
+            "standard_name": "height",
+            "units": "m"
+        },
+        "zghalf/.zarray": {
+            "chunks": [
+                91,
+                12
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                91,
+                12
+            ],
+            "zarr_format": 2
+        },
+        "zghalf/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "level_half",
+                "cell"
+            ],
+            "coordinates": "clat clon",
+            "long_name": "geometric height at half level center",
+            "standard_name": "height",
+            "units": "m"
+        }
+    },
+    "zarr_consolidated_format": 1
+}

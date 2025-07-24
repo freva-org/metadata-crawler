@@ -1,0 +1,21 @@
+{
+  "shape": [
+    4390
+  ],
+  "chunks": [
+    4390
+  ],
+  "order": "C",
+  "dimension_separator": "/",
+  "zarr_format": 2,
+  "compressor": {
+    "blocksize": 0,
+    "clevel": 5,
+    "cname": "lz4",
+    "id": "blosc",
+    "shuffle": 1
+  },
+  "dtype": "<i8",
+  "fill_value": null,
+  "filters": null
+}

@@ -1,0 +1,13 @@
+{
+    "_ARRAY_DIMENSIONS": [
+        "time",
+        "cell"
+    ],
+    "cell_methods": "time: mean cell: mean",
+    "component": "atmo",
+    "grid_mapping": "crs",
+    "long_name": "toa outgoing longwave radiation",
+    "standard_name": "toa_outgoing_longwave_flux",
+    "units": "W m-2",
+    "vgrid": "toa"
+}

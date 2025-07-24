@@ -1,0 +1,26 @@
+sources:
+  2D_1h_native:
+    args:
+      chunks:
+        nod2: -1
+        time: 1
+      urlpath:
+      - data/intake/work/bm1344/AWI/Cycle3/experimental_grid/fesom_ng5_cropped_restricted_compressed.nc
+      - data/intake/work/bm1235/b381679/IFS_cycle3/9km_fesom/rundir/Cycle3_012020/evap.fesom.2020_restricted.nc
+    driver:
+    - netcdf
+    metadata:
+      variable-long_names:
+      - ice concentration
+      - evaporation
+      - heat flux
+      - area of grid cell
+      - sea surface salinity
+      - sea surface temperature
+      variables:
+      - a_ice
+      - evap
+      - fh
+      - node_area
+      - sss
+      - sst

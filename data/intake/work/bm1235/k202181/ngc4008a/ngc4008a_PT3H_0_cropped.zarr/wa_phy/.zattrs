@@ -1,0 +1,14 @@
+{
+    "_ARRAY_DIMENSIONS": [
+        "time",
+        "level_half",
+        "cell"
+    ],
+    "cell_methods": "time: mean cell: mean",
+    "component": "atmo",
+    "coordinates": "zghalf",
+    "grid_mapping": "crs",
+    "long_name": "vertical velocity",
+    "units": "m s-1",
+    "vgrid": "reference_half"
+}

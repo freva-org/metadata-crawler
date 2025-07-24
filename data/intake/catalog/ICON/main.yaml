@@ -1,0 +1,64 @@
+sources:
+  ngc4008a:
+    args:
+      chunks: null
+      consolidated: true
+      urlpath: data/intake/work/bm1235/k202181/ngc4008a/ngc4008a_{{
+        time }}_{{ zoom }}_cropped.zarr
+    driver: zarr
+    parameters:
+      time:
+        allowed:
+        - P1D
+        - PT3H
+        - PT15M
+        default: P1D
+        description: time resolution of the dataset
+        type: str
+      zoom:
+        allowed:
+        - 0
+        default: 0
+        description: zoom resolution of the dataset
+        type: int
+    metadata:
+      project: nextGEMS
+      experiment_id: nextgems_prefinal
+      source_id: ICON-ESM
+      simulation_id: ngc4008a
+  ngc4008a_unknown_zarr:
+    args:
+      chunks: null
+      consolidated: true
+      urlpath: data/intake/work/bm1235/k202181/ngc4008a/ngc4008a__.zarr
+    driver: zarr
+    metadata:
+      project: nextGEMS
+      experiment_id: nextgems_prefinal
+      source_id: ICON-ESM
+      simulation_id: ngc4008a
+  HAMOCC:
+    description: Bonus 10km ICON/HAMOCC simulation
+    driver: yaml_file_cat
+    args:
+      path: "{{CATALOG_DIR}}/HAMOCC.yaml"
+  ngc3542:
+    description:  10km/5km ICON/HAMOCC simulation
+    driver: yaml_file_cat
+    args:
+      path: "{{CATALOG_DIR}}/ngc3542.yaml"
+  erc1011:
+    description: EERIE Cycle 1 control run
+    driver: yaml_file_cat
+    args:
+      path: "https://raw.githubusercontent.com/eerie-project/intake_catalogues/main/dkrz/disk/model-output/icon-esm-er/eerie-control-1950/main.yaml"
+  erc1017:
+    description: EERIE Cycle 1 historical run
+    driver: yaml_file_cat
+    args:
+      path: "https://raw.githubusercontent.com/eerie-project/intake_catalogues/main/dkrz/disk/model-output/icon-esm-er/eerie-spinup-1950/main.yaml"
+  C5:
+    description: Cloud-Circulation Coupling in a Changing Climate (C5)
+    driver: yaml_file_cat
+    args:
+      path: "{{CATALOG_DIR}}/C5.yaml"

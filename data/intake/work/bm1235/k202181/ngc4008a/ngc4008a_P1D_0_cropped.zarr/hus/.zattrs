@@ -1,0 +1,14 @@
+{
+    "_ARRAY_DIMENSIONS": [
+        "time",
+        "level_full",
+        "cell"
+    ],
+    "cell_methods": "time: mean cell: mean",
+    "component": "atmo",
+    "coordinates": "zg",
+    "grid_mapping": "crs",
+    "long_name": "Specific humidity",
+    "standard_name": "specific_humidity",
+    "vgrid": "reference"
+}

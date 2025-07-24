@@ -1,0 +1,12 @@
+{
+  "_ARRAY_DIMENSIONS": [
+    "time",
+    "cell"
+  ],
+  "cell_methods": "time: mean cell: mean",
+  "component": "atmo",
+  "grid_mapping": "crs",
+  "long_name": "precipitation flux",
+  "units": "kg m-2 s-1",
+  "vgrid": "surface"
+}
