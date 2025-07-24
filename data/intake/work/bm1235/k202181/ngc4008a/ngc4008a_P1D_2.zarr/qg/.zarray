@@ -1,25 +1,3 @@
-{
-  "shape": [
-    4390,
-    90,
-    192
-  ],
-  "chunks": [
-    1,
-    90,
-    192
-  ],
-  "order": "C",
-  "dimension_separator": "/",
-  "zarr_format": 2,
-  "compressor": {
-    "blocksize": 0,
-    "clevel": 5,
-    "cname": "lz4",
-    "id": "blosc",
-    "shuffle": 1
-  },
-  "dtype": "<f4",
-  "fill_value": "NaN",
-  "filters": null
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:3154b7a12818be40e6a7234357802d1053a2758aa628e78b6aca3380a77b88d3
+size 331

@@ -1,9 +1,3 @@
-{
-    "dimensions": {
-        "lat": 180,
-        "lon": 360,
-        "time": null
-    },
-    "source": "Simulated data",
-    "title": "Zarr without variables"
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:54fa08ab0d83e65a228ed81ec6a2a5d52360b1320c17412692db49b4d81477fe
+size 162

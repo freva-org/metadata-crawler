@@ -1,33 +1,3 @@
-sources:
-  2D_1h_0.25deg:
-    args:
-      urlpath:
-      - /work/bm1344/AWI/Cycle3/FESOM/IFS_4.4-FESOM_5-cycle3/025/2D_1h_native/*/*.nc
-    driver:
-    - netcdf
-    metadata:
-      variable-long_names:
-      - ice concentration
-      - evaporation
-      variables:
-      - a_ice
-      - evap
-  2D_1h_1deg:
-    args:
-      urlpath:
-      - /work/bm1344/AWI/Cycle3/FESOM/IFS_4.4-FESOM_5-cycle3/100/2D_1h_native/*/*.nc
-    driver:
-    - netcdf
-    metadata:
-      variable-long_names:
-      - ice concentration
-      - evaporation
-      - heat flux
-      - sea surface salinity
-      - sea surface temperature
-      variables:
-      - a_ice
-      - evap
-      - fh
-      - sss
-      - sst
+version https://git-lfs.github.com/spec/v1
+oid sha256:9a424b2eb20ee5f05ee00f867d27a04bba6a28aa2d96d110fc518d75559c9fb8
+size 686

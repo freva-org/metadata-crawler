@@ -1,13 +1,3 @@
-{
-    "_ARRAY_DIMENSIONS": [
-        "time",
-        "cell"
-    ],
-    "cell_methods": "time: mean cell: mean",
-    "component": "atmo",
-    "grid_mapping": "crs",
-    "long_name": "toa outgoing longwave radiation",
-    "standard_name": "toa_outgoing_longwave_flux",
-    "units": "W m-2",
-    "vgrid": "toa"
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:6a46b2f5fbaf7be88b43ca0b08dadf484052bc6c966107d89e7d3350d49cbd62
+size 310

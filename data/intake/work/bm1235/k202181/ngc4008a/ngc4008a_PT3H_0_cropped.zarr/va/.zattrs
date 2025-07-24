@@ -1,15 +1,3 @@
-{
-    "_ARRAY_DIMENSIONS": [
-        "time",
-        "level_full",
-        "cell"
-    ],
-    "cell_methods": "time: mean cell: mean",
-    "component": "atmo",
-    "coordinates": "zg",
-    "grid_mapping": "crs",
-    "long_name": "Meridional wind",
-    "standard_name": "northward_wind",
-    "units": "m s-1",
-    "vgrid": "reference"
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:5832f9970ef44f25658fafd2f024bbe85ff4bd28906aaefa957d1a60903ec6b4
+size 335

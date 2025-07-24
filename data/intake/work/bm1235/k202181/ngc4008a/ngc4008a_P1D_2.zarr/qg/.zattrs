@@ -1,1 +1,3 @@
-{"_ARRAY_DIMENSIONS": ["time", "level_full", "cell"], "cell_methods": "time: mean cell: mean", "component": "atmo", "grid_mapping": "crs", "long_name": "specific graupel content", "units": "kg kg-1", "vgrid": "reference", "coordinates": "zg"}
+version https://git-lfs.github.com/spec/v1
+oid sha256:ee0e55ad742b6132e2263736e0713273329fe8903911874b7e31fe66c13585fd
+size 243

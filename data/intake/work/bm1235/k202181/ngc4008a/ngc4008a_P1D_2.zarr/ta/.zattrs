@@ -1,1 +1,3 @@
-{"_ARRAY_DIMENSIONS": ["time", "level_full", "cell"], "cell_methods": "time: mean cell: mean", "component": "atmo", "grid_mapping": "crs", "long_name": "Temperature", "standard_name": "air_temperature", "units": "K", "vgrid": "reference", "coordinates": "zg"}
+version https://git-lfs.github.com/spec/v1
+oid sha256:44b3f6cc4d38db7395290470f7d1fe312e596db849de914f963062cdb1f5721e
+size 260

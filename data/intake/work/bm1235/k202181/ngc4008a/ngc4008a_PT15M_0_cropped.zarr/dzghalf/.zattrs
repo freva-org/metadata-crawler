@@ -1,10 +1,3 @@
-{
-    "_ARRAY_DIMENSIONS": [
-        "level_full",
-        "cell"
-    ],
-    "coordinates": "clat clon",
-    "long_name": "vertical extent of model full layer",
-    "standard_name": "cell_thickness",
-    "units": "m"
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:44b25795493e0896a33fddec41b789aba3f770044c73d0d40d42c872bb7378ee
+size 219

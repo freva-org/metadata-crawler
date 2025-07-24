@@ -1,8 +1,3 @@
-{
-    "_ARRAY_DIMENSIONS": [
-        "crs"
-    ],
-    "grid_mapping_name": "healpix",
-    "healpix_nside": 1,
-    "healpix_order": "nest"
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:73f163ca62a29912705ed314ca72d218c8249cbebba7f7246790704b8de35562
+size 140

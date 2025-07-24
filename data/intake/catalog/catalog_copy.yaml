@@ -1,16 +1,3 @@
-sources:
-  ICON:
-    description: ICON model output
-    driver: yaml_file_cat
-    args:
-        path: "{{CATALOG_DIR}}/ICON/main.yaml"
-  IFS:
-    description: IFS model output
-    driver: yaml_file_cat
-    args:
-        path: "{{CATALOG_DIR}}/IFS/main.yaml"
-  FESOM:
-    description: FESOM ocean model output
-    driver: yaml_file_cat
-    args:
-        path: "{{CATALOG_DIR}}/FESOM/main.yaml"
+version https://git-lfs.github.com/spec/v1
+oid sha256:ef7382682b68faf29f5b8c517a8a7e0ae0d01959f370ad10f735d09c4c4ccb8a
+size 393

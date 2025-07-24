@@ -1,14 +1,3 @@
-{
-    "_ARRAY_DIMENSIONS": [
-        "time",
-        "level_full",
-        "cell"
-    ],
-    "cell_methods": "time: mean cell: mean",
-    "component": "atmo",
-    "coordinates": "zg",
-    "grid_mapping": "crs",
-    "long_name": "specific rain content",
-    "units": "kg kg-1",
-    "vgrid": "reference"
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:91b0d6a56d0cdb0da3b0a8b7676ef9089c8095af4e57ced1ebcd0ab7f63691c0
+size 304

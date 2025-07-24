@@ -1,16 +1,3 @@
-metadata:
-  access_url: https://eerie.cloud.dkrz.de/intake.yaml
-  source: Served via `xpublish-intake`
-sources:
-  era5-dkrz.pressure-level_analysis_daily:
-    args:
-      path: https://eerie.cloud.dkrz.de/datasets/era5-dkrz.pressure-level_analysis_daily/catalog.yaml
-    description: ''
-    driver: intake.catalog.local.YAMLFileCatalog
-    metadata: {}
-  except_wrong:
-    args:
-      path: data/intake/catalog/eerie_catalog/wrong.yaml
-    description: ''
-    driver: intake.catalog.local.YAMLFileCatalog
-    metadata: {}
+version https://git-lfs.github.com/spec/v1
+oid sha256:602ed3357781b1c2a6318d6a77a794157aa49587637baf6943b41a573e494a56
+size 522

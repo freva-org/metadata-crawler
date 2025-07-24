@@ -1,1 +1,3 @@
-{"_ARRAY_DIMENSIONS": ["time", "level_half", "cell"], "cell_methods": "time: mean cell: mean", "component": "atmo", "grid_mapping": "crs", "long_name": "vertical velocity", "units": "m s-1", "vgrid": "reference_half", "coordinates": "zghalf"}
+version https://git-lfs.github.com/spec/v1
+oid sha256:1642a73456d29949a95a603c3202b1cae2df7a3c5002a619424ec752fc731ad3
+size 243

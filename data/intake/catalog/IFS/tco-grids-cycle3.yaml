@@ -1,9 +1,3 @@
-sources:
-  native4.4_grid:
-    driver: netcdf
-    args:
-      urlpath: "data/intake/work/bm1235/ifs-grids/tco_grids/tco2559_grid_restricted.nc"
-  native4.4_gridarea:
-    driver: netcdf
-    args:
-      urlpath: data/intake/work/bm1235/ifs-grids/tco_grids/tco2559_gridarea_restricted.nc
+version https://git-lfs.github.com/spec/v1
+oid sha256:2c2be703d44c7320ae7e34c054a3b0a423fb45bc33f0d96419f9ce1402b69c18
+size 285

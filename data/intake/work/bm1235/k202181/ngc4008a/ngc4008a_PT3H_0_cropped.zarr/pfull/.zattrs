@@ -1,14 +1,3 @@
-{
-    "_ARRAY_DIMENSIONS": [
-        "time",
-        "level_full",
-        "cell"
-    ],
-    "cell_methods": "time: mean cell: mean",
-    "component": "atmo",
-    "coordinates": "zg",
-    "grid_mapping": "crs",
-    "standard_name": "air_pressure",
-    "units": "Pa",
-    "vgrid": "reference"
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:e28ac9bd9eea9fbd52b95d7a059454d02faf87f43a2cc14d988beecff2fa102f
+size 294

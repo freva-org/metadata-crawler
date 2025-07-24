@@ -1,13 +1,3 @@
-{
-    "_ARRAY_DIMENSIONS": [
-        "time",
-        "cell"
-    ],
-    "cell_methods": "time: mean cell: mean",
-    "component": "atmo",
-    "grid_mapping": "crs",
-    "long_name": "surface temperature",
-    "standard_name": "surface_temperature",
-    "units": "K",
-    "vgrid": "surface"
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:db7a92cbd42d47080d7b946d115b28057e7f283392f48915770775438175de34
+size 291

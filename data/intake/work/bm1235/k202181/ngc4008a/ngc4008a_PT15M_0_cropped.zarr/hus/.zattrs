@@ -1,14 +1,3 @@
-{
-    "_ARRAY_DIMENSIONS": [
-        "time",
-        "level_full",
-        "cell"
-    ],
-    "cell_methods": "time: point cell: mean",
-    "component": "atmo",
-    "coordinates": "zg",
-    "grid_mapping": "crs",
-    "long_name": "Specific humidity",
-    "standard_name": "specific_humidity",
-    "vgrid": "reference"
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:cf65300b7ea318f1e630dce650b348af70bf1058b3fd9915b56773cf5c68187a
+size 319
