@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import time
-from copy import deepcopy
 from typing import (
     Any,
     AsyncIterator,
@@ -10,17 +9,16 @@ from typing import (
     Callable,
     Iterable,
     Optional,
-    Type,
-    cast,
+    Tuple,
+    Union,
 )
 
 from anyio import Path
 
 from .api.config import CrawlerSettings, DRSConfig
-from .backends.base import BasePath
 from .ingester import get_ingest_instance
 from .logger import logger
-from .utils import Console, PrintLock, daemon, load_plugins
+from .utils import Console, PrintLock, daemon
 
 
 class DataCollector:
@@ -39,30 +37,33 @@ class DataCollector:
         Password for the ingestion
     batch_size: int
         Batch size for the ingestion
-    **ingest_kwargs: str
-        Additional keyword arguments for the ingestion
+    cores: str, str
+        Names of the cores for latest and all metadata versions.
     """
 
     def __init__(
         self,
-        config_file: Path | str,
-        metadata_store: str | None = None,
+        config_file: Union[Path, str],
+        metadata_store: Optional[str] = None,
         *search_objects: CrawlerSettings,
         batch_size: int = 2500,
         comp_level: int = 4,
+        cores: Tuple[str, str] = ("latest", "files"),
     ):
         self._search_objects = search_objects
         if not search_objects:
             raise ValueError("You have to give search directories")
         self._num_files = 0
-        self.core = "files"
-        self.latest = "latest"
+        self._all_versions = cores[-1]
+        self._latest_version = cores[0]
+        self.config = DRSConfig.load(config_file)
         self.ingest_queue = get_ingest_instance(
             metadata_store=metadata_store,
             batch_size=batch_size,
             comp_level=comp_level,
+            cores=cores,
+            facets=self.config.facets,
         )
-        self.config = DRSConfig.load(config_file)
         self.ingest_queue.run_consumer()
         self._print_status = False
         try:
@@ -144,16 +145,16 @@ class DataCollector:
         rank = 0
         async for _dir in sub_dirs:
             async for _inp in self.config.datasets[drs_type].backend.rglob(
-                _dir, "*.*"
+                _dir, self.config.datasets[drs_type].glob_pattern
             ):
                 future = self.ingest_queue.executor.submit(
                     self.config.read_metadata,
                     drs_type,
                     _inp,
                 )
-                await self.ingest_queue.put(future, name=self.core)
+                await self.ingest_queue.put(future, name=self._all_versions)
                 if rank == 0:
-                    await self.ingest_queue.put(future, name=self.latest)
+                    await self.ingest_queue.put(future, name=self._latest_version)
                 self._num_files += 1
             rank += 1
         return None
@@ -173,7 +174,7 @@ class DataCollector:
         except Exception as error:
             logger.error("Error checking file %s", error)
             return
-        if is_file and suffix in self.suffixes:
+        if is_file and suffix in self.config.suffixes:
             op = self._ingest_dir
         elif pos <= 0 or suffix == ".zarr":
             op = self._ingest_dir

@@ -1,0 +1,26 @@
+---
+services:
+  solr:
+    networks:
+      - freva-rest
+    image: ghcr.io/freva-org/freva-solr:latest
+    ports:
+      - "8983:8983"
+    hostname: solr
+
+  mongodb:
+    networks:
+      - freva-rest
+    image: mongo:latest
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mongo
+      MONGO_INITDB_ROOT_PASSWORD: secret
+      MONGO_INITDB_DATABASE: search_stats
+    hostname: mongodb
+    ports:
+      - "27017:27017"
+
+
+networks:
+  freva-rest:
+    driver: bridge

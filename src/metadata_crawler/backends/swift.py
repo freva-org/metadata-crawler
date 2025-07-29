@@ -2,75 +2,70 @@
 
 from __future__ import annotations
 
-import asyncio
 import pathlib
-from datetime import datetime
 from fnmatch import fnmatch
-from typing import AsyncIterator, cast
-from urllib.parse import urljoin, urlparse
+from getpass import getuser
+from typing import Any, AsyncIterator, Union, cast
+from urllib.parse import SplitResult, urljoin, urlsplit
 
 import aiohttp
 from anyio import Path
 from rich.prompt import Prompt
 
 from ..utils import PrintLock
-from .base import BasePath
+from .base import BasePath, Metadata
 
 
 class SwiftPath(BasePath):
-    """Class to interact with the OpenStack swift cloud storage system.
+    """Class to interact with the OpenStack swift cloud storage system."""
 
-    Parameters
-    ----------
-    username: str, default: None
-        User name that is used to logon to the system.
-        This is only needed if no valid token was given.
-    password: str, default: None
-        Password that is used to logon and generate an access token.
-        This is only needed if no valid token was given.
-    url: str, default: https://archive.dkrz.de/api/v2
-        Url of the StrongLink rest API service
-    container: str, default: None
-        The swift storage container name that is used to store the data.
-    """
+    _fs_type: str = "swift"
 
-    password_prompt: str = "[b]Password to logon to the swift system[/b]"
-    # TODO: Make the url scalable ...
-    _url: str = "https://swift.dkrz.de"
-    fs_type = "swift"
-
-    def __init__(
-        self,
-        username: str | None = None,
-        password: str | None = None,
-        url: str | None = None,
-        account: str | None = None,
-    ):
-        super().__init__(
-            username=username, password=password, account=account, url=url
+    def __init__(self, **kwargs: Any):
+        super().__init__(**kwargs)
+        self.os_password = self.storage_options.get("os_password") or self._pw
+        self.os_user_id = (
+            self.storage_options.get("os_user_id") or self._user or getuser()
         )
+        self.os_auth_token = self.storage_options.get("os_auth_token")
+        self.os_auth_url = self.storage_options.get(
+            "os_auth_url", "https://swift.dkrz.de/auth/v1"
+        )
+        self.os_project_id = self.storage_options.get("os_project_id", "")
+        self.os_storage_url = self.storage_options.get(
+            "os_storage_url", ""
+        ).rstrip("/")
+        self.container = self.storage_options.get(
+            "container", self.os_storage_url.split("/")[-1]
+        ).rstrip("/")
+        self.os_storage_url = self.os_storage_url.removesuffix(self.container)
+        self.url_split = urlsplit(urljoin(self.os_storage_url, self.container))
 
     async def logon(self) -> None:
         """Logon to the swfit system if necessary."""
         with PrintLock:
-            self.password = self.password or Prompt.ask(
+            self.os_password = self.os_password or Prompt.ask(
                 self.password_prompt, password=True
             )
         headers = {
-            "X-Auth-User": f"{self.account}:{self.username}",
-            "X-Auth-Key": self.password,
+            "X-Auth-User": f"{self.os_project_id}:{self.os_user_id}",
+            "X-Auth-Key": self.os_password,
         }
         async with aiohttp.ClientSession() as session:
-            async with session.get(
-                urljoin(self._url, "auth/v1"), headers=headers
-            ) as res:
+            async with session.get(self.os_auth_url, headers=headers) as res:
                 if res.status != 200:
-                    raise ValueError(f"Logon to {self._url} failed")
-                self.token = res.headers["X-Auth-Token"]
+                    raise ValueError(f"Logon to {self.os_auth_url} failed")
+                self.os_auth_token = res.headers["X-Auth-Token"]
 
-    @staticmethod
-    async def _url_fragments(url: str) -> tuple[str, str]:
-        parsed_url = urlparse(url)
+    async def _url_fragments(self, url: str) -> str:
+        url_split = urlsplit(url)
+        parsed_url = SplitResult(
+            url_split.scheme or self.url_split.scheme,
+            url_split.netloc or self.url_split.netloc,
+            f"{self.url_split.path}/{url_split.path.rstrip('/').lstrip('/')}",
+            url_split.query,
+            url_split.fragment,
+        )
         url_path = pathlib.PosixPath(parsed_url.path).parts[1:]
         url_prefix = "/".join(url_path[:3])
         prefix = "/".join(url_path[3:])
@@ -83,6 +78,7 @@ class SwiftPath(BasePath):
         self, path: str, delimiter: str | None = "/"
     ) -> list[dict[str, str]]:
         url, prefix = await self._url_fragments(path)
+        # prefix = url.removeprefix(self.os_storage_url)
         suffix = f"?format=json&prefix={prefix}"
         if delimiter:
             suffix += f"&delimiter={delimiter}"
@@ -101,7 +97,9 @@ class SwiftPath(BasePath):
                         )
                     return cast(list[dict[str, str]], await res.json())
         # this never happens, bencause of the raise error in logon
-        raise ValueError(f"Login to {self._url} failed")  # pragma: no cover
+        raise ValueError(
+            f"Login to {self.os_storage_url} failed"
+        )  # pragma: no cover
 
     async def _get_dir_from_path(self, data: dict[str, str]) -> str | None:
         if "subdir" in data:
@@ -113,9 +111,9 @@ class SwiftPath(BasePath):
     @property
     def headers(self) -> dict[str, str]:
         """Define the headers used to interact with swift."""
-        if self.token is None:
+        if self.os_auth_token is None:
             return {}
-        return {"X-Auth-Token": self.token}
+        return {"X-Auth-Token": self.os_auth_token}
 
     async def is_file(self, path: str | Path | pathlib.Path) -> bool:
         """Check if a given path is a file object on the storage system."""
@@ -140,52 +138,58 @@ class SwiftPath(BasePath):
             for data in await self._read_json(str(path)):
                 new_path = await self._get_dir_from_path(data)
                 if new_path:
-                    yield str(path) + "/" + pathlib.PosixPath(new_path).name
+                    yield "/" + str(path).lstrip("/") + "/" + pathlib.PosixPath(
+                        new_path
+                    ).name
         except (FileNotFoundError, PermissionError):
             pass
 
-    async def mtime(self, path: str | Path | pathlib.Path) -> float:
-        """Get the modification time of a path."""
-        try:
-            data = (await self._read_json(str(path)))[0]
-            timestamp = datetime.fromisoformat(data["last_modified"])
-        except (KeyError, FileNotFoundError, IndexError) as error:
-            raise FileNotFoundError(
-                f"No such file or directory {path}"
-            ) from error
-        return timestamp.timestamp()
-
     async def rglob(
         self, path: str | Path | pathlib.Path, glob_pattern: str = "*"
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[Metadata]:
         """Search recursively for files matching a glo_pattern."""
         for data in await self._read_json(str(path), delimiter=None):
             name = data.get("name")
             if name:
                 new_path = pathlib.PosixPath(name)
-                if new_path.suffix == ".zarr":
-                    if fnmatch(new_path.name, glob_pattern):
-                        url, _ = await self._url_fragments(str(path))
-                        yield url + "/" + name
+                if (
+                    fnmatch(new_path.name, glob_pattern)
+                    and new_path.suffix in self.suffixes
+                ):
+                    url, _ = await self._url_fragments(str(path))
+                    result = urljoin(url, name).removeprefix(self.os_storage_url)
+                    yield Metadata(path="/" + result.lstrip("/"))
 
-    async def read_metadata_from_path(
-        self, attr: str, path: str | Path | pathlib.Path
-    ) -> str:
-        """Access the meta data by key-value pair
+    def path(self, path: Union[str, Path, pathlib.Path]) -> str:
+        """Get the full path (including any schemas/netlocs).
 
         Parameters
         ----------
-        attr: str
-            The name of the meta data attribute that should be reade.
-        path: str
+        path: str, asyncio.Path, pathlib.Path
             Path of the object store
 
         Returns
         -------
-        str: value of the meta data for the key
+        str:
+            URI of the object store
 
-        Raises
-        ------
-        KeyError: if attribute is not present in metadata.
         """
-        return await asyncio.to_thread(self._read_attr, attr, str(path))
+        url = urlsplit(urljoin(self.os_storage_url, self.container, str(path)))
+        return SplitResult(
+            "swift", url.netloc, url.path, url.query, url.fragment
+        ).geturl()
+
+    def uri(self, path: Union[str, Path, pathlib.Path]) -> str:
+        """Get the uri of the object store.
+
+        Parameters
+        ----------
+        path: str, asyncio.Path, pathlib.Path
+            Path of the object store
+
+        Returns
+        -------
+        str:
+            URI of the object store
+        """
+        return self.path(path)

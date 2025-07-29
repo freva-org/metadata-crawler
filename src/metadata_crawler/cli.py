@@ -3,26 +3,21 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import inspect
 import logging
 import os
 import sys
-import time
-from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import Annotated, Union, cast, get_args, get_origin, get_type_hints
+from typing import Annotated, Union, get_args, get_origin, get_type_hints
 
-import uvloop
+from metadata_crawler import add
 
 from ._version import __version__
 from .api.config import ConfigMerger
-from .logger import THIS_NAME, add_file_handle, logger, set_log_level
-from .run import async_add, call
+from .logger import THIS_NAME, add_file_handle, set_log_level
+from .run import call
 from .utils import exception_handler, load_plugins
-
-asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 
 async def display_config(config: Path | None) -> None:
@@ -67,18 +62,6 @@ class ArgParse:
             help="Print the version end exit",
         )
         self._add_general_config_to_parser(self.parser)
-        self.parser.add_argument(
-            "--cron",
-            help=(
-                "Run the crawler on a regular basis in cron mode, the "
-                "argument should follow a crontab like entry. The system"
-                " will then run the command according to the crontab like "
-                "entry, for example: */10 9-17 1 * *"
-                "if None is given (default) then cron mode won't be used."
-            ),
-            default=None,
-            type=str,
-        )
         self.subparsers = self.parser.add_subparsers(
             description="Collect or ingest metadata",
             required=True,
@@ -159,6 +142,18 @@ class ArgParse:
             action="store_true",
         )
         parser.add_argument(
+            "--latest-version",
+            type=str,
+            default="latest",
+            help="Name of the core holding 'latest' metadata.",
+        )
+        parser.add_argument(
+            "--all-versions",
+            type=str,
+            default="files",
+            help="Name of the core holding 'all' metadata versions.",
+        )
+        parser.add_argument(
             "--comp-level",
             "-z",
             help="Set the compression level for compressing files.",
@@ -166,7 +161,7 @@ class ArgParse:
             type=int,
         )
         self._add_general_config_to_parser(parser)
-        parser.set_defaults(apply_func=async_add)
+        parser.set_defaults(apply_func=add)
 
     def _add_general_config_to_parser(
         self, parser: argparse.ArgumentParser
@@ -299,7 +294,7 @@ class ArgParse:
         self.kwargs = {
             k: v
             for (k, v) in args._get_kwargs()
-            if k not in ("apply_func", "verbose", "version", "cron", "log_suffix")
+            if k not in ("apply_func", "verbose", "version", "log_suffix")
         }
         self.verbose = args.verbose
         add_file_handle(args.log_suffix)
@@ -318,33 +313,9 @@ def _run(
 ) -> None:
     """Apply the parsed method."""
     try:
-        uvloop.run(parser.apply_func(**kwargs))
+        parser.apply_func(**kwargs)
     except Exception as error:
         exception_handler(error)
-
-
-def cron_mode(
-    cron: str,
-    parser: argparse.Namespace,
-    **kwargs: Union[str, int, float, bool, Path, None],
-) -> None:
-    """Run the crawler in cron mode."""
-    from cron_converter import Cron
-
-    cron_instance = Cron(cron)
-    reference = datetime.now()
-    schedule = cron_instance.schedule(reference)
-    set_log_level(logging.INFO)
-    while True:
-        exec_time = schedule.next()
-        logger.info("Next execution: %s", exec_time.isoformat())
-        while exec_time > datetime.now():
-            time.sleep(5)
-        try:
-            _run(parser, **kwargs)
-        # This exception doesn't happen, due to the _run method catching it
-        except SystemExit:  # pragma: no cover
-            pass
 
 
 def cli(sys_args: list[str] | None = None) -> None:
@@ -353,9 +324,6 @@ def cli(sys_args: list[str] | None = None) -> None:
     try:
         parser = ArgParse()
         args = parser.parse_args(sys_args or sys.argv[1:])
-        if args.cron:
-            cron_mode(args.cron, args, **parser.kwargs)
-        else:
-            _run(args, **parser.kwargs)
+        _run(args, **parser.kwargs)
     except KeyboardInterrupt:
         raise SystemExit("Exiting program")

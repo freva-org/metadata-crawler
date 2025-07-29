@@ -118,7 +118,7 @@ class PathSpecs(BaseModel):
             raise ValueError(
                 (
                     f"Number of dir parts for {rel_path.parent} do not match "
-                    f"in {rel_path} ({len(self.dir_parts)} {len(dir_parts)})"
+                    f"- needs: {len(self.dir_parts)} has: {len(dir_parts)}"
                 )
             )
         if len(file_parts) == len(self.file_parts):
@@ -131,8 +131,7 @@ class PathSpecs(BaseModel):
             raise ValueError(
                 (
                     f"Number of file parts for {rel_path.name} do not match "
-                    f"in {rel_path} ({len(self.file_parts)} "
-                    f"{len(file_parts)})"
+                    f"- needs: {len(self.file_parts)} has: {len(file_parts)})"
                 )
             )
         _parts.setdefault("time", "fx")
@@ -256,12 +255,11 @@ class Datasets(BaseModel):
     __pydantic_extra__: Dict[str, str] = Field(init=False)
     model_config = ConfigDict(extra="allow")
     root_path: str | Path
-    drs_format: str = "cmip5"
+    drs_format: str = "freva"
     fs_type: str = "posix"
-    username: Optional[str] = None
-    api_key: Optional[str] = None
     defaults: Dict[str, Any] = Field(default_factory=dict)
     storage_options: Dict[str, Any] = Field(default_factory=dict)
+    glob_pattern: str = "*.*"
 
     @root_validator(pre=True)
     def validate_storage_options(cls, values: Dict[str, Any]) -> Dict[str, Any]:
@@ -287,7 +285,7 @@ class Datasets(BaseModel):
 
 
 class SpecialRule(BaseModel):
-    type: Literal["conditional", "lookup", "function"]
+    type: Literal["conditional", "lookup", "function", "call"]
     condition: Optional[str] = None
     true: Optional[Any] = None
     false: Optional[Any] = None
@@ -349,11 +347,11 @@ class DRSConfig(BaseModel):
                 dset.backend.storage_options.setdefault(key, option)
         for key, dset in self.datasets.items():
             self._defaults.setdefault(key, {})
-            for k, _def in self.defaults:
+            for k, _def in (dset.defaults or {}).items():
                 self._defaults[key].setdefault(k, _def)
             for k, _def in self.dialect[dset.drs_format].defaults.items():
                 self._defaults[key].setdefault(k, _def)
-            for k, _def in (dset.defaults or {}).items():
+            for k, _def in self.defaults:
                 self._defaults[key].setdefault(k, _def)
 
     @root_validator(pre=True)
@@ -402,7 +400,9 @@ class DRSConfig(BaseModel):
         values["dialect"] = {k: v for k, v in raw.items()}
         return values
 
-    def _apply_special_rules(self, standard: str, inp: Metadata) -> None:
+    def _apply_special_rules(
+        self, standard: str, inp: Metadata, specials: Dict[str, SpecialRule]
+    ) -> None:
         call = {
             "self": self,
             "data": inp.metadata,
@@ -410,13 +410,10 @@ class DRSConfig(BaseModel):
             "__file_name__": inp.path,
             "storage_backend": self.datasets[standard].backend,
         }
-        specials = {
-            f: s
-            for f, s in self.special.items()
-            if f not in self.dialect[standard].special
-        }
-        for facet, rule in {**self.dialect[standard].special, **specials}.items():
+        for facet, rule in specials.items():
             result: Any = None
+            if inp.metadata.get(facet):
+                continue
             match rule.type:
                 case "conditional":
                     cond = eval(rule.condition, {}, call)
@@ -438,6 +435,8 @@ class DRSConfig(BaseModel):
                         result = asyncio.run(func(*args))
                     else:
                         result = func(*args)
+                case "call":
+                    result = eval(textwrap.dedent(rule.call).strip())
             if result:
                 inp.metadata[facet] = result
 
@@ -526,54 +525,39 @@ class DRSConfig(BaseModel):
                         )
         for key, default in self._defaults[standard].items():
             inp.metadata.setdefault(key, default)
-        self._apply_special_rules(standard, inp)
-        return inp.metadata
+        self._apply_special_rules(standard, inp, self.dialect[standard].special)
+        return self._translate(standard, inp)
 
     def read_metadata(self, standard: str, inp: Metadata) -> Dict[str, Any]:
         """Get the meta data for a given file path."""
-
         try:
             return self._read_metadata(standard, inp)
         except Exception as error:
-            print(inp.path, inp.metadata)
             raise ValueError(error) from error
 
-    async def translate(
-        self, standard: str, data: Dict[str, Any], uri: str
-    ) -> Dict[str, Any]:
-        # 1) apply facets + defaults
+    def _translate(self, standard: str, inp: Metadata) -> Dict[str, Any]:
         out: Dict[str, Any] = {}
-        fac = self.facets
-        defs = self.defaults
+        defs = self._defaults[standard]
         dia = self.dialect[standard]
-        for field, raw_key in fac.items():
+        for field, raw_key in self.facets.items():
             if raw_key == "__file_name__":
-                val = uri
+                val = self.datasets[standard].backend.path(inp.path)
+            elif raw_key == "__uri__":
+                val = self.datasets[standard].backend.uri(inp.path)
+            elif raw_key == "__fs_type__":
+                val = self.datasets[standard].backend.fs_type(inp.path)
+            elif raw_key == "__format__":
+                val = inp.path.rpartition(".")[-1]
+            elif raw_key == "__dataset__":
+                val = standard
             else:
                 key = dia.facets.get(field, raw_key)
-                val = data.get(key, dia.defaults.get(field, defs.get(field)))
+                val = inp.metadata.get(key) or defs.get(field)
             out[field] = val
-
-        # 2) apply global special
-        for fld, rule in self.special.items():
-            if rule.type == "conditional":
-                cond = eval(rule.condition, {}, {"data": data})
-                out[fld] = rule.true if cond else rule.false
-            elif rule.type == "function":
-                out[fld] = eval(rule.call, {"data": data, "self": self})
-        # 3) apply dialect special
-        for fld, rule in dia.special.items():
-            if rule.type == "method":
-                args = [
-                    uri if a == "__file_name__" else data[a] for a in rule.args
-                ]
-                out[fld] = getattr(self, rule.method)(
-                    *args
-                )  # assume sync for brevity
-            elif rule.type == "function":
-                out[fld] = eval(rule.call, {"data": data, "self": self})
-            elif rule.type == "conditional":
-                cond = eval(rule.condition, {}, {"data": data})
-                out[fld] = rule.true if cond else rule.false
-
-        return out
+        meta_data = Metadata(path=inp.path, metadata=out)
+        self._apply_special_rules(
+            standard,
+            meta_data,
+            self.special,
+        )
+        return meta_data.metadata

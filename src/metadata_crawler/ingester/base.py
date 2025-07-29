@@ -9,6 +9,7 @@ import asyncio
 import csv
 import gzip
 import multiprocessing as mp
+import os
 from concurrent.futures import ThreadPoolExecutor
 from queue import Empty, Queue
 from threading import Lock, Thread
@@ -23,11 +24,41 @@ from typing import (
     List,
     Optional,
     Tuple,
+    cast,
 )
 
 import yaml
 
 from ..logger import logger
+
+MetadataKeys = [
+    "bbox",
+    "cmor_table",
+    "dataset",
+    "driving_model",
+    "ensemble",
+    "experiment",
+    "file",
+    "format",
+    "fs_type",
+    "grid_id",
+    "grid_label",
+    "institute",
+    "level_type",
+    "model",
+    "product",
+    "project",
+    "rcm_name",
+    "rcm_version",
+    "realm",
+    "time",
+    "time_aggregation",
+    "time_frequency",
+    "uri",
+    "user",
+    "variable",
+    "version",
+]
 
 
 def _run_async(
@@ -71,6 +102,8 @@ class BaseIngest(metaclass=abc.ABCMeta):
         self,
         uri: Optional[str] = None,
         batch_size: int = 2500,
+        cores: Tuple[str, str] = ("latest", "files"),
+        **kwargs: Any,
     ):
         self._done = 0
         self._num_objects = 0
@@ -91,16 +124,37 @@ class BaseIngest(metaclass=abc.ABCMeta):
         self._uri = uri
         self._inp_data = {}
         self._files = []
-        _ = self.input_data
         self.batch_size = batch_size
-        self.cores = "files", "latest"
+        self._cores = cores
+        self._cat: Optional[Dict[str, Any]] = None
+        if uri and os.path.isfile(uri):
+            with open(uri) as stream:
+                self._cat = yaml.safe_load(stream)
+        _ = self.input_data
+        self._facets = kwargs.get("facets") or dict(
+            zip(MetadataKeys, MetadataKeys)
+        )
+
+    @property
+    def cores(self) -> Tuple[str, str]:
+        """Names of meta data store entries for data with latest version only
+        and all versions."""
+        if self._cat:
+            return cast(Tuple[str, str], tuple(self._cat["sources"]))
+        return self._cores
+
+    @property
+    def facets(self) -> Dict[str, Any]:
+        if self._cat:
+            return self._cat["sources"][self.cores[0]]["metadata"]["facets"]
+        return self._facets
 
     async def get_metadata(
         self, core: str
     ) -> AsyncIterator[List[Dict[str, Any]]]:
-        """Get the metdata in batches."""
+        """Get the metadata in batches."""
         batch = []
-        for num, data in enumerate(self.input_data[core]):
+        for num, data in enumerate(self.input_data.get(core, [])):
             batch.append({k: v for k, v in data.items() if v})
             if num > 0 and num % self.batch_size == 0:
                 yield batch
@@ -111,15 +165,10 @@ class BaseIngest(metaclass=abc.ABCMeta):
     @property
     def input_data(self) -> Dict[str, csv.DictReader]:
         """Meta data streams."""
-        if not self._inp_data and self._uri:
-            with open(self._uri) as stream:
-                cat = yaml.safe_load(stream)
-                for core in cat["sources"]:
-                    stream = gzip.open(
-                        cat["sources"][core]["args"]["urlpath"], mode="rt"
-                    )
-                    self._files.append(stream)
-                    self._inp_data[core] = csv.DictReader(stream)
+        for core, cat in (self._cat or {}).get("sources", {}).items():
+            stream = gzip.open(cat["args"]["urlpath"], mode="rt")
+            self._files.append(stream)
+            self._inp_data[core] = csv.DictReader(stream)
         return self._inp_data
 
     async def put(

@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import glob
 import pathlib
-from typing import Any, AsyncIterator, Dict
+from typing import Any, AsyncIterator, Union
 
 from anyio import Path
 
@@ -14,10 +13,12 @@ from .base import BasePath, Metadata
 class PosixPath(BasePath):
     """Class to interact with a Posix file system."""
 
-    def __init__(self, **storage_options: Any) -> None:
-        super().__init__(**storage_options)
+    _fs_type: str = "posix"
 
-    async def is_dir(self, path: str | Path | pathlib.Path) -> bool:
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+
+    async def is_dir(self, path: Union[str, Path, pathlib.Path]) -> bool:
         """Check if a given path is a directory object on the storage system.
 
         Parameter
@@ -31,7 +32,7 @@ class PosixPath(BasePath):
         """
         return await Path(path).is_dir()
 
-    async def is_file(self, path: str | Path | pathlib.Path) -> bool:
+    async def is_file(self, path: Union[str, Path, pathlib.Path]) -> bool:
         """Check if a given path is a file object on the storage system.
 
         Parameter
@@ -48,7 +49,7 @@ class PosixPath(BasePath):
         return await Path(path).is_file()
 
     async def iterdir(
-        self, path: str | Path | pathlib.Path
+        self, path: Union[str, Path, pathlib.Path]
     ) -> AsyncIterator[str]:
         """Get all sub directories from a given path.
 
@@ -70,7 +71,7 @@ class PosixPath(BasePath):
             pass
 
     async def rglob(
-        self, path: str | Path | pathlib.Path, glob_pattern: str = "*"
+        self, path: Union[str, Path, pathlib.Path], glob_pattern: str = "*"
     ) -> AsyncIterator[str]:
         """Search recursively for paths matching a given glob pattern.
 
@@ -88,3 +89,34 @@ class PosixPath(BasePath):
         async for out_f in Path(path).rglob(glob_pattern):
             if out_f.suffix in self.suffixes:
                 yield Metadata(path=str(out_f))
+
+    def path(self, path: Union[str, Path, pathlib.Path]) -> str:
+        """Get the full path (including any schemas/netlocs).
+
+        Parameters
+        ----------
+        path: str, asyncio.Path, pathlib.Path
+            Path of the object store
+
+        Returns
+        -------
+        str:
+            URI of the object store
+
+        """
+        return str(pathlib.Path(path).absolute())
+
+    def uri(self, path: Union[str, Path, pathlib.Path]) -> str:
+        """Get the uri of the object store.
+
+        Parameters
+        ----------
+        path: str, asyncio.Path, pathlib.Path
+            Path of the object store
+
+        Returns
+        -------
+        str:
+            URI of the object store
+        """
+        return f"file://{pathlib.Path(path).absolute()}"

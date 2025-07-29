@@ -1,10 +1,11 @@
 """Random utility functions."""
 
 import asyncio
+import difflib
 import threading
 from functools import wraps
 from importlib.metadata import entry_points
-from typing import Any, Callable, Dict, Optional, TypeVar, Union
+from typing import Any, Callable, Dict, Iterable, Optional, TypeVar, Union
 
 import rich.console
 import toml
@@ -16,6 +17,25 @@ T = TypeVar("T")
 
 PrintLock = threading.Lock()
 Console = rich.console.Console(force_terminal=True, stderr=True)
+
+
+def find_closest(msg: str, target: str, options: Iterable[str]) -> str:
+    """String for rasing an Error with a text matching the closest options.
+
+    Parameters
+    ----------
+
+    target:   The string to match.
+    options:  A list of candidate strings.
+
+
+    Returns
+    -------
+        str: Message
+    """
+    matches = difflib.get_close_matches(target, options, n=1, cutoff=0.6)
+    suffix = f", did you mean {matches[0]}?" if matches else ""
+    return msg + suffix
 
 
 def load_plugins(group: str) -> list:

@@ -3,46 +3,19 @@
 from __future__ import annotations
 
 import asyncio
-import csv
 import gzip
+import json
 from collections import defaultdict
 from pathlib import Path
 from random import random
 from threading import Lock
+from typing import Optional, Tuple, Union
 
-import aiohttp
 import yaml
 
-from ..logger import logger
 from .base import BaseIngest
 
 _lock = Lock()
-
-MetadataKeys = [
-    "cmor_table",
-    "dataset",
-    "driving_model",
-    "ensemble",
-    "experiment",
-    "format",
-    "fs_type",
-    "grid_id",
-    "grid_label",
-    "institute",
-    "level_type",
-    "model",
-    "product",
-    "project",
-    "rcm_name",
-    "rcm_version",
-    "realm",
-    "time_aggregation",
-    "time_frequency",
-    "user",
-    "variable",
-    "file",
-    "uri",
-]
 
 
 class UploadError(Exception):
@@ -62,50 +35,49 @@ class FileIngest(BaseIngest):
 
     def __init__(
         self,
-        uri: str | None = None,
+        uri: Optional[str] = None,
         batch_size: int = 2500,
+        cores: Tuple[str, str] = ("latest", "files"),
         **kwargs: str,
     ) -> None:
-        super().__init__(batch_size=batch_size)
-        self._lock: None | asyncio.Lock() = None
+        super().__init__(batch_size=batch_size, cores=cores, **kwargs)
+        self._lock: Optional[asyncio.Lock()] = None
         scheme, _, path = (uri or "").rpartition("://")
         scheme = scheme or "file"
 
         self.yaml_path = Path(uri).with_suffix(".yaml")
         self.yaml_path.parent.mkdir(exist_ok=True, parents=True)
-        self._core_path = self.yaml_path.parent / "metadata-files.csv.gz"
-        self._latest_path = self.yaml_path.parent / "metadata-latest.csv.gz"
+        self._core_path = self.yaml_path.parent / "metadata-files.jsonl"
+        self._latest_path = self.yaml_path.parent / "metadata-latest.jsonl"
         comp = int(kwargs.get("comp_level", 4))
-        self._files = {}
+        self._streams = {}
         for name, path in (
-            ("files", self._core_path),
-            ("latest", self._latest_path),
+            (cores[0], self._latest_path),
+            (cores[-1], self._core_path),
         ):
-            f = gzip.open(path, mode="wt", compresslevel=comp)
-            writer = csv.DictWriter(
-                f, fieldnames=MetadataKeys, extrasaction="ignore"
-            )
-            writer.writeheader()
-            self._files[name] = (f, writer)
+            # f = gzip.open(path, mode="wt", compresslevel=comp)
+            self._streams[name] = open(path, mode="w")
 
     def _create_catalogue_file(self) -> None:
         catalog = {
             "version": 1,
             "sources": {
-                "files": {
-                    "description": "All metadata versions, gzipped CSV",
+                self.cores[0]: {
+                    "description": "Latest metadata versions, gzipped CSV",
                     "driver": "csv",
+                    "metadata": {"facets": self.facets},
                     "args": {
-                        "urlpath": str(self._core_path.absolute()),
+                        "urlpath": str(self._latest_path.absolute()),
                         "compression": "gzip",
                         "blocksize": None,
                     },
                 },
-                "latest": {
-                    "description": "Latest metadata versions only, gzipped CSV",
+                self.cores[1]: {
+                    "description": "All metadata versions only, gzipped CSV",
                     "driver": "csv",
+                    "metadata": {"facets": self.facets},
                     "args": {
-                        "urlpath": str(self._latest_path.absolute()),
+                        "urlpath": str(self._core_path.absolute()),
                         "compression": "gzip",
                         "blocksize": None,
                     },
@@ -120,18 +92,10 @@ class FileIngest(BaseIngest):
                 default_flow_style=False,
             )
 
-    def _write_metadata(self, submit: dict[str, list[dict[str, object]]]) -> None:
-        """Write metadata in csv format."""
-        for core, items in submit.items():
-            csv_writer = self._files[core][-1]
-            for obj in items:
-                csv_writer.writerow(obj)
-
     async def close(self) -> None:
         """Close the files."""
-        for _file, _ in self._files.values():
+        for _file in self._streams.values():
             _file.flush()
-            _file.write("\n]")
             _file.close()
         self._create_catalogue_file()
 
@@ -145,14 +109,14 @@ class FileIngest(BaseIngest):
         ],
         flush: bool = True,
     ) -> None:
-        submit: dict[str, list[dict[str, object]]] = defaultdict(list)
-
-        for core, metadata in metadata_batch:
-            submit[core].append(metadata)
         while _lock.locked():
             await asyncio.sleep(random())
         with _lock:
-            self._write_metadata(submit)
+            for core, metadata in metadata_batch:
+                # self._files[core][-1].writerow(metadata)
+                self._streams[core].write(
+                    json.dumps(metadata, ensure_ascii=False) + "\n"
+                )
 
     async def delete(self, flush: bool = True, **search_keys: str) -> None:
         query = []

@@ -1,18 +1,25 @@
 """Apply the metdata collector."""
 
+import asyncio
 import os
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional, Union
 
-import toml
+import uvloop
 from rich import print as pprint
 from rich.prompt import Prompt
 
 from .api.config import CrawlerSettings, DRSConfig, strip_protocol
 from .data_collector import DataCollector
 from .logger import logger
-from .utils import deprecated_key, load_plugins, timedelta, validate_bbox
+from .utils import (
+    deprecated_key,
+    find_closest,
+    load_plugins,
+    timedelta,
+    validate_bbox,
+)
 
 
 @staticmethod
@@ -31,9 +38,13 @@ def _get_search(
             for (k, cfg) in config.items()
         ]
     for item in datasets or []:
-        _search_items.append(
-            CrawlerSettings(name=item, search_path=config[item].root_path)
-        )
+        try:
+            _search_items.append(
+                CrawlerSettings(name=item, search_path=config[item].root_path)
+            )
+        except KeyError:
+            msg = find_closest(f"No such dataset: {item}", item, config.keys())
+            raise ValueError(msg) from None
     for _dir in map(strip_protocol, search_dirs or []):
         for name, cfg in config.items():
             if _dir.is_relative_to(strip_protocol(cfg.root_path)):
@@ -44,22 +55,48 @@ def _get_search(
     return _search_items
 
 
-async def call(
+async def async_call(
     index_system: str,
     method: str,
     batch_size: int = 2500,
-    catalogue_file: str | Path | None = None,
+    catalogue_file: Optional[Union[str, Path]] = None,
     *args: Any,
     **kwargs: Any,
 ) -> None:
     """Index metadata."""
+    backends = load_plugins("metadata_crawler.ingester")
     try:
-        cls = load_plugins("climate_metadata_harvester.ingester")[index_system]
+        cls = backends[index_system]
     except KeyError:
-        raise ValueError(f"{index_system} not available")
+        msg = find_closest(
+            f"No such backend: {index_system}", index_system, backends.keys()
+        )
+        raise ValueError(msg) from None
     obj = cls(batch_size=batch_size, catalogue_file=catalogue_file)
     func = getattr(obj, method)
     await func(**kwargs)
+
+
+def call(
+    index_system: str,
+    method: str,
+    batch_size: int = 2500,
+    catalogue_file: Optional[Union[str, Path]] = None,
+    *args: Any,
+    **kwargs: Any,
+):
+    """Sync version of async_call."""
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    uvloop.run(
+        async_call(
+            index_system,
+            method,
+            batch_size=batch_size,
+            catalogue_file=catalogue_file,
+            *args,
+            **kwargs,
+        )
+    )
 
 
 async def async_index(
@@ -83,7 +120,7 @@ async def async_index(
         Keyword arguments used to delete data from the index.
 
     """
-    await call(
+    await async_call(
         index_system,
         "index",
         catalogue_file=catalogue_file,
@@ -118,6 +155,8 @@ async def async_add(
     data_set: list[str] | None = None,
     batch_size: int = 2500,
     comp_level: int = 4,
+    latest_version: str = "latest",
+    all_versions: str = "files",
     password: bool = False,
 ) -> None:
     """Harvest metdata from sotrage systems and add them to an intake catalogue
@@ -129,8 +168,10 @@ async def async_add(
         Path to the intake catalogue.
     config_file:
         Path to the drs-config file.
-    data_sets:
-        Datasets that should be crawled. The datasets need to be defined
+    data_ojbect:
+        Objects (directories or catalogue files) that are processed.
+    data_set:
+        Dataset(s) that should be crawled. The datasets need to be defined
         in the drs-config file. By default all datasets are crawled.
     data_objects:
         Instead of defining datasets are are to be crawled you can crawl
@@ -141,6 +182,10 @@ async def async_add(
         preformance.
     comp_level:
         Compression level used to write the meta data to csv.gz
+    latest_version:
+        Name of the core holding 'latest' metadata.
+    all_versions:
+        Name of the core holding 'all' metadata versions.
     password:
         Display a password prompt before beginning
 
@@ -180,6 +225,7 @@ async def async_add(
             *_get_search(cfg_file, data_object, data_set),
             batch_size=batch_size,
             comp_level=comp_level,
+            cores=(latest_version, all_versions),
         ) as data_col:
             await data_col.ingest_data()
             num_files = data_col.ingested_objects

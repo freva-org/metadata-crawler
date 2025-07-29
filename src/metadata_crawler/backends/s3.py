@@ -4,48 +4,50 @@ from __future__ import annotations
 
 import asyncio
 import pathlib
-from typing import Any, AsyncIterator, Optional, Tuple
+from typing import Any, AsyncIterator, Optional, Tuple, Union
+from urllib.parse import SplitResult, urlsplit
 
 import fsspec
 from anyio import Path
 from s3fs import S3FileSystem
 
 from ..logger import logger
-from ..utils import PrintLock  # noqa
 from .base import BasePath, Metadata
 
 
 class S3Path(BasePath):
-    """Class to interact with an S3 object store.
+    """Class to interact with an S3 object store."""
 
-    Parameters
-    ----------
-    username: str, default: None
-        Key id that is used to access the resource/bucket.
-        This is only needed if the bucket is not public
-    password: str, default: None
-        Respective secret, only needed if resource is private
-    url: str, default: https://s3.eu-dkrz-1.dkrz.cloud
-        Url of the S3 endpoint
-    account: str, default: None
-        The AWS profile to use for fetching these objects.
-    """
+    _fs_type: str = "s3"
 
-    fs_type = "s3"
-
-    def __init__(self, **storage_options: Any):
-        super().__init__(**storage_options)
+    def __init__(self, **kwargs: Any):
+        super().__init__(**kwargs)
         self._client: Optional[S3FileSystem] = None
 
     async def close(self) -> None:
-        client = await self.get_client()
+        client = await self._get_client()
         await client.s3.close()
 
     def get_fs_and_path(self, path: str) -> Tuple[fsspec.AbstractFileSystem, str]:
+        """S3 implementation for returning (fs, path) suitable for xarray.
+
+        Parameters
+        ----------
+        path:
+            Path to the object store / file name
+
+
+        Returns
+        -------
+        fsspec.AbstractFileSystem, str:
+            The AbstractFileSystem class and the corresponding path to the
+            data store.
+
+        """
 
         return fsspec.filesystem("s3", **self.storage_options), path
 
-    async def get_client(self) -> S3FileSystem:
+    async def _get_client(self) -> S3FileSystem:
         if self._client is None:
             logger.debug(
                 "Creating S3 Filesystem with storage_options: %s",
@@ -60,9 +62,9 @@ class S3Path(BasePath):
             await self._client.set_session()
         return self._client
 
-    async def is_file(self, path: str | Path | pathlib.Path) -> bool:
+    async def is_file(self, path: Union[str, Path, pathlib.Path]) -> bool:
         """Check if a given path is a file object on the storage system."""
-        client = await self.get_client()
+        client = await self._get_client()
         return await client._isfile(str(path))
 
     async def is_dir(self, path: str | Path | pathlib.Path) -> bool:
@@ -71,9 +73,9 @@ class S3Path(BasePath):
         return await client._isdir(str(path))
 
     async def iterdir(
-        self, path: str | Path | pathlib.Path
+        self, path: Union[str, Path, pathlib.Path]
     ) -> AsyncIterator[str]:
-        client = await self.get_client()
+        client = await self._get_client()
         for _content in await client._lsdir(str(path)):
             if _content.get("type", "") == "directory":
                 yield f'{_content.get("name", "")}'
@@ -90,11 +92,49 @@ class S3Path(BasePath):
                 - bucket, 'bucketname'
                 - prefix, 'prefix/to/a/path'
             E.g.: '/bucketname/prefix/to/objects'
-            Will be translated into a request to `self.url`+`/bucketname?prefix="prefix/to/objects`
+            Will be translated into a request to
+            `self.url`+`/bucketname?prefix="prefix/to/objects`
         glob_pattern: str
             A string reprenseting several glob patterns, separated by '|'
             E.g.: '*.zarr|*.nc|*.hdf5'
         """
-        client = await self.get_client()
+        client = await self._get_client()
         for content in await client._glob(f"{path}/**/{glob_pattern}"):
-            yield Metadata(path=f"/{content}")
+            if Path(content).suffix in self.suffixes:
+                yield Metadata(path=f"/{content}")
+
+    def path(self, path: Union[str, Path, pathlib.Path]) -> str:
+        """Get the full path (including any schemas/netlocs).
+
+        Parameters
+        ----------
+        path: str, asyncio.Path, pathlib.Path
+            Path of the object store
+
+        Returns
+        -------
+        str:
+            URI of the object store
+
+        """
+        url = urlsplit(
+            fsspec.filesystem("s3", **self.storage_options).url(str(path))
+        )
+        return SplitResult(
+            "s3", url.netloc, url.path, url.query, url.fragment
+        ).geturl()
+
+    def uri(self, path: Union[str, Path, pathlib.Path]) -> str:
+        """Get the uri of the object store.
+
+        Parameters
+        ----------
+        path: str, asyncio.Path, pathlib.Path
+            Path of the object store
+
+        Returns
+        -------
+        str:
+            URI of the object store
+        """
+        return self.path(path)

@@ -9,7 +9,16 @@ import os
 import pathlib
 import threading
 from getpass import getuser
-from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
+from typing import (
+    Any,
+    AsyncIterator,
+    ClassVar,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
 
 import fsspec
 import xarray as xr
@@ -62,6 +71,9 @@ class BasePath(metaclass=abc.ABCMeta):
     ----------
     """
 
+    _fs_type: ClassVar[Optional[str]]
+    """Defination of the file system time for each implementation."""
+
     _lock = threading.RLock()
 
     def __init__(
@@ -75,23 +87,50 @@ class BasePath(metaclass=abc.ABCMeta):
     async def __aenter__(self) -> "BasePath":
         return self
 
-    async def __aexit__(self, *args: Any) -> None:
+    async def __aexit__(self, *args: Any, **kwargs: Any) -> None:
         await self.close()
 
     async def close(self) -> None:
         """Close any open sessions."""
 
     def get_fs_and_path(self, path: str) -> Tuple[fsspec.AbstractFileSystem, str]:
-        """Return (fs, path) suitable for xarray."""
+        """Return (fs, path) suitable for xarray.
+
+        Parameters
+        ----------
+        path:
+            Path to the object store / file name
+
+
+        Returns
+        -------
+        fsspec.AbstractFileSystem, str:
+            The AbstractFileSystem class and the corresponding path to the
+            data store.
+
+        """
         return fs_and_path(path)
 
-    def open_dataset(self, file_name: str, **read_kws: Any) -> xr.Dataset:
-        """Open a dataset."""
-        fs, path = self.get_fs_and_path(file_name)
+    def open_dataset(self, path: str, **read_kws: Any) -> xr.Dataset:
+        """Open a dataset with xarray.
+
+        Parameters
+        ----------
+        path:
+            Path to the object store / file name
+        **read_kws:
+            Keyword arguments passed to open the datasets.
+
+        Returns
+        -------
+        xarray.Dataset:
+            The xarray dataset.
+        """
+        fs, path = self.get_fs_and_path(path)
 
         def _get_engine(file_name: str) -> str:
             engines = {
-                "cfggrib": (".grb", ".grib", "gb"),
+                "cfgrib": (".grb", ".grib", "gb"),
                 "h5netcdf": (".nc", ".nc4", ".netcdf", ".cdf", ".hdf5", ".h5"),
                 "zarr": (".zarr", ".zar"),
             }
@@ -101,7 +140,7 @@ class BasePath(metaclass=abc.ABCMeta):
                         return eng
             return ""
 
-        engine = read_kws.pop("engine", _get_engine(file_name)) or None
+        engine = read_kws.pop("engine", _get_engine(path)) or None
 
         if engine == "zarr":
             mapper = fs.get_mapper(path)
@@ -109,8 +148,26 @@ class BasePath(metaclass=abc.ABCMeta):
         with fs.open(path, "rb") as stream:
             return xr.open_dataset(stream, engine=engine)
 
-    def lookup(self, file_name: str, *attrs: str, **read_kws: Any) -> Any:
-        """Get metdata from a lookup table."""
+    def lookup(self, path: str, *attrs: str, **read_kws: Any) -> Any:
+        """Get metdata from a lookup table.
+
+        This function will read metadata from a pre-defined cache table and if
+        the metadata is not present in the cache table it'll read the
+        the object store and add the metdata to the cache table.
+
+        Parameters
+        ----------
+
+        path:
+            Path to the object store / file name
+        *attrs:
+            A tuple represnting nested attributes. Attributes are nested for
+            more efficent lookup. ('atmos', '1hr', 'tas') will translate into
+            a tree of ['atmos']['1hr']['tas']
+        **read_kws:
+            Keyword arguments passed to open the datasets.
+
+        """
         keys = tuple(attrs)
         d = cmor_lookup
         with self._lock:
@@ -118,25 +175,40 @@ class BasePath(metaclass=abc.ABCMeta):
                 d = d.setdefault(a, {})
             if keys[-1] in d:
                 return d[attrs[-1]]
-            d[keys[-1]] = self.read_attr(keys[-1], file_name, **read_kws)
+            d[keys[-1]] = self.read_attr(keys[-1], path, **read_kws)
         return d[keys[-1]]
 
     def read_attr(
-        self, attr: str, file_name: str | pathlib.Path, **read_kws: Any
-    ) -> str:
-        with self.open_dataset(file_name, **read_kws) as dset:
+        self, attribute: str, path: Union[str, pathlib.Path], **read_kws: Any
+    ) -> Any:
+        """Get a metadata attribute from a datastore object.
+
+        Parameters
+        ----------
+        attr: The attribute that is queired can be of the form of
+              <attribute>, <variable>.<attribute>, <attribute>,
+              <variable>.<attribute>
+        path: Path to the object strore / file path
+        read_kws: Keyword arguments for opening the datasets.
+
+        Retruns
+        -------
+        str: Metadata from the data.
+        """
+
+        with self.open_dataset(path, **read_kws) as dset:
             attrs = dset.attrs
             for var in dset.variables:
                 for name, value in dset[var].attrs.items():
                     attrs[f"{var}.{name}"] = value
-            return attrs[attr]
+            return attrs[attribute]
 
     @abc.abstractmethod
-    async def is_dir(self, path: str | Path | pathlib.Path) -> bool:
+    async def is_dir(self, path: Union[str, Path, pathlib.Path]) -> bool:
         """Check if a given path is a directory object on the storage system.
 
-        Parameter
-        ---------
+        Parameters
+        ----------
         path : str, asyncio.Path, pathlib.Path
             Path of the object store
 
@@ -146,7 +218,7 @@ class BasePath(metaclass=abc.ABCMeta):
         """
 
     @abc.abstractmethod
-    async def is_file(self, path: str | Path | pathlib.Path) -> bool:
+    async def is_file(self, path: Union[str, Path, pathlib.Path]) -> bool:
         """Check if a given path is a file object on the storage system.
 
         Parameter
@@ -154,15 +226,18 @@ class BasePath(metaclass=abc.ABCMeta):
         path : str, asyncio.Path, pathlib.Path
             Path of the object store
 
-
         Returns
         -------
-        bool: True if path is file object, False if otherwise or doesn't exist
+        bool:
+            True if path is file object, False if otherwise or doesn't exist
 
         """
+        ...
 
+    @abc.abstractmethod
     async def iterdir(
-        self, path: str | Path | pathlib.Path
+        self,
+        path: Union[str, Path, pathlib.Path],
     ) -> AsyncIterator[str]:
         """Get all sub directories from a given path.
 
@@ -173,13 +248,14 @@ class BasePath(metaclass=abc.ABCMeta):
 
         Yields
         ------
-        str: 1st level sub directory
+        str:
+            1st level sub directory
         """
-        yield str(path)  # pragma: no cover
+        ...
 
     @abc.abstractmethod
     async def rglob(
-        self, path: str | Path | pathlib.Path, glob_pattern: str = "*"
+        self, path: Union[str, Path, pathlib.Path], glob_pattern: str = "*"
     ) -> AsyncIterator[Metadata]:
         """Search recursively for paths matching a given glob pattern.
 
@@ -197,7 +273,7 @@ class BasePath(metaclass=abc.ABCMeta):
         ...
 
     @staticmethod
-    async def suffix(path: str | Path | pathlib.Path) -> str:
+    async def suffix(path: Union[str, Path, pathlib.Path]) -> str:
         """Get the suffix of a given input path.
 
         Parameters
@@ -212,7 +288,7 @@ class BasePath(metaclass=abc.ABCMeta):
         return Path(path).suffix
 
     @staticmethod
-    async def name(path: str | Path | pathlib.Path) -> str:
+    async def name(path: Union[str, Path, pathlib.Path]) -> str:
         """Get the name of the object store.
 
         Parameters
@@ -226,7 +302,29 @@ class BasePath(metaclass=abc.ABCMeta):
         """
         return Path(path).name
 
-    async def uri(self, path: str | Path | pathlib.Path) -> str:
+    def fs_type(self, path: Union[str, Path, pathlib.Path]) -> str:
+        """Define the file system type."""
+        return self._fs_type or ""
+
+    @abc.abstractmethod
+    def path(self, path: Union[str, Path, pathlib.Path]) -> str:
+        """Get the full path (including any schemas/netlocs).
+
+        Parameters
+        ----------
+        path: str, asyncio.Path, pathlib.Path
+            Path of the object store
+
+        Returns
+        -------
+        str:
+            URI of the object store
+
+        """
+        ...
+
+    @abc.abstractmethod
+    def uri(self, path: Union[str, Path, pathlib.Path]) -> str:
         """Get the uri of the object store.
 
         Parameters
@@ -236,6 +334,7 @@ class BasePath(metaclass=abc.ABCMeta):
 
         Returns
         -------
-        str: URI of the object store
+        str:
+            URI of the object store
         """
-        return str(path)
+        ...

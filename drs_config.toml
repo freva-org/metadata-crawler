@@ -35,7 +35,9 @@ root_path = "./data/observations"
 drs_format = "obs-fs"
 [obs-fs.defaults]
 project = "observations"
-
+bbox = [0, 360, -60, 60]
+level_type = "2d"
+model = "sat"
 [foo]
 root_path = "./data/observations"
 drs_format = "foo"
@@ -78,32 +80,38 @@ drs_format = "cordex"
 bbox."domain"."EUR-11" = [-10, 30, 30, 60]
 time_frequency = "mon"
 
-[obs-swfit]
-root_path = "https://swift.dkrz.de/v1/dkrz_a32dc0e8-2299-4239-a47d-6bf45c8b0160/freva_test/observations"
+[obs-swift]
+root_path = "/observations"
 fs_type = "swift"
-[obs-swfit.defaults]
+drs_format = "obs-swift"
+[obs-swift.defaults]
 project = "observations"
-
+[obs-swift.storage_options]
+os_storage_url = "https://swift.dkrz.de/v1/dkrz_a32dc0e8-2299-4239-a47d-6bf45c8b0160/freva_test"
+os_auth_url = "https://swift.dkrz.de/auth/v1"
 [drs_settings.dialect.obs-swift]
-specs_dir = [
-    "product", "institute", "model", "experiment", "time_frequency",
+inherits_from = "cmip5"
+
+[drs_settings.dialect.obs-swift.path_specs]
+dir_parts = [
+    "grid_label", "institute", "model", "experiment", "time_frequency",
     "realm", "cmor_table", "ensemble", "version", "variable",
 ]
-specs_file = ["variable", "time_frequency", "model", "experiment", "ensemble", "time"]
+file_parts = ["variable", "time_frequency", "model", "experiment", "ensemble", "time"]
 
-[cmip6-swfit]
+[cmip6-swift]
 root_path = "https://swift.dkrz.de/v1/dkrz_a32dc0e8-2299-4239-a47d-6bf45c8b0160/freva_test/model/global/cmip6"
 drs_format = "cmip6"
 fs_type = "swift"
 
-[reana-swfit]
+[reana-swift]
 root_path = "https://swift.dkrz.de/v1/dkrz_a32dc0e8-2299-4239-a47d-6bf45c8b0160/freva_test/model/obs"
 drs_format = "cmip5"
 fs_type = "swift"
-[reana-swfit.defaults]
+[reana-swift.defaults]
 project = "observations"
 
-[cordex-swfit]
+[cordex-swift]
 root_path = "https://swift.dkrz.de/v1/dkrz_a32dc0e8-2299-4239-a47d-6bf45c8b0160/freva_test/model/regional"
 drs_format = "cordex"
 fs_type = "swift"
