@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from functools import cached_property
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Annotated, Any, Dict, List, Optional, Tuple
 from urllib.parse import ParseResult, parse_qs, urlencode, urlparse, urlunparse
 
 from motor.motor_asyncio import (
@@ -14,7 +14,7 @@ from motor.motor_asyncio import (
 )
 from pymongo import DeleteMany, UpdateOne
 
-from ..api.cli import Annotated, cli_function, cli_parameter
+from ..api.cli import cli_function, cli_parameter
 from ..api.index import BaseIndex
 from ..logger import logger
 

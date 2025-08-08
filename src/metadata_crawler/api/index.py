@@ -1,0 +1,123 @@
+"""API for adding new cataloging systems via :py:class:`BaseIngest`
+==================================================================
+"""
+
+from __future__ import annotations
+
+import abc
+from pathlib import Path
+from typing import (
+    Any,
+    AsyncIterator,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
+
+from ..api.metadata_stores import CatalogueReader
+from ..logger import logger
+
+
+class BaseIndex(metaclass=abc.ABCMeta):
+    """Base class to index metadata in the indexing system.
+
+    Any data ingestion class that implements metadata ingestion into
+    cataloguing systems should inherit from this class.
+
+    This abstract class will setup consumer threads and a fifo queue that wait
+    for new data to harvest metadata and add it to the cataloguing system.
+    Only :py:func:`add` and :py:func:`delete` are abstract methods that need
+    to be implemented for each cataloguing ingestion class. The rest is done
+    by this base class.
+
+    Parameters
+    ----------
+    catalogue_file:
+        Path to the intake catalogue
+    batch_size:
+        The amount for metadata that should be gathered `before` ingesting
+        it into the catalogue.
+
+    Attributes
+    ----------
+    """
+
+    @abc.abstractmethod
+    def __init__(
+        self,
+        catalogue_file: Union[str, Path] = None,
+        batch_size: int = 2500,
+        **kwargs: Any,
+    ) -> None:
+        self._reader: Optional[CatalogueReader] = None
+        if catalogue_file:
+            self._reader = CatalogueReader(
+                catalogue_file=catalogue_file, batch_size=batch_size
+            )
+
+    @property
+    def index_schema(self) -> Dict[str, Any]:
+        """Get the index schema."""
+        return getattr(getattr(self._reader, "store", None), "schema", {})
+
+    @property
+    def index_names(self) -> Tuple[str, str]:
+        """Get the names of the indexs for latests and all data."""
+        return getattr(getattr(self._reader, "store", None), "index_names", ())
+
+    async def get_metadata(
+        self, index_name: str
+    ) -> AsyncIterator[List[Dict[str, Any]]]:
+        """Get the metadata of an index in batches.
+
+        Parameters
+        ----------
+        index_name:
+            Name of the index that should be read.
+
+        """
+        batch = []
+        num_items = 0
+        logger.info("Indexing %s", index_name)
+        async for batch in self._reader.store.read(index_name):
+            yield batch
+            num_items += len(batch)
+        logger.info("Indexed %i items for index %s", num_items, index_name)
+
+    @abc.abstractmethod
+    async def delete(self, **kwargs: Any) -> None:
+        """Delete data from the cataloguing system.
+
+        Parameters
+        ----------
+        flush:
+            Boolean indicating whether or not the data should be flushed after
+            amending the catalogue (if implemented).
+        search_keys:
+            key-value based query for data that should be deleted.
+
+        """
+
+    @abc.abstractmethod
+    async def index(
+        self,
+        metadata: Optional[dict[str, Any]] = None,
+        core: Optional[str] = None,
+        **kwags: Any,
+    ) -> None:
+        """Add metadata into the cataloguing system.
+
+        Parameters
+        ----------
+        metadata_batch:
+            batch of metadata stored in a two valued tuple. The first entry
+            of the tuple represents a name of the catalog. This entry
+            might have different meanings for different cataloguing systems.
+            For example apache solr will receive the name of the ``core``.
+            The second  entry is the meta data itself, saved in a dictionary.
+        flush:
+            Boolean indicating whether or not the data should be flushed after
+            adding to the catalogue (if implemented)
+        """
