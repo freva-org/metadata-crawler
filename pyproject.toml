@@ -26,8 +26,6 @@ dependencies = [
         "fsspec",
         "s3fs",
         "intake",
-        "intake-sql",
-        "sqlalchemy",
         "duckdb",
         "h5netcdf",
         "rich",
@@ -110,8 +108,10 @@ commands = make -C docs clean
 deps = .
        black
        isort
+       flake8
 commands =
-    isort --check --profile black -t py311 -l 79 src
+    python3 -m isort --check --profile black -t py313 -l 79 src
+    python3 -m flake8 src --count --max-complexity=10 --ignore=E203,F405,F403,E704,W503,C901 --max-line-length=88 --statistics --show-source
 [testenv:types]
 deps = .
        mypy

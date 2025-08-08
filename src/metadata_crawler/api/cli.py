@@ -1,7 +1,7 @@
 """API for adding commands to the cli."""
 
 from functools import wraps
-from typing import Annotated, Any, Callable, Dict, Tuple, TypedDict, Union
+from typing import Any, Callable, Dict, Tuple, Union
 
 from pydantic import BaseModel, ConfigDict
 

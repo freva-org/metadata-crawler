@@ -13,9 +13,8 @@ from typing import (
 )
 
 import fsspec
-from anyio import Path
-
 import intake
+from anyio import Path
 
 from .base import BasePath, Metadata
 

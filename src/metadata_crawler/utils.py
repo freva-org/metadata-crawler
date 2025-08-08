@@ -172,7 +172,7 @@ def daemon(
     return background_func
 
 
-def timedelta(seconds: Union[int, float]) -> str:
+def timedelta_to_str(seconds: Union[int, float]) -> str:
     """Convert seconds to a more human readable format."""
     hours = seconds // 60**2
     minutes = (seconds // 60) % 60
@@ -195,35 +195,15 @@ def deprecated_key(
                 for deprecated_key, new_key in deprecated_keys.items():
                     if config.get(deprecated_key) is not None:
                         logger.critical(
-                            f"The '{deprecated_key}' key for '{config[deprecated_key]}' in 'drs_config.toml' is deprecated. "
-                            f"Please update your config file to use '{new_key}' instead."
+                            "The '%s' key for '%s' in 'drs_config.toml' "
+                            "is deprecated. Please update your config file "
+                            "to use '%s' instead.",
+                            deprecated_key,
+                            config[deprecated_key],
+                            new_key,
                         )
             return func(*args, **kwargs)
 
         return wrapper
 
     return decorator
-
-
-def validate_bbox(func: Callable[..., Any]) -> Callable[..., Any]:
-    @wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
-        config_file = args[0]
-        for dataset, config in toml.loads(config_file.read_text()).items():
-            drs_format = config.get("drs_format", "").lower()
-            bbox = config.get("bbox")
-
-            if drs_format != "cordex" and not bbox:
-                logger.debug(
-                    f"Dataset '{dataset}' uses {drs_format} format without bbox specification. "
-                    "Will use global coordinates."
-                )
-            if drs_format == "cordex" and not bbox:
-                if not bbox:
-                    logger.debug(
-                        f"Dataset '{dataset}' uses CORDEX format without bbox specification. "
-                        "Will use CORDEX domain if matched, otherwise global coordinates."
-                    )
-        return func(*args, **kwargs)
-
-    return wrapper

@@ -1,4 +1,4 @@
-from __future__ import annotations
+"""The metdata crawler."""
 
 import asyncio
 from pathlib import Path

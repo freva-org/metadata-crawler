@@ -18,14 +18,12 @@ from .utils import (
     deprecated_key,
     find_closest,
     load_plugins,
-    timedelta,
-    validate_bbox,
+    timedelta_to_str,
 )
 
 
 @staticmethod
 @deprecated_key({"root_dir": "root_path"})
-@validate_bbox
 def _get_search(
     config_file: Path,
     search_dirs: list[str] | None = None,
@@ -245,7 +243,7 @@ async def async_add(
             files_discovered = data_col.crawled_files
     finally:
         os.environ = env
-    dt = timedelta(time.time() - st)
+    dt = timedelta_to_str(time.time() - st)
     logger.info("Discovered: %s files", f"{files_discovered:10,.0f}")
     logger.info("Ingested: %s files", f"{num_files:10,.0f}")
     logger.info("Spend: %s", dt)
