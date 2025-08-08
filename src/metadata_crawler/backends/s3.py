@@ -99,9 +99,12 @@ class S3Path(BasePath):
             E.g.: '*.zarr|*.nc|*.hdf5'
         """
         client = await self._get_client()
-        for content in await client._glob(f"{path}/**/{glob_pattern}"):
-            if Path(content).suffix in self.suffixes:
-                yield Metadata(path=f"/{content}")
+        if self.is_file(path):
+            yield str(path)
+        else:
+            for content in await client._glob(f"{path}/**/{glob_pattern}"):
+                if Path(content).suffix in self.suffixes:
+                    yield Metadata(path=f"/{content}")
 
     def path(self, path: Union[str, Path, pathlib.Path]) -> str:
         """Get the full path (including any schemas/netlocs).

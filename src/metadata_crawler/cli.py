@@ -15,6 +15,7 @@ from metadata_crawler import add
 
 from ._version import __version__
 from .api.config import ConfigMerger
+from .api.metadata_stores import CatalogueBackends, IndexName
 from .logger import THIS_NAME, add_file_handle, set_log_level
 from .run import call
 from .utils import exception_handler, load_plugins
@@ -98,7 +99,26 @@ class ArgParse:
         parser.add_argument(
             "store",
             type=str,
-            help="The metadata store, can be path on file or a mongodb url",
+            help="Path to the intake catalogue",
+        )
+        parser.add_argument(
+            "--catalogue-backend",
+            "-cb",
+            type=str,
+            help="Source type of the catalogue backend.",
+            choices=CatalogueBackends.__members__.keys(),
+            default=list(CatalogueBackends.__members__.keys())[0],
+        )
+        parser.add_argument(
+            "--data-store-prefix",
+            "--prefix",
+            type=str,
+            help=(
+                "Set the path prefix for the metadata store, is can either be"
+                " an absolute path or if absolute path  is given a path prefix"
+                " relative to the yaml catalogue file."
+            ),
+            default="metadata",
         )
         parser.add_argument(
             "-c",
@@ -142,15 +162,21 @@ class ArgParse:
             action="store_true",
         )
         parser.add_argument(
+            "--threads",
+            help="Set the number of threads for collecting.",
+            type=int,
+            default=None,
+        )
+        parser.add_argument(
             "--latest-version",
             type=str,
-            default="latest",
+            default=IndexName().latest,
             help="Name of the core holding 'latest' metadata.",
         )
         parser.add_argument(
             "--all-versions",
             type=str,
-            default="files",
+            default=IndexName().all,
             help="Name of the core holding 'all' metadata versions.",
         )
         parser.add_argument(

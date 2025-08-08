@@ -38,25 +38,25 @@ project = "observations"
 bbox = [0, 360, -60, 60]
 level_type = "2d"
 model = "sat"
-[foo]
-root_path = "./data/observations"
-drs_format = "foo"
-[foo.defaults]
-project = "observations"
-[drs_settings.dialect.foo]
-sources    = ["data"]
-[drs_settings.dialect.foo.data_specs.read_kws]
-engine = "h5netcdf"
-[drs_settings.dialect.foo.data_specs.globals]
-institute = "institution_id"
-experiment = "experiment_id"
-ensemble = "ensemble"
-project = "project_id"
-resolution = "nominal_resolution"
-grid_label = "grid_label"
-vars = "__variable__"
-[drs_settings.dialect.foo.data_specs.var_attrs]
-variable = { var="{vars}", attr="long_name", default="__name__" }
+#[foo]
+#root_path = "./data/observations"
+#drs_format = "foo"
+#[foo.defaults]
+#project = "observations"
+#[drs_settings.dialect.foo]
+#sources    = ["data"]
+#[drs_settings.dialect.foo.data_specs.read_kws]
+#engine = "h5netcdf"
+#[drs_settings.dialect.foo.data_specs.globals]
+#institute = "institution_id"
+#experiment = "experiment_id"
+#ensemble = "ensemble"
+#project = "project_id"
+#resolution = "nominal_resolution"
+#grid_label = "grid_label"
+#vars = "__variable__"
+#[drs_settings.dialect.foo.data_specs.var_attrs]
+#variable = { var="{vars}", attr="long_name", default="__name__" }
 
 [cmip6-fs]
 root_path = "./data/model/global/cmip6"

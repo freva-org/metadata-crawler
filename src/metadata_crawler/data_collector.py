@@ -9,14 +9,13 @@ from typing import (
     Callable,
     Iterable,
     Optional,
-    Tuple,
     Union,
 )
 
 from anyio import Path
 
 from .api.config import CrawlerSettings, DRSConfig
-from .ingester import get_ingest_instance
+from .api.metadata_stores import CatalogueWriter, IndexName
 from .logger import logger
 from .utils import Console, PrintLock, daemon
 
@@ -37,32 +36,27 @@ class DataCollector:
         Password for the ingestion
     batch_size: int
         Batch size for the ingestion
-    cores: str, str
-        Names of the cores for latest and all metadata versions.
     """
 
     def __init__(
         self,
         config_file: Union[Path, str],
-        metadata_store: Optional[str] = None,
+        metadata_store: str,
+        index_name: IndexName,
         *search_objects: CrawlerSettings,
-        batch_size: int = 2500,
-        comp_level: int = 4,
-        cores: Tuple[str, str] = ("latest", "files"),
+        **kwargs: Union[str, int, None],
     ):
         self._search_objects = search_objects
         if not search_objects:
             raise ValueError("You have to give search directories")
         self._num_files = 0
-        self._all_versions = cores[-1]
-        self._latest_version = cores[0]
+        self.index_name = index_name
         self.config = DRSConfig.load(config_file)
-        self.ingest_queue = get_ingest_instance(
-            metadata_store=metadata_store,
-            batch_size=batch_size,
-            comp_level=comp_level,
-            cores=cores,
-            facets=self.config.facets,
+        self.ingest_queue = CatalogueWriter(
+            metadata_store,
+            index_name=index_name,
+            config=self.config,
+            **kwargs,
         )
         self.ingest_queue.run_consumer()
         self._print_status = False
@@ -136,7 +130,9 @@ class DataCollector:
         for item in itt:
             yield item
 
-    async def _ingest_dir(self, drs_type: str, search_dir: str) -> None:
+    async def _ingest_dir(
+        self, drs_type: str, search_dir: str, iterable: bool = True
+    ) -> None:
         try:
             sub_dirs = self.config.datasets[drs_type].backend.iterdir(search_dir)
         except Exception as error:
@@ -147,14 +143,13 @@ class DataCollector:
             async for _inp in self.config.datasets[drs_type].backend.rglob(
                 _dir, self.config.datasets[drs_type].glob_pattern
             ):
-                future = self.ingest_queue.executor.submit(
-                    self.config.read_metadata,
-                    drs_type,
-                    _inp,
+                await self.ingest_queue.put(
+                    _inp, drs_type, name=self.index_name.all
                 )
-                await self.ingest_queue.put(future, name=self._all_versions)
                 if rank == 0:
-                    await self.ingest_queue.put(future, name=self._latest_version)
+                    await self.ingest_queue.put(
+                        _inp, drs_type, name=self.index_name.latest
+                    )
                 self._num_files += 1
             rank += 1
         return None

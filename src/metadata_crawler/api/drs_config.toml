@@ -8,40 +8,156 @@
 suffixes = [".zarr", ".zar", ".nc4", ".nc", ".tar", ".hdf5", ".h5"]
 
 # 2) Canonical index facets → raw keys in `data`
-[drs_settings.facets]
-file              = "__file_name__"
-uri               = "__uri__"
-project           = "project"
-product           = "product"
-institute         = "institute"
-model             = "model"
-experiment        = "experiment"
-time_frequency    = "time_frequency"
-realm             = "realm"
-cmor_table        = "cmor_table"
-ensemble          = "member"
-variable          = "variable"
-time              = "time"
-grid_label        = "grid_label"
-version           = "version"
-driving_model     = "driving_model"
-rcm_name          = "rcm_name"
-rcm_version       = "rcm_version"
-dataset           = "__dataset__"
-format            = "__format__"
-grid_id           = "grid_id"
-level_type        = "level_type"
-user              = "user"
-fs_type           = "__fs_type__"
-bbox              = "bbox"
-time_aggregation  = "time_aggregation"
+[drs_settings.index_schema]
+# facet -> raw-key map
+
+[drs_settings.index_schema.file]
+key          = "file"
+type         = "path"
+multi_valued = false
+required     = true
+unique       = true
+
+[drs_settings.index_schema.uri]
+key         = "uri"
+type        = "uri"
+multi_valued = false
+required    = true
+
+[drs_settings.index_schema.project]
+key         = "project"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.product]
+key         = "product"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.institute]
+key         = "institute"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.model]
+key         = "model"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.experiment]
+key         = "experiment"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.time_frequency]
+key         = "time_frequency"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.realm]
+key         = "realm"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.cmor_table]
+key         = "cmor_table"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.ensemble]
+key         = "ensemble"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.variable]
+key         = "variable"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.time]
+key         = "time"
+type        = "daterange"
+multi_valued = false
+
+[drs_settings.index_schema.grid_label]
+key         = "grid_label"
+type        = "string"
+multi_valued = true
+default     = "gn"
+
+[drs_settings.index_schema.version]
+key         = "version"
+type        = "string"
+multi_valued = false
+default     = "-1"
+
+[drs_settings.index_schema.driving_model]
+key         = "driving_model"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.rcm_name]
+key         = "rcm_name"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.rcm_version]
+key         = "rcm_version"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.dataset]
+key         = "dataset"
+type        = "dataset"
+multi_valued = false
+default     = ""
+
+[drs_settings.index_schema.format]
+key         = "format"
+type        = "fmt"
+multi_valued = false
+
+[drs_settings.index_schema.grid_id]
+key         = "grid_id"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.level_type]
+key         = "level_type"
+type        = "string"
+multi_valued = true
+default     = "2d"
+
+[drs_settings.index_schema.user]
+key         = "user"
+type        = "string"
+multi_valued = false
+
+[drs_settings.index_schema.fs_type]
+key         = "fs_type"
+type        = "storage"
+multi_valued = false
+default     = "posix"
+
+[drs_settings.index_schema.bbox]
+key         = "bbox"
+type        = "bbox"
+multi_valued = true
+default     = [0,360,-90,90]
+
+[drs_settings.index_schema.time_aggregation]
+key         = "time_aggregation"
+type        = "string"
+multi_valued = true
+default     = "mean"
+
 
 # 3) Global special rules
-[drs_settings.special]
-time_aggregation.type      = "conditional"
-time_aggregation.condition = "'pt' in data.get('time_frequency', '').lower()"
-time_aggregation.true      = "inst"
-time_aggregation.false     = "mean"
+[drs_settings.special.time_aggregation]
+type      = "conditional"
+condition = "'pt' in data.get('time_frequency', '').lower()"
+true      = "inst"
+false     = "mean"
 
 # 4) Global storage options
 [drs_settings.storage_options]

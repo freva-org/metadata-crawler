@@ -11,11 +11,11 @@ services:
   mongodb:
     networks:
       - freva-rest
-    image: mongo:latest
+    image: ghcr.io/freva-org/freva-mongo:latest
     environment:
-      MONGO_INITDB_ROOT_USERNAME: mongo
-      MONGO_INITDB_ROOT_PASSWORD: secret
-      MONGO_INITDB_DATABASE: search_stats
+      API_MONGO_DB: metadata
+      API_MONGO_USER: mongo
+      API_MONGO_PASSWORD: secret
     hostname: mongodb
     ports:
       - "27017:27017"

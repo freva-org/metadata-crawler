@@ -11,6 +11,7 @@ from rich import print as pprint
 from rich.prompt import Prompt
 
 from .api.config import CrawlerSettings, DRSConfig, strip_protocol
+from .api.metadata_stores import IndexName
 from .data_collector import DataCollector
 from .logger import logger
 from .utils import (
@@ -101,7 +102,7 @@ def call(
 
 async def async_index(
     index_system: str,
-    catalogue_file: Path | str,
+    catalogue_file: Union[Path, str],
     batch_size: int = 2500,
     **kwargs: Any,
 ) -> None:
@@ -153,41 +154,50 @@ async def async_add(
     config_file: Path | None | str = None,
     data_object: list[str] | None = None,
     data_set: list[str] | None = None,
+    data_store_prefix: str = "metadata",
     batch_size: int = 2500,
     comp_level: int = 4,
-    latest_version: str = "latest",
-    all_versions: str = "files",
+    catalogue_backend: str = "sqlite",
+    latest_version: str = IndexName().latest,
+    all_versions: str = IndexName().all,
     password: bool = False,
+    threads: Optional[int] = None,
 ) -> None:
     """Harvest metdata from sotrage systems and add them to an intake catalogue
 
     Parameters
     ----------
 
-    store: str
+    store:
         Path to the intake catalogue.
     config_file:
         Path to the drs-config file.
+    data_objects:
+        Instead of defining datasets that are to be crawled you can crawl
+        data based on their directories. The directories must be a root dirs
+        given in the drs-config file. By default all root dirs are crawled.
     data_ojbect:
         Objects (directories or catalogue files) that are processed.
     data_set:
         Dataset(s) that should be crawled. The datasets need to be defined
         in the drs-config file. By default all datasets are crawled.
-    data_objects:
-        Instead of defining datasets are are to be crawled you can crawl
-        data based on their directories. The directories must be a root dirs
-        given in the drs-config file. By default all root dirs are crawled.
+    data_store_prefix: str
+        Absolute path or relative path to intake catalogue source
     batch_size:
         Batch size that is used to collect the meta data. This can affect
         preformance.
     comp_level:
         Compression level used to write the meta data to csv.gz
+    catalogue_backend:
+        Intake catalogue backend
     latest_version:
         Name of the core holding 'latest' metadata.
     all_versions:
         Name of the core holding 'all' metadata versions.
     password:
         Display a password prompt before beginning
+    threads:
+        Set the number of threads for collecting.
 
 
     Example
@@ -222,10 +232,13 @@ async def async_add(
         async with DataCollector(
             cfg_file,
             store,
+            IndexName(latest=latest_version, all=all_versions),
             *_get_search(cfg_file, data_object, data_set),
             batch_size=batch_size,
             comp_level=comp_level,
-            cores=(latest_version, all_versions),
+            backend=catalogue_backend,
+            data_store_prefix=data_store_prefix,
+            threads=threads,
         ) as data_col:
             await data_col.ingest_data()
             num_files = data_col.ingested_objects

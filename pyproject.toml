@@ -25,6 +25,10 @@ dependencies = [
         "anyio",
         "fsspec",
         "s3fs",
+        "intake",
+        "intake-sql",
+        "sqlalchemy",
+        "duckdb",
         "h5netcdf",
         "rich",
         "tomli",
@@ -68,9 +72,8 @@ Home = "https://github.com/freva-org/freva-admin"
 metadata-crawler = "metadata_crawler.cli:cli"
 
 [project.entry-points."metadata_crawler.ingester"]
-solr = "metadata_crawler.ingester.solr:SolrIngest"
-mongo = "metadata_crawler.ingester.mongo:MongoIngest"
-file = "metadata_crawler.ingester.file:FileIngest"
+solr = "metadata_crawler.ingester.solr:SolrIndex"
+mongo = "metadata_crawler.ingester.mongo:MongoIndex"
 
 [project.entry-points."metadata_crawler.storage"]
 posix = "metadata_crawler.backends.posix:PosixPath"

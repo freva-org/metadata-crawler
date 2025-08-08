@@ -1,4 +1,5 @@
 import logging
+import logging.config
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, Iterator, Optional
@@ -8,6 +9,39 @@ from rich.console import Console
 from rich.logging import RichHandler
 
 THIS_NAME = "data-crawler"
+
+logging.basicConfig(
+    level=logging.WARNING,
+    format="%(asctime)s %(levelname)s: %(name)s - %(message)s",
+)
+
+logging.config.dictConfig(
+    {
+        "version": 1,
+        # keep existing handlers
+        "disable_existing_loggers": False,
+        "root": {
+            "level": "WARNING",
+            "handlers": ["default"],
+        },
+        "formatters": {
+            "standard": {
+                "format": "%(asctime)s %(levelname)s: %(name)s - %(message)s",
+            },
+        },
+        "handlers": {
+            "default": {
+                "class": "logging.StreamHandler",
+                "formatter": "standard",
+                "level": "WARNING",
+            },
+        },
+    }
+)
+
+logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
 
 
 class Logger(logging.Logger):

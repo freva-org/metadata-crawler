@@ -3,22 +3,32 @@ from __future__ import annotations
 import asyncio
 import inspect
 import os
+import re
 import textwrap
 from copy import deepcopy
-from enum import StrEnum
+from datetime import datetime
+from enum import Enum, StrEnum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Literal, Optional
+from typing import Any, Callable, Dict, List, Literal, Optional, Union
 from urllib.parse import urlsplit
 
 import numpy as np
 import tomli
 import tomlkit
 import xarray
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, root_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+    root_validator,
+)
 from tomlkit.container import OutOfOrderTableProxy, Table
 
 from ..backends.base import Metadata
-from ..utils import load_plugins
+from ..utils import convert_str_to_timestamp, load_plugins
 
 
 def is_async_callable(fn: Callable[..., Any]) -> bool:
@@ -26,6 +36,79 @@ def is_async_callable(fn: Callable[..., Any]) -> bool:
     Return True if `fn` is an async function (i.e. defined with `async def`).
     """
     return asyncio.iscoroutinefunction(fn) or inspect.iscoroutinefunction(fn)
+
+
+class BaseType(str, Enum):
+    string = "string"
+    integer = "integer"
+    float = "float"
+    timestamp = "timestamp"
+
+
+class Types(str, Enum):
+    string = "string"
+    integer = "integer"
+    float = "float"
+    timestamp = "timestamp"
+    daterange = "timestamp[2]"
+    path = "string"
+    uri = "string"
+    dataset = "string"
+    fmt = "string"
+    storage = "string"
+    bbox = "float[4]"
+
+
+class SchemaField(BaseModel):
+    key: str
+    type: str
+    required: bool = False
+    default: Optional[Any] = None
+    length: Optional[int] = None
+    base_type: BaseType = Field(default_factory=str)
+    multi_valued: bool = True
+    indexed: bool = True
+    name: Optional[str] = None
+    unique: bool = False
+
+    @field_validator("type")
+    @classmethod
+    def parse_type(cls, v: str) -> str:
+        """
+        Accepts
+        -------
+          - 'string', 'integer', 'float', 'timestamp' -> length=None
+          - 'float[2]', 'int[5]' -> length=number
+          - 'string[]'  -> length=None, multi_valued semantics
+          - 'daterange' [timestamp, timestamp]
+        """
+        f_type = getattr(getattr(Types, v, None), "value", v)
+        m = re.fullmatch(r"({})(\[(\d*)\])?".format("|".join(BaseType)), f_type)
+        if not m:
+            raise ValueError(f"invalid type spec {v!r}")
+        base, _, num = m.groups()
+        cls.__parsed_type = {"base": base, "length": int(num) if num else None}
+        return v
+
+    @model_validator(mode="after")
+    def set_parsed(self) -> "SchemaField":
+        parsed = self.__parsed_type
+        self.base_type = BaseType(parsed["base"])
+        self.length = parsed["length"]
+        self.name = self.name or self.key
+        return self
+
+    @staticmethod
+    def get_time_range(time_stamp: str) -> List[datetime]:
+        """Convert a from to time range to a begin or end time step."""
+        start_str, _, end_str = (
+            time_stamp.replace(":", "").replace("_", "-").partition("-")
+        )
+        start = convert_str_to_timestamp(
+            start_str or "fx", alternative="0001-01-01"
+        )
+        end = convert_str_to_timestamp(end_str or "fx", alternative="9999-12-31")
+        return [start, end]
 
 
 class MetadataSource(StrEnum):
@@ -54,18 +137,19 @@ class StatRule(BaseModel):
 
 class ConfigMerger:
     """
-    Loads a system and user TOML, merges user → system under 'drs_settings',
+    Loads a system and user TOML, merges user -> system under 'drs_settings',
     preserves comments/formatting, and lets you inspect or write the result.
     """
 
-    def __init__(self, user_path: Path | str):
+    def __init__(self, user_path: Optional[Union[Path, str]] = None):
         # parse both documents
         system_path = Path(__file__).parent / "drs_config.toml"
         self._system_doc = tomlkit.parse(system_path.read_text(encoding="utf-8"))
-        self._user_doc = tomlkit.parse(
-            Path(user_path).read_text(encoding="utf-8")
-        )
-        self._merge_tables(self._system_doc, self._user_doc)
+        if user_path:
+            self._user_doc = tomlkit.parse(
+                Path(user_path).read_text(encoding="utf-8")
+            )
+            self._merge_tables(self._system_doc, self._user_doc)
 
     def _merge_tables(self, base: Table, override: Table) -> None:
 
@@ -322,7 +406,7 @@ class Dialect(BaseModel):
 
 class DRSConfig(BaseModel):
     datasets: Dict[str, Datasets]
-    facets: Dict[str, str]
+    index_schema: Dict[str, SchemaField] = Field(...)
     suffixes: List[str] = Field(default_factory=list)
     storage_options: Dict[str, Any] = Field(default_factory=dict)
     defaults: Dict[str, Any] = Field(default_factory=dict)
@@ -451,7 +535,7 @@ class DRSConfig(BaseModel):
         return self.dialect[drs_type].path_specs.get_metadata_from_path(rel_path)
 
     @classmethod
-    def load(cls, config_path: Path | str) -> DRSConfig:
+    def load(cls, config_path: Optional[Union[Path, str]] = None) -> DRSConfig:
         cfg = tomli.loads(ConfigMerger(config_path).dumps())
         settings = cfg.pop("drs_settings")
         try:
@@ -477,14 +561,15 @@ class DRSConfig(BaseModel):
         """
         search_dir = strip_protocol(search_dir)
         root_path = strip_protocol(self.datasets[drs_type].root_path)
-        version = self.facets.get("version", "version")
+        standard = self.datasets[drs_type].drs_format
+        version = self.dialect[standard].facets.get("version", "version")
         try:
-            version_idx = self.dialect[drs_type].path_specs.dir_parts.index(
+            version_idx = self.dialect[standard].path_specs.dir_parts.index(
                 version
             )
         except ValueError:
             # No version given
-            version_idx = len(self.dialect[drs_type].path_specs.dir_parts)
+            version_idx = len(self.dialect[standard].path_specs.dir_parts)
         if root_path == search_dir:
             current_pos = 0
         else:
@@ -497,7 +582,9 @@ class DRSConfig(BaseModel):
             return False
         complete = True
         preset = {**self._defaults[standard], **self.dialect[standard].special}
-        facets = (k for k, v in self.facets.items() if not v.startswith("__"))
+        facets = (
+            k for k, v in self.index_schema.items() if not v.key.startswith("__")
+        )
         for facet in self.dialect[standard].facets or facets:
             if facet not in data and facet not in preset:
                 complete = False
@@ -531,7 +618,9 @@ class DRSConfig(BaseModel):
     def read_metadata(self, standard: str, inp: Metadata) -> Dict[str, Any]:
         """Get the meta data for a given file path."""
         try:
-            return self._read_metadata(standard, inp)
+            return self._read_metadata(
+                standard, Metadata(path=inp.path, metdata=inp.metadata.copy())
+            )
         except Exception as error:
             raise ValueError(error) from error
 
@@ -539,25 +628,35 @@ class DRSConfig(BaseModel):
         out: Dict[str, Any] = {}
         defs = self._defaults[standard]
         dia = self.dialect[standard]
-        for field, raw_key in self.facets.items():
-            if raw_key == "__file_name__":
-                val = self.datasets[standard].backend.path(inp.path)
-            elif raw_key == "__uri__":
-                val = self.datasets[standard].backend.uri(inp.path)
-            elif raw_key == "__fs_type__":
-                val = self.datasets[standard].backend.fs_type(inp.path)
-            elif raw_key == "__format__":
-                val = inp.path.rpartition(".")[-1]
-            elif raw_key == "__dataset__":
-                val = standard
-            else:
-                key = dia.facets.get(field, raw_key)
-                val = inp.metadata.get(key) or defs.get(field)
-            out[field] = val
-        meta_data = Metadata(path=inp.path, metadata=out)
         self._apply_special_rules(
             standard,
-            meta_data,
+            inp,
             self.special,
         )
-        return meta_data.metadata
+        for field, schema in self.index_schema.items():
+            if schema.indexed is False:
+                continue
+            match schema.type:
+                case "path":
+                    val = self.datasets[standard].backend.path(inp.path)
+                case "uri":
+                    val = self.datasets[standard].backend.uri(inp.path)
+                case "storage":
+                    val = self.datasets[standard].backend.fs_type(inp.path)
+                case "dataset":
+                    val = standard
+                case "fmt":
+                    val = Path(inp.path).suffix.lstrip(".")
+                case "daterange":
+                    val = schema.get_time_range(
+                        inp.metadata.get(field) or defs.get(field)
+                    )
+                case _:
+                    key = dia.facets.get(schema.key, field)
+                    val = inp.metadata.get(key) or defs.get(field)
+            val = val or schema.default
+            if schema.multi_valued or schema.length:
+                if not isinstance(val, list) and val:
+                    val = [val]
+            out[field] = val
+        return out

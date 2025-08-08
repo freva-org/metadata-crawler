@@ -86,9 +86,13 @@ class PosixPath(BasePath):
         ------
         str: Path of the object store that matches the glob pattern.
         """
-        async for out_f in Path(path).rglob(glob_pattern):
-            if out_f.suffix in self.suffixes:
-                yield Metadata(path=str(out_f))
+        p = Path(path)
+        if await self.is_file(p):
+            yield Metadata(path=str(p))
+        else:
+            async for out_f in p.rglob(glob_pattern):
+                if out_f.suffix in self.suffixes:
+                    yield Metadata(path=str(out_f))
 
     def path(self, path: Union[str, Path, pathlib.Path]) -> str:
         """Get the full path (including any schemas/netlocs).
