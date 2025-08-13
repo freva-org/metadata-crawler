@@ -596,10 +596,14 @@ class CatalogueReader:
     """
 
     def __init__(
-        self, catalogue_file: Union[str, Path], batch_size: int = 2500
+        self,
+        catalogue_file: Union[str, Path],
+        batch_size: int = 2500,
+        storage_options: Optional[Dict[str, Any]] = None,
     ) -> None:
         catalogue_file = str(catalogue_file)
-        fs, _ = IndexStore.get_fs(catalogue_file)
+        storage_options = storage_options or {}
+        fs, _ = IndexStore.get_fs(catalogue_file, **storage_options)
         path = fs.unstrip_protocol(catalogue_file)
         with fs.open(path) as stream:
             cat = yaml.safe_load(stream.read())

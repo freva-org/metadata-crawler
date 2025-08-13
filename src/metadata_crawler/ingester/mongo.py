@@ -22,13 +22,7 @@ from ..logger import logger
 class MongoIndex(BaseIndex):
     """Ingest metadata into a mongoDB server."""
 
-    def __init__(
-        self,
-        catalogue_file: str,
-        batch_size: int = 2500,
-        **kwargs: str,
-    ) -> None:
-        super().__init__(catalogue_file, batch_size)
+    def __post_init__(self) -> None:
         self._raw_uri = ""
         self._url = ""
         self._client: Optional[AsyncIOMotorClient[Any]] = None

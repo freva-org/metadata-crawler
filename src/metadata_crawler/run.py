@@ -83,9 +83,13 @@ async def async_call(
     _event_loop = asyncio.get_event_loop()
     flat_files = flat_files or [""]
     futures = []
+    storage_options = kwargs.pop("storage_options", {})
     for catalogue_file in flat_files:
-        print(catalogue_file)
-        obj = cls(batch_size=batch_size, catalogue_file=catalogue_file or None)
+        obj = cls(
+            batch_size=batch_size,
+            catalogue_file=catalogue_file or None,
+            storage_options=storage_options,
+        )
         func = getattr(obj, method)
         future = _event_loop.create_task(func(**kwargs))
         futures.append(future)

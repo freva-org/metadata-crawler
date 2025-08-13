@@ -16,12 +16,7 @@ from ..logger import logger
 class SolrIndex(BaseIndex):
     """Ingest metadata into an apache solr server."""
 
-    def __init__(
-        self,
-        catalogue_file: str,
-        batch_size: int = 2500,
-    ) -> None:
-        super().__init__(catalogue_file, batch_size)
+    def __post_init__(self) -> None:
         self.timeout = aiohttp.ClientTimeout(total=50)
         self._uri: str = ""
 
@@ -45,7 +40,7 @@ class SolrIndex(BaseIndex):
         server: Annotated[
             Optional[str],
             cli_parameter(
-                "-s",
+                "-sv",
                 "--server",
                 help="The <host>:<port> to the solr server",
                 type=str,
@@ -123,7 +118,7 @@ class SolrIndex(BaseIndex):
         server: Annotated[
             Optional[str],
             cli_parameter(
-                "-s",
+                "-sv",
                 "--server",
                 help="The <host>:<port> to the solr server",
                 type=str,

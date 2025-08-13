@@ -22,7 +22,7 @@ from ..api.metadata_stores import CatalogueReader, IndexStore
 from ..logger import logger
 
 
-class BaseIndex(metaclass=abc.ABCMeta):
+class BaseIndex:
     """Base class to index metadata in the indexing system.
 
     Any data ingestion class that implements metadata ingestion into
@@ -46,19 +46,24 @@ class BaseIndex(metaclass=abc.ABCMeta):
     ----------
     """
 
-    @abc.abstractmethod
     def __init__(
         self,
         catalogue_file: Optional[Union[str, Path]] = None,
         batch_size: int = 2500,
+        storage_options: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> None:
         self._store: Optional[IndexStore] = None
         if catalogue_file is not None:
             _reader = CatalogueReader(
-                catalogue_file=catalogue_file or "", batch_size=batch_size
+                catalogue_file=catalogue_file or "",
+                batch_size=batch_size,
+                storage_options=storage_options,
             )
             self._store = _reader.store
+        self.__post_init__()
+
+    def __post_init__(self): ...
 
     @property
     def index_schema(self) -> Dict[str, SchemaField]:

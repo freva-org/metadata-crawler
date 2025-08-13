@@ -32,7 +32,22 @@ from .logger import THIS_NAME, add_file_handle, set_log_level
 from .utils import exception_handler, load_plugins
 
 
-async def display_config(config: Path | None) -> None:
+def _process_storage_option(option: str) -> Union[float, str, int, bool]:
+
+    if option.lower() in ("false", "true"):
+        return option.lower() == "true"
+    try:
+        return int(option)
+    except ValueError:
+        pass
+    try:
+        return float(option)
+    except ValueError:
+        pass
+    return option
+
+
+def display_config(config: Path | None) -> None:
     """Display the config file."""
 
     default_config = Path(__file__).parent / "drs_config.toml"
@@ -261,6 +276,16 @@ class ArgParse:
                     default=2500,
                     help="Set the batch size for ingestion.",
                 )
+                parser.add_argument(
+                    "--storage_option",
+                    "-s",
+                    help=(
+                        "Set addtional storage options for adding metadata to "
+                        " the metadta store"
+                    ),
+                    action="append",
+                    nargs=2,
+                )
                 params = inspect.signature(method).parameters
                 annotations = get_type_hints(method, include_extras=True)
                 for param_name, param in params.items():
@@ -355,8 +380,13 @@ class ArgParse:
         storage_options: List[Tuple[str, str]] = getattr(
             args, "storage_option", []
         )
-        if storage_options:
-            self.kwargs["storage_options"] = dict(storage_options)
+        self.kwargs["storage_options"]: Dict[
+            str, Union[str, int, float, bool]
+        ] = {}
+        for option, value in storage_options:
+            self.kwargs["storage_options"][option] = _process_storage_option(
+                value
+            )
         self.verbose = args.verbose
         add_file_handle(args.log_suffix)
         set_log_level(self.log_level)
