@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from typing import Annotated, Any, Dict, List
+from typing import Annotated, Any, Dict, List, Optional
 
 import aiohttp
 
@@ -43,7 +43,7 @@ class SolrIndex(BaseIndex):
         self,
         *,
         server: Annotated[
-            str,
+            Optional[str],
             cli_parameter(
                 "-s",
                 "--server",
@@ -52,7 +52,7 @@ class SolrIndex(BaseIndex):
             ),
         ] = None,
         facets: Annotated[
-            List[tuple[str, str]],
+            Optional[List[tuple[str, str]]],
             cli_parameter(
                 "-f",
                 "--facets",
@@ -80,7 +80,7 @@ class SolrIndex(BaseIndex):
         ] = IndexName().all,
     ) -> None:
         query = []
-        for key, value in facets:
+        for key, value in facets or []:
             if key.lower() == "file":
                 if value[0] in (os.sep, "/"):
                     value = f"\\{value}"
@@ -89,6 +89,7 @@ class SolrIndex(BaseIndex):
                 value = value.lower()
             query.append(f"{key.lower()}:{value}")
         query_str = " AND ".join(query)
+        server = server or ""
         async with aiohttp.ClientSession(timeout=self.timeout) as session:
             logger.debug("Deleting entries matching %s", query_str)
             for core in (all_versions, latest_version):
@@ -120,7 +121,7 @@ class SolrIndex(BaseIndex):
         self,
         *,
         server: Annotated[
-            str,
+            Optional[str],
             cli_parameter(
                 "-s",
                 "--server",
@@ -129,6 +130,7 @@ class SolrIndex(BaseIndex):
             ),
         ] = None,
     ) -> None:
+        server = server or ""
         async with aiohttp.ClientSession(timeout=self.timeout) as session:
             for core in self.index_names:
                 url = await self.solr_url(server, core)

@@ -6,8 +6,19 @@ import threading
 from datetime import datetime, timedelta
 from functools import wraps
 from importlib.metadata import entry_points
-from typing import Any, Callable, Dict, Iterable, Optional, TypeVar, Union
+from typing import (
+    Any,
+    AsyncIterator,
+    Callable,
+    Dict,
+    Iterable,
+    Optional,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
+import fsspec
 import rich.console
 import toml
 
@@ -18,6 +29,25 @@ T = TypeVar("T")
 
 PrintLock = threading.Lock()
 Console = rich.console.Console(force_terminal=True, stderr=True)
+
+
+async def create_async_iterator(itt: Iterable[Any]) -> AsyncIterator[Any]:
+    """Create an async iterator from as sync iterable."""
+    for item in itt:
+        yield item
+
+
+def fs_and_path(
+    url: str,
+    **storage_options: Any,
+) -> Tuple[fsspec.AbstractFileSystem, str]:
+    """
+    Return (fs, path) for any URL that fsspec understands (file, s3, swift, http, ...).
+    """
+    protocol, path = fsspec.core.split_protocol(url)
+    protocol = protocol or "file"
+    fs = fsspec.filesystem(protocol, **storage_options)
+    return fs, path
 
 
 def convert_str_to_timestamp(
@@ -118,7 +148,7 @@ def find_closest(msg: str, target: str, options: Iterable[str]) -> str:
     return msg + suffix
 
 
-def load_plugins(group: str) -> list:
+def load_plugins(group: str) -> Dict[str, Any]:
     """Load harverster plugins."""
     eps = entry_points().select(group=group)
     plugins = {}

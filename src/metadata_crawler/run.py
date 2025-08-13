@@ -4,9 +4,8 @@ import asyncio
 import os
 import time
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Dict, List, Optional, Sequence, Union, cast
 
-import uvloop
 from rich import print as pprint
 from rich.prompt import Prompt
 
@@ -21,14 +20,23 @@ from .utils import (
     timedelta_to_str,
 )
 
+FilesArg = Optional[Union[str, Path, Sequence[Union[str, Path]]]]
 
-@staticmethod
+
+def _norm_files(catalogue_files: FilesArg) -> List[str]:
+    if catalogue_files is None:
+        return [""]
+    if isinstance(catalogue_files, (str, Path)):
+        return [str(catalogue_files)]
+    return [str(p) for p in catalogue_files]
+
+
 @deprecated_key({"root_dir": "root_path"})
 def _get_search(
     config_file: Path,
     search_dirs: list[str] | None = None,
     datasets: list[str] | None = None,
-) -> list[str]:
+) -> list[CrawlerSettings]:
     _search_items = []
     config = DRSConfig.load(config_file).datasets
     if not datasets and not search_dirs:
@@ -58,7 +66,7 @@ async def async_call(
     index_system: str,
     method: str,
     batch_size: int = 2500,
-    catalogue_file: Optional[Union[str, Path]] = None,
+    catalogue_files: Optional[Sequence[Union[Path, str]]] = None,
     *args: Any,
     **kwargs: Any,
 ) -> None:
@@ -71,36 +79,22 @@ async def async_call(
             f"No such backend: {index_system}", index_system, backends.keys()
         )
         raise ValueError(msg) from None
-    obj = cls(batch_size=batch_size, catalogue_file=catalogue_file)
-    func = getattr(obj, method)
-    await func(**kwargs)
-
-
-def call(
-    index_system: str,
-    method: str,
-    batch_size: int = 2500,
-    catalogue_file: Optional[Union[str, Path]] = None,
-    *args: Any,
-    **kwargs: Any,
-):
-    """Sync version of async_call."""
-    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-    uvloop.run(
-        async_call(
-            index_system,
-            method,
-            batch_size=batch_size,
-            catalogue_file=catalogue_file,
-            *args,
-            **kwargs,
-        )
-    )
+    flat_files = _norm_files(catalogue_files)
+    _event_loop = asyncio.get_event_loop()
+    flat_files = flat_files or [""]
+    futures = []
+    for catalogue_file in flat_files:
+        print(catalogue_file)
+        obj = cls(batch_size=batch_size, catalogue_file=catalogue_file or None)
+        func = getattr(obj, method)
+        future = _event_loop.create_task(func(**kwargs))
+        futures.append(future)
+    await asyncio.gather(*futures)
 
 
 async def async_index(
     index_system: str,
-    catalogue_file: Union[Path, str],
+    *catalogue_files: Union[Path, str, List[str], List[Path]],
     batch_size: int = 2500,
     **kwargs: Any,
 ) -> None:
@@ -119,10 +113,10 @@ async def async_index(
         Keyword arguments used to delete data from the index.
 
     """
+    kwargs.setdefault("catalogue_files", catalogue_files)
     await async_call(
         index_system,
         "index",
-        catalogue_file=catalogue_file,
         batch_size=batch_size,
         **kwargs,
     )
@@ -144,7 +138,7 @@ async def async_delete(
         Keyword arguments used to delete data from the index.
 
     """
-    await call(index_system, "delete", batch_size=batch_size, **kwargs)
+    await async_call(index_system, "delete", batch_size=batch_size, **kwargs)
 
 
 async def async_add(
@@ -155,13 +149,14 @@ async def async_add(
     data_store_prefix: str = "metadata",
     batch_size: int = 2500,
     comp_level: int = 4,
+    storage_options: Optional[Dict[str, Any]] = None,
     catalogue_backend: str = "sqlite",
     latest_version: str = IndexName().latest,
     all_versions: str = IndexName().all,
     password: bool = False,
     threads: Optional[int] = None,
 ) -> None:
-    """Harvest metdata from sotrage systems and add them to an intake catalogue
+    """Harvest metadata from sotrage systems and add them to an intake catalogue
 
     Parameters
     ----------
@@ -186,6 +181,8 @@ async def async_add(
         preformance.
     comp_level:
         Compression level used to write the meta data to csv.gz
+    storage_options:
+        Set addtional storage options for adding metadata to the metadta store
     catalogue_backend:
         Intake catalogue backend
     latest_version:
@@ -208,7 +205,9 @@ async def async_add(
                 data_set=["cmip6", "cordex"],
             )
     """
-    config_file = config_file or os.environ.get("EVALUATION_SYSTEM_CONFIG_DIR")
+    config_file = Path(
+        config_file or os.environ.get("EVALUATION_SYSTEM_CONFIG_DIR") or "."
+    )
     if not config_file:
         raise ValueError(("You must give a config file/directory"))
     if config_file.is_dir():
@@ -223,7 +222,7 @@ async def async_add(
             "[b]Enter the password", password=True
         )  # pragma: no cover
 
-    env = os.environ.copy()
+    env = cast(os._Environ[str], os.environ.copy())
     try:
         if passwd:
             os.environ["DRS_STORAGE_PASSWD"] = passwd
@@ -237,6 +236,7 @@ async def async_add(
             backend=catalogue_backend,
             data_store_prefix=data_store_prefix,
             threads=threads,
+            storage_options=storage_options or {},
         ) as data_col:
             await data_col.ingest_data()
             num_files = data_col.ingested_objects

@@ -2,17 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import time
+from pathlib import Path
 from typing import (
     Any,
     AsyncIterator,
     Awaitable,
     Callable,
-    Iterable,
     Optional,
     Union,
 )
-
-from anyio import Path
 
 from .api.config import CrawlerSettings, DRSConfig
 from .api.metadata_stores import CatalogueWriter, IndexName
@@ -41,10 +39,10 @@ class DataCollector:
     def __init__(
         self,
         config_file: Union[Path, str],
-        metadata_store: str,
+        metadata_store: Optional[str],
         index_name: IndexName,
         *search_objects: CrawlerSettings,
-        **kwargs: Union[str, int, None],
+        **kwargs: Any,
     ):
         self._search_objects = search_objects
         if not search_objects:
@@ -53,7 +51,7 @@ class DataCollector:
         self.index_name = index_name
         self.config = DRSConfig.load(config_file)
         self.ingest_queue = CatalogueWriter(
-            metadata_store,
+            metadata_store or "metadata.yaml",
             index_name=index_name,
             config=self.config,
             **kwargs,
@@ -83,7 +81,7 @@ class DataCollector:
         for cfg in self._search_objects:
             yield cfg.name, str(cfg.search_path)
 
-    async def __aenter__(self) -> DataCollector:
+    async def __aenter__(self) -> "DataCollector":
         return self
 
     async def __aexit__(self, *args: Any, **kwargs: Any) -> None:
@@ -124,11 +122,6 @@ class DataCollector:
             if not PrintLock.locked():  # pragma: no cover
                 Console.print(msg, end="\r")
         Console.print()
-
-    @staticmethod
-    async def _create_async_iterator(itt: Iterable[Any]) -> AsyncIterator[Any]:
-        for item in itt:
-            yield item
 
     async def _ingest_dir(
         self, drs_type: str, search_dir: str, iterable: bool = True

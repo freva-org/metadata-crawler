@@ -25,19 +25,8 @@ import xarray as xr
 from anyio import Path
 from pydantic import BaseModel, Field
 
+from ..utils import fs_and_path
 from .lookup_tables import cmor_lookup
-
-
-def fs_and_path(
-    url: str, **storage_options
-) -> Tuple[fsspec.AbstractFileSystem, str]:
-    """
-    Return (fs, path) for any URL that fsspec understands (file, s3, swift, http, ...).
-    """
-    protocol, path = fsspec.core.split_protocol(url)
-    protocol = protocol or "file"
-    fs = fsspec.filesystem(protocol, **storage_options)
-    return fs, path
 
 
 class Metadata(BaseModel):
@@ -143,8 +132,8 @@ class BasePath(metaclass=abc.ABCMeta):
         engine = read_kws.pop("engine", _get_engine(path)) or None
 
         if engine == "zarr":
-            mapper = fs.get_mapper(path)
-            return xr.open_zarr(mapper)
+            dset: xr.Dataset = xr.open_zarr(fs.get_mapper(path))
+            return dset
         with fs.open(path, "rb") as stream:
             return xr.open_dataset(stream, engine=engine)
 
@@ -169,7 +158,7 @@ class BasePath(metaclass=abc.ABCMeta):
 
         """
         keys = tuple(attrs)
-        d = cmor_lookup
+        d: Dict[str, Any] = cmor_lookup
         with self._lock:
             for a in keys[:-1]:
                 d = d.setdefault(a, {})
@@ -196,7 +185,7 @@ class BasePath(metaclass=abc.ABCMeta):
         str: Metadata from the data.
         """
 
-        with self.open_dataset(path, **read_kws) as dset:
+        with self.open_dataset(str(path), **read_kws) as dset:
             attrs = dset.attrs
             for var in dset.variables:
                 for name, value in dset[var].attrs.items():
@@ -251,7 +240,7 @@ class BasePath(metaclass=abc.ABCMeta):
         str:
             1st level sub directory
         """
-        ...
+        yield ""  # pragma: no cover
 
     @abc.abstractmethod
     async def rglob(
@@ -270,7 +259,7 @@ class BasePath(metaclass=abc.ABCMeta):
         ------
         str: Path of the object store that matches the glob pattern.
         """
-        ...
+        yield Metadata(path="")  # pragma: no cover
 
     @staticmethod
     async def suffix(path: Union[str, Path, pathlib.Path]) -> str:

@@ -22,7 +22,7 @@ from .base import BasePath, Metadata
 class IntakePath(BasePath):
     """Class to interact with the Intake metadata catalogues."""
 
-    _fs_type: None
+    _fs_type = None
 
     def __init__(
         self, suffixes: Optional[List[str]] = None, **storage_options: Any
@@ -98,7 +98,7 @@ class IntakePath(BasePath):
             URI of the object store
 
         """
-        return path
+        return str(path)
 
     def uri(self, path: Union[str, Path, pathlib.Path]) -> str:
         """Get the uri of the object store.

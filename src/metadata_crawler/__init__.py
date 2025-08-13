@@ -2,7 +2,7 @@
 
 import asyncio
 from pathlib import Path
-from typing import Any, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 import uvloop
 
@@ -29,7 +29,7 @@ __all__ = [
 
 def index(
     index_system: str,
-    catalogue_file: Union[Path, str],
+    *catalogue_files: Union[Path, str, List[str], List[Path]],
     batch_size: int = 2500,
     **kwargs: Any,
 ) -> None:
@@ -40,8 +40,8 @@ def index(
 
     index_system:
         The index server where the metadata is indexed.
-    catalogue_file:
-        Path to the file where the metadata was stored.
+    catalogue_files:
+        Path to the file(s) where the metadata was stored.
     batch_size:
         If the index system supports batch-sizes, the size of the batches.
     **kwargs:
@@ -52,7 +52,7 @@ def index(
     uvloop.run(
         async_index(
             index_system,
-            catalogue_file=catalogue_file,
+            *catalogue_files,
             batch_size=batch_size,
             **kwargs,
         )
@@ -85,6 +85,7 @@ def add(
     catalogue_backend: str = "sqlite",
     batch_size: int = 2500,
     comp_level: int = 4,
+    storage_options: Optional[Dict[str, Any]] = None,
     latest_version: str = IndexName().latest,
     all_versions: str = IndexName().all,
     threads: Optional[int] = None,
@@ -117,6 +118,8 @@ def add(
         preformance.
     comp_level:
         Compression level used to write the meta data to csv.gz
+    storage_options:
+        Set addtional storage options for adding metadata to the metadta store
     catalogue_backend:
         Intake catalogue backend
     latest_version:
@@ -153,5 +156,6 @@ def add(
             latest_version=latest_version,
             all_versions=all_versions,
             threads=threads,
+            storage_options=storage_options,
         )
     )

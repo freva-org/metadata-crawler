@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict
 class Parameter(BaseModel):
     model_config = ConfigDict(extra="allow")
 
-    args: Union[str, Tuple]
+    args: Union[str, Tuple[str, ...]]
     """Names for the arpargse.Namespace"""
     help: str
     """Help string that is going to be displayed."""
@@ -36,7 +36,7 @@ def cli_function(
     a argparse.Namespace"""
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-        func._cli_help = help or func.__doc__
+        setattr(func, "_cli_help", help or func.__doc__)
 
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:

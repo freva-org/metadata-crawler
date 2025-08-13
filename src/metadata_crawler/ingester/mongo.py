@@ -31,7 +31,7 @@ class MongoIndex(BaseIndex):
         super().__init__(catalogue_file, batch_size)
         self._raw_uri = ""
         self._url = ""
-        self._client: Optional[AsyncIOMotorClient] = None
+        self._client: Optional[AsyncIOMotorClient[Any]] = None
 
     @property
     def uri(self) -> str:
@@ -64,7 +64,7 @@ class MongoIndex(BaseIndex):
         raise ValueError("The schema doesn't define a unique value.")
 
     @property
-    def client(self) -> AsyncIOMotorClient:
+    def client(self) -> AsyncIOMotorClient[Any]:
         """Get the mongoDB client."""
         if self._client is None:
             logger.debug("Creating async mongoDB client: %s", self.uri)
@@ -72,7 +72,7 @@ class MongoIndex(BaseIndex):
         return self._client
 
     async def _bulk_upsert(
-        self, chunk: List[Dict[str, Any]], collection: AsyncIOMotorCollection
+        self, chunk: List[Dict[str, Any]], collection: AsyncIOMotorCollection[Any]
     ) -> None:
         ops = [
             UpdateOne(
@@ -86,7 +86,7 @@ class MongoIndex(BaseIndex):
 
     async def _prep_db_connection(
         self, database: str, url: str
-    ) -> AsyncIOMotorDatabase:
+    ) -> AsyncIOMotorDatabase[Any]:
 
         await self.close()
         self._raw_uri = url or ""
@@ -117,16 +117,16 @@ class MongoIndex(BaseIndex):
             ),
         ] = "metadata",
     ) -> None:
-        db = await self._prep_db_connection(database, url)
+        db = await self._prep_db_connection(database, url or "")
         for collection in self.index_names:
-            db[collection].create_index(self.unique_index, unique=True)
+            await db[collection].create_index(self.unique_index, unique=True)
             async for chunk in self.get_metadata(collection):
                 await self._bulk_upsert(chunk, db[collection])
 
     async def close(self) -> None:
         """Close the mongoDB connection."""
         if self._client is not None:
-            await self._client.close()
+            self._client.close()
         self._url = ""
         self._raw_uri = ""
 
@@ -155,7 +155,7 @@ class MongoIndex(BaseIndex):
             ),
         ] = "metadata",
         facets: Annotated[
-            List[Tuple[str, str]],
+            Optional[List[Tuple[str, str]]],
             cli_parameter(
                 "-f",
                 "--facets",
@@ -166,7 +166,7 @@ class MongoIndex(BaseIndex):
             ),
         ] = None,
     ) -> None:
-        db = await self._prep_db_connection(database, url)
+        db = await self._prep_db_connection(database, url or "")
         if not facets:
             logger.info("Nothing to delete")
             return

@@ -13,7 +13,7 @@ from .base import BasePath, Metadata
 class PosixPath(BasePath):
     """Class to interact with a Posix file system."""
 
-    _fs_type: str = "posix"
+    _fs_type = "posix"
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -72,7 +72,7 @@ class PosixPath(BasePath):
 
     async def rglob(
         self, path: Union[str, Path, pathlib.Path], glob_pattern: str = "*"
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[Metadata]:
         """Search recursively for paths matching a given glob pattern.
 
         Parameter

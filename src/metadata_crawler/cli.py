@@ -9,15 +9,26 @@ import os
 import sys
 from functools import partial
 from pathlib import Path
-from typing import Annotated, Union, get_args, get_origin, get_type_hints
+from typing import (
+    Annotated,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Tuple,
+    Union,
+    cast,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
-from metadata_crawler import add
+from metadata_crawler import add, index
 
 from ._version import __version__
 from .api.config import ConfigMerger
 from .api.metadata_stores import CatalogueBackends, IndexName
 from .logger import THIS_NAME, add_file_handle, set_log_level
-from .run import call
 from .utils import exception_handler, load_plugins
 
 
@@ -38,7 +49,7 @@ class ArgParse:
             property holding all parsed keyword arguments.
     """
 
-    kwargs: dict[str, Union[str, float, Path, int]] = {}
+    kwargs: Dict[str, Union[str, float, Path, int, Dict[str, str]]] = {}
     verbose: int = 0
     epilog: str = (
         "See also "
@@ -114,7 +125,7 @@ class ArgParse:
             "--prefix",
             type=str,
             help=(
-                "Set the path prefix for the metadata store, is can either be"
+                "Set the path prefix for the metadata store, this can either be"
                 " an absolute path or if absolute path  is given a path prefix"
                 " relative to the yaml catalogue file."
             ),
@@ -186,6 +197,16 @@ class ArgParse:
             default=4,
             type=int,
         )
+        parser.add_argument(
+            "--storage_option",
+            "-s",
+            help=(
+                "Set addtional storage options for adding metadata to the"
+                "metadta store"
+            ),
+            action="append",
+            nargs=2,
+        )
         self._add_general_config_to_parser(parser)
         parser.set_defaults(apply_func=add)
 
@@ -211,11 +232,11 @@ class ArgParse:
         """Add sub command for adding metadata to the solr server."""
         entry_point = "metadata_crawler.ingester"
         for plugin, cls in load_plugins(entry_point).items():
-            cli_methods = {}
+            cli_methods: Dict[str, Callable[..., Any]] = {}
             for name in ("index", "delete"):
                 method = getattr(cls, name, None)
                 if hasattr(method, "_cli_help"):
-                    cli_methods[name] = method
+                    cli_methods[name] = cast(Callable[..., Any], method)
             if cli_methods:
                 subparser = self.subparsers.add_parser(
                     plugin,
@@ -228,8 +249,8 @@ class ArgParse:
             for name, method in cli_methods.items():
                 parser = cmd_parser.add_parser(
                     name,
-                    help=method._cli_help,
-                    description=method._cli_help,
+                    help=getattr(method, "_cli_help", ""),
+                    description=getattr(method, "_cli_help", ""),
                     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                     epilog=self.epilog,
                 )
@@ -294,14 +315,15 @@ class ArgParse:
                         )
                 if name == "index":
                     parser.add_argument(
-                        "catalogue_file",
+                        "catalogue_files",
                         help="File path to the metadata store.",
-                        type=Path,
+                        type=str,
+                        nargs="*",
                     )
 
                 self._add_general_config_to_parser(parser)
                 parser.set_defaults(
-                    apply_func=partial(call, index_system=plugin, method=name)
+                    apply_func=partial(index, index_system=plugin)
                 )
 
     def parse_args(self, argv: list[str]) -> argparse.Namespace:
@@ -320,8 +342,21 @@ class ArgParse:
         self.kwargs = {
             k: v
             for (k, v) in args._get_kwargs()
-            if k not in ("apply_func", "verbose", "version", "log_suffix")
+            if k
+            not in (
+                "apply_func",
+                "verbose",
+                "version",
+                "log_suffix",
+                "storage_option",
+            )
         }
+
+        storage_options: List[Tuple[str, str]] = getattr(
+            args, "storage_option", []
+        )
+        if storage_options:
+            self.kwargs["storage_options"] = dict(storage_options)
         self.verbose = args.verbose
         add_file_handle(args.log_suffix)
         set_log_level(self.log_level)
@@ -335,7 +370,7 @@ class ArgParse:
 
 def _run(
     parser: argparse.Namespace,
-    **kwargs: Union[str, int, float, bool, Path, None],
+    **kwargs: Union[str, int, float, bool, Path, None, Dict[str, str]],
 ) -> None:
     """Apply the parsed method."""
     try:

@@ -2,11 +2,11 @@
 
 import abc
 import asyncio
-import gzip
 import json
 import multiprocessing as mp
 import os
 import re
+import time
 from datetime import datetime
 from enum import Enum
 from functools import cached_property
@@ -16,32 +16,39 @@ from queue import Empty, Queue
 from threading import Lock, Thread
 from typing import (
     Any,
-    Awaitable,
+    AsyncIterator,
     Callable,
     ClassVar,
     Coroutine,
     Dict,
-    Iterator,
     List,
     Literal,
     NamedTuple,
     Optional,
     Tuple,
+    Type,
     Union,
+    cast,
 )
+from urllib.parse import urlsplit
 
 import duckdb
+import fsspec
+import pyarrow as pa
 import yaml
 
 import metadata_crawler
 
 from ..backends.base import Metadata
 from ..logger import logger
+from ..utils import create_async_iterator
 from .config import DRSConfig, SchemaField
 
 ISO_FORMAT_REGEX = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?$"
 )
+
+BATCH_SECS_THRESHOLD = 20
 
 
 def _run_async(
@@ -69,7 +76,7 @@ class DateTimeDecoder(json.JSONDecoder):
     JSON Decoder that converts ISO‐8601 strings to datetime objects.
     """
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(object_hook=self._decode_objects, *args, **kwargs)
 
     def _decode_datetime(self, obj: Any) -> Any:
@@ -153,20 +160,36 @@ class IndexStore:
         lock: Optional[Lock] = None,
         batch_size: int = 2500,
         mode: Literal["r", "w"] = "r",
-        **kwargs,
+        storage_options: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
     ) -> None:
         self._lock = lock or Lock()
-        self._path = path
+        self.storage_options = storage_options or {}
+        self._fs, self._is_local_path = self.get_fs(path, **self.storage_options)
+        self._path = self._fs.unstrip_protocol(path)
         self.schema = schema
-        self.batch_size = batch_size
-        self.index_names = (index_name.latest, index_name.all)
+        self.batch_size = min(1000, batch_size)
+        self.index_names: Tuple[str, str] = (index_name.latest, index_name.all)
         self.mode = mode
+        self._rows_since_flush = 0
+        self._last_flush = time.time()
+
+    @staticmethod
+    def get_fs(
+        uri: str, **storage_options: Any
+    ) -> Tuple[fsspec.AbstractFileSystem, bool]:
+        """Get the base-url from a path."""
+        storage_options = storage_options or {"anon": True}
+        protocol, path = fsspec.core.split_protocol(uri)
+        protocol = protocol or "file"
+        fs = fsspec.filesystem(protocol, **storage_options)
+        return fs, protocol == "file"
 
     async def serialise_or_deserialise(
         self, obj: Dict[str, Any], action: Literal["serialise", "deserialise"]
     ) -> Dict[str, Any]:
         """Searialise or deserialise collections of items."""
-        funcs = {
+        funcs: Dict[str, Dict[str, Callable[[Any], Any]]] = {
             "timestamp": {
                 "serialise": datetime.isoformat,
                 "deserialise": datetime.fromisoformat,
@@ -174,10 +197,29 @@ class IndexStore:
         }
         for key, value in obj.items():
             if self.schema[key].length or self.schema[key].multi_valued:
-                typ = self.schema[key].base_type
+                typ = cast(str, self.schema[key].base_type)
                 if typ in funcs:
+
                     obj[key] = list(map(funcs[typ][action], value))
         return obj
+
+    @abc.abstractmethod
+    async def read(
+        self,
+        index_name: str,
+    ) -> AsyncIterator[List[Dict[str, Any]]]:
+        """Yield batches of metadata records from a specific table.
+
+        Parameters
+        ----------
+        index_name:
+            The name of the index_name.
+
+        Yields:
+            List[Dict[str, Any]]:
+                Deserialised metadata records.
+        """
+        yield [{}]  # pragma: no cover
 
     def get_path(self, path_suffix: Optional[str] = None) -> str:
         """Construct a path name for a given suffix."""
@@ -189,24 +231,6 @@ class IndexStore:
     @abc.abstractmethod
     async def add(self, metadata_batch: List[Tuple[str, Dict[str, Any]]]) -> None:
         """Add a chunk metadata to the store."""
-        ...
-
-    @abc.abstractmethod
-    async def read(
-        self,
-        index_name: str,
-    ) -> Iterator[List[Dict[str, Any]]]:
-        """Yield batches of metadata records from a specific table.
-
-        Parameters
-        ----------
-        index_name:
-            The name of the index.
-
-        Yields:
-            List[Dict[str, Any]]:
-                Deserialised metadata records.
-        """
         ...
 
     @abc.abstractmethod
@@ -226,17 +250,18 @@ class DuckDB(IndexStore):
     Can write to disk, memory, or remote S3 via httpfs.
     """
 
-    driver = "duckdb"
-    suffix = ".duckdb"
+    driver = "parquet"
+    suffix = ".parquet"
 
     def __init__(
         self,
         path: str,
-        index_names: Tuple[str, str],
+        index_names: IndexName,
         schema: Dict[str, SchemaField],
-        mode: str = "r",
+        mode: Literal["r", "w"] = "r",
         lock: Optional[Lock] = None,
         duckdb_config: Optional[Dict[str, Any]] = None,
+        storage_options: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ):
         """
@@ -255,28 +280,86 @@ class DuckDB(IndexStore):
         lock
             optional threading.Lock for thread safety
         """
-        super().__init__(path, index_names, schema, lock=lock)
+        super().__init__(
+            path, index_names, schema, lock=lock, storage_options=storage_options
+        )
         self.mode = mode
-        self.duckdb_config = duckdb_config or {}
-        self._path = self._path + self.suffix
         if mode == "w":
             self._create_tables()
+
+    @property
+    def duckdb_httpfs_settings(self) -> Dict[str, Any]:
+        """
+        Return DuckDB httpfs S3 settings derived from
+        storage_options when path is s3://...
+        Empty dict for local paths.
+        """
+        if self._is_local_path:
+            # You can extend this for gs://, abfs://, etc. For now only s3.
+            return {}
+
+        so = self.storage_options
+        key = so.get("key") or so.get("username")  # s3fs accepts "key"
+        secret = so.get("secret") or so.get("password")
+        token = so.get("token")  # optional session token
+
+        endpoint_url = so.get("endpoint_url")
+        region = so.get("region") or so.get("region_name") or "eu-dkrz-1"
+
+        endpoint_hostport = None
+        use_ssl = None
+        url_style = so.get("addressing_style") or "path"
+
+        if endpoint_url:
+            ep = urlsplit(endpoint_url)
+            endpoint_hostport = ep.netloc or ep.path  # allow host:port form
+            use_ssl = ep.scheme == "https"
+        else:
+            # No explicit endpoint (likely AWS). Let DuckDB default to AWS S3.
+            use_ssl = True
+            url_style = "auto"
+
+        settings: Dict[str, Any] = {
+            "s3_access_key_id": key or "",
+            "s3_secret_access_key": secret or "",
+            "s3_region": region,
+            "s3_url_style": url_style,
+            "s3_use_ssl": bool(use_ssl),
+        }
+        if endpoint_hostport:
+            settings["s3_endpoint"] = endpoint_hostport
+        if token:
+            settings["s3_session_token"] = token
+        return settings
+
+    def prepare_duckdb_connection(self, con: duckdb.DuckDBPyConnection) -> None:
+        """
+        Install/load httpfs and apply settings if needed.
+        """
+        con.execute("INSTALL httpfs;")
+        con.execute("LOAD httpfs;")
+        for k, v in self.duckdb_httpfs_settings.items():
+            if isinstance(v, bool):
+                con.execute(f"SET {k} = {'true' if v else 'false'};")
+            else:
+                # Use parameter binding to be safe with strings
+                con.execute(f"SET {k} = ?", [v])
 
     @cached_property
     def con(self) -> duckdb.DuckDBPyConnection:
         """Make a db connection."""
-        # open DB (file, memory, or S3 path)
-        con = duckdb.connect(self._path, read_only=False)
-        # load httpfs for S3 if needed
-        con.execute("INSTALL httpfs;")
-        con.execute("LOAD httpfs;")
-        # apply any PRAGMA configs
-        for key, val in self.duckdb_config.items():
-            con.execute(f"PRAGMA {key} = '{val}';")
+        con = duckdb.connect(read_only=False)
+        self.prepare_duckdb_connection(con)
         return con
 
+    def get_cursor(self) -> duckdb.DuckDBPyConnection:
+        con = duckdb.connect(read_only=False)
+        cursor = con.cursor()
+        self.prepare_duckdb_connection(cursor)
+        return cursor
+
     def _duck_type(self, fld: SchemaField) -> str:
-        """Translate SchemaField → DuckDB column type."""
+        """Translate SchemaField to DuckDB column type."""
         base = fld.base_type.value
         return DuckDBTypeMap.get_type(
             base, multi_valued=fld.length is not None or fld.multi_valued
@@ -291,10 +374,49 @@ class DuckDB(IndexStore):
                 if fld.required:
                     coldef += " NOT NULL"
                 cols.append(coldef)
-            ddl = f"CREATE TABLE IF NOT EXISTS {table} (\n  "
-            ddl += ",\n  ".join(cols) + "\n);"
-            logger.debug("Executing duckdb statement:\n%s", ddl)
-            self.con.execute(ddl)
+            col_expr = ", ".join(cols)
+            self.con.execute(
+                f'CREATE TABLE IF NOT EXISTS "{table}"  ({col_expr});'
+            )
+            self.con.execute(
+                (
+                    f'CREATE TABLE IF NOT EXISTS "staging_{table}" '
+                    f'AS SELECT * FROM "{table}" WHERE 0=1;'
+                )
+            )
+
+    def _flush_locked(self) -> None:
+        """Export only staging rows to Parquet, then clear staging."""
+        any_export = False
+        for table in self.index_names:
+            res = self.con.execute(
+                f'SELECT COUNT(*) FROM "staging_{table}"'
+            ).fetchone()
+            n = res[0] if res else 0
+            if n == 0:
+                continue
+            any_export = True
+            escaped_path = self.get_path(table).replace("'", "''")
+            self.con.execute("BEGIN;")
+            escaped_table = f"staging_{table}".replace('"', '""')
+            sql = (
+                f'COPY (SELECT * FROM "{escaped_table}") TO '
+                f"'{escaped_path}' (FORMAT PARQUET, COMPRESSION ZSTD);"
+            )
+            logger.debug("Executing COPY:\n%s", sql)
+            try:
+                # Write only staging rows to new parquet files
+                self.con.execute(sql)
+                logger.debug("Truncating table staging_%s", table)
+                self.con.execute(f'TRUNCATE TABLE "staging_{table}";')
+                self.con.execute("COMMIT;")
+            except Exception as error:
+                self.con.execute("ROLLBACK;")
+                logger.error(error)
+
+        if any_export:
+            self._rows_since_flush = 0
+            self._last_flush = time.time()
 
     async def add(self, metadata_batch: List[Tuple[str, Dict[str, Any]]]) -> None:
         """Batch‐insert metadata dicts."""
@@ -308,31 +430,43 @@ class DuckDB(IndexStore):
             for table, rows in by_table.items():
                 if not rows:
                     continue
-                # build parametrized INSERT
                 placeholders = ", ".join("?" for _ in self.schema)
-                sql = f"INSERT INTO {table} VALUES ({placeholders});"
-                # use DuckDB’s executemany
-                self.con.executemany(sql, rows)
+                sql = f'INSERT INTO "staging_{table}" VALUES ({placeholders});'
 
-    async def read(self, index_name: str) -> Iterator[List[Dict[str, Any]]]:
+                await asyncio.to_thread(self.con.executemany, sql, rows)
+                self._rows_since_flush += len(rows)
+            if (
+                self._rows_since_flush >= self.batch_size
+                or (time.time() - self._last_flush) >= BATCH_SECS_THRESHOLD
+            ):
+                await asyncio.to_thread(self._flush_locked)
+
+    def flush(self) -> None:
+        """Public flush (threads safe)."""
+        with self._lock:
+            self._flush_locked()
+
+    async def read(self, index_name: str) -> AsyncIterator[List[Dict[str, Any]]]:
         """
         Stream rows from DuckDB using a DBAPI cursor.
         Yields batches of dicts of size self.batch_size.
         """
-        cur = self.con.cursor()
-        cur.execute(f"SELECT * FROM {index_name};")
-        cols = [col[0] for col in cur.description]
-        while True:
-            rows = cur.fetchmany(self.batch_size)
-            if not rows:
-                break
-            batch = []
-            for r in rows:
-                rec = {col: val for col, val in zip(cols, r)}
-                batch.append(rec)
-            yield batch
+        escaped_file = self.get_path(index_name).replace("'", "''")
+        sql = f"SELECT * FROM read_parquet('{escaped_file}')"
+        logger.debug("Reading from file: %s", sql)
+        cur = await asyncio.to_thread(self.get_cursor)
+        try:
+            await asyncio.to_thread(cur.execute, sql)
+            for table in await asyncio.to_thread(
+                cur.fetch_record_batch, self.batch_size
+            ):
+                yield pa.Table.from_batches([table]).to_pylist()
+        finally:
+            await asyncio.to_thread(cur.close)
 
     def close(self) -> None:
+        if self.mode == "w":
+            self.flush()
         self.con.close()
 
     def get_args(self, index_name: str) -> Dict[str, Any]:
@@ -341,8 +475,9 @@ class DuckDB(IndexStore):
         returns URI and a simple SQL expression.
         """
         return {
-            "uri": self._path,
-            "sql_expr": f"SELECT * FROM {index_name}",
+            "urlpath": self.get_path(index_name),
+            "engine": "pyarrow",
+            "storage_options": self.storage_options,
         }
 
 
@@ -356,30 +491,50 @@ class JSONLines(IndexStore):
         self,
         path: str,
         index_name: IndexName,
-        schema: List[SchemaField],
+        schema: Dict[str, SchemaField],
         lock: Optional[Lock] = None,
         mode: Literal["w", "r"] = "r",
+        storage_options: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ):
         self._lock = lock or Lock()
         self._streams: Dict[str, TextIOWrapper] = {}
-        super().__init__(path, index_name, schema, lock, mode=mode)
+        super().__init__(
+            path,
+            index_name,
+            schema,
+            lock=lock,
+            mode=mode,
+            storage_options=storage_options,
+        )
         comp_level = int(kwargs.get("comp_level", "4"))
-        for index_name in self.index_names:
-            out_path = self.get_path(index_name)
-            self._streams[index_name] = gzip.open(
-                out_path, mode=f"{mode}t", compresslevel=comp_level
+        for name in self.index_names:
+            out_path = self.get_path(name)
+            if mode == "w":
+                parent = os.path.dirname(out_path).rstrip("/")
+                try:
+                    self._fs.makedirs(parent, exist_ok=True)
+                except Exception:  # pragma: no cover
+                    pass  # pragma: no cover
+            self._streams[name] = self._fs.open(
+                out_path,
+                mode=f"{mode}t",
+                compression="gzip",
+                compression_level=comp_level,
+                encoding="utf-8",
+                newline="\n",
             )
 
     async def add(self, metadata_batch: List[Tuple[str, Dict[str, Any]]]) -> None:
         """Add a batch of metadata to the gzip store."""
         for index_name, metadata in metadata_batch:
-            self._streams[index_name].write(
+            await asyncio.to_thread(
+                self._streams[index_name].write,
                 json.dumps(metadata, ensure_ascii=False, cls=DateTimeEncoder)
-                + "\n"
+                + "\n",
             )
 
-    def close(self):
+    def close(self) -> None:
         """Close the files."""
         for stream in self._streams.values():
             stream.flush()
@@ -391,12 +546,13 @@ class JSONLines(IndexStore):
             "urlpath": self.get_path(index_name),
             "compression": "gzip",
             "text_mode": True,
+            "storage_options": self.storage_options,
         }
 
     async def read(
         self,
         index_name: str,
-    ) -> Iterator[List[Dict[str, Any]]]:
+    ) -> AsyncIterator[List[Dict[str, Any]]]:
         """Yield batches of metadata records from a specific table.
 
         Parameters
@@ -409,7 +565,8 @@ class JSONLines(IndexStore):
                 Deserialised metadata records.
         """
         chunk: List[Dict[str, Any]] = []
-        for line in self._streams[index_name]:
+
+        async for line in create_async_iterator(self._streams[index_name]):
             chunk.append(json.loads(line, cls=DateTimeDecoder))
             if len(chunk) >= self.batch_size:
                 yield chunk
@@ -441,18 +598,25 @@ class CatalogueReader:
     def __init__(
         self, catalogue_file: Union[str, Path], batch_size: int = 2500
     ) -> None:
-
-        cat = yaml.safe_load(Path(catalogue_file).read_text())
+        catalogue_file = str(catalogue_file)
+        fs, _ = IndexStore.get_fs(catalogue_file)
+        path = fs.unstrip_protocol(catalogue_file)
+        with fs.open(path) as stream:
+            cat = yaml.safe_load(stream.read())
         _schema_json = cat["metadata"]["schema"]
         schema = {s["key"]: SchemaField(**s) for k, s in _schema_json.items()}
         index_name = IndexName(**cat["metadata"]["index_names"])
-        cls = CatalogueBackends[cat["metadata"]["backend"]].value
+        cls: Type[IndexStore] = CatalogueBackends[
+            cat["metadata"]["backend"]
+        ].value
+        storage_options = cat["metadata"].get("storage_options", {})
         self.store = cls(
             cat["metadata"]["prefix"],
             index_name,
             schema,
             mode="r",
             batch_size=batch_size,
+            storage_options=storage_options,
         )
 
 
@@ -484,26 +648,30 @@ class CatalogueWriter:
         batch_size: int = 2500,
         config: Optional[DRSConfig] = None,
         threads: Optional[int] = None,
-        **kwargs: str,
+        storage_options: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
     ) -> None:
         self.config = config or DRSConfig.load()
         self._done = 0
         self._num_objects = 0
         self.lock = Lock()
-        self.yaml_path = Path(yaml_path).with_suffix(".yaml")
+        storage_options = storage_options or {}
+        self.fs, _ = IndexStore.get_fs(yaml_path, **storage_options)
+        self.path = self.fs.unstrip_protocol(yaml_path)
         scheme, _, _ = data_store_prefix.rpartition("://")
         self.backend = backend
         if not scheme:
             data_store_prefix = os.path.abspath(data_store_prefix)
         self.prefix = data_store_prefix
         self.index_name = index_name
-        cls = CatalogueBackends[backend].value
+        cls: Type[IndexStore] = CatalogueBackends[backend].value
         self.store = cls(
             data_store_prefix,
             index_name,
             self.config.index_schema,
             lock=self.lock,
             mode="w",
+            storage_options=storage_options,
             **kwargs,
         )
         threads = threads or (min(mp.cpu_count(), 15))
@@ -518,7 +686,7 @@ class CatalogueWriter:
             )
             for i in range(threads)
         }
-        self._queue: Queue[Tuple[Awaitable[Dict[str, Any]], str]] = Queue()
+        self._queue: Queue[Tuple[str, str, Metadata]] = Queue()
 
     def write_batch(self, index_name: str, batch: List[Dict[str, Any]]) -> None:
         """Write a batch of metadata to the storage system."""
@@ -527,7 +695,7 @@ class CatalogueWriter:
         self,
         inp: Metadata,
         drs_type: str,
-        name: str | None = None,
+        name: str = "",
     ) -> None:
         """Add items to the fifo queue.
 
@@ -594,6 +762,7 @@ class CatalogueWriter:
                 "version": 1,
                 "backend": self.backend,
                 "prefix": self.prefix,
+                "storage_options": self.store.storage_options,
                 "index_names": {
                     "latest": self.index_name.latest,
                     "all": self.index_name.all,
@@ -616,7 +785,7 @@ class CatalogueWriter:
                 },
             },
         }
-        with self.yaml_path.open("w", encoding="utf-8") as f:
+        with self.fs.open(self.path, "w", encoding="utf-8") as f:
             yaml.safe_dump(
                 catalog,
                 f,
@@ -640,7 +809,6 @@ class CatalogueWriter:
                 continue
             nbatch += 1
             batch.append((name, metadata))
-            del metadata
             if nbatch >= batch_size:
                 logger.info("Ingesting %i items", batch_size)
                 try:

@@ -1,10 +1,8 @@
 """Interact with an S3 Object Store."""
 
-from __future__ import annotations
-
 import asyncio
 import pathlib
-from typing import Any, AsyncIterator, Optional, Tuple, Union
+from typing import Any, AsyncIterator, Optional, Tuple, Union, cast
 from urllib.parse import SplitResult, urlsplit
 
 import fsspec
@@ -18,7 +16,7 @@ from .base import BasePath, Metadata
 class S3Path(BasePath):
     """Class to interact with an S3 object store."""
 
-    _fs_type: str = "s3"
+    _fs_type = "s3"
 
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
@@ -65,12 +63,12 @@ class S3Path(BasePath):
     async def is_file(self, path: Union[str, Path, pathlib.Path]) -> bool:
         """Check if a given path is a file object on the storage system."""
         client = await self._get_client()
-        return await client._isfile(str(path))
+        return cast(bool, await client._isfile(str(path)))
 
     async def is_dir(self, path: str | Path | pathlib.Path) -> bool:
         """Check if a given path is a directory object on the storage system."""
-        client = await self.get_client()
-        return await client._isdir(str(path))
+        client = await self._get_client()
+        return cast(bool, await client._isdir(str(path)))
 
     async def iterdir(
         self, path: Union[str, Path, pathlib.Path]
@@ -82,7 +80,7 @@ class S3Path(BasePath):
 
     async def rglob(
         self, path: str | Path | pathlib.Path, glob_pattern: str = "*"
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[Metadata]:
         """Search recursively for files matching the extensions given by 'glob_pattern'.
 
         Parameters
@@ -100,7 +98,7 @@ class S3Path(BasePath):
         """
         client = await self._get_client()
         if self.is_file(path):
-            yield str(path)
+            yield Metadata(path=str(path))
         else:
             for content in await client._glob(f"{path}/**/{glob_pattern}"):
                 if Path(content).suffix in self.suffixes:

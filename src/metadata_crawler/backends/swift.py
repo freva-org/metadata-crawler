@@ -5,7 +5,7 @@ from __future__ import annotations
 import pathlib
 from fnmatch import fnmatch
 from getpass import getuser
-from typing import Any, AsyncIterator, Union, cast
+from typing import Any, AsyncIterator, Tuple, Union, cast
 from urllib.parse import SplitResult, urljoin, urlsplit
 
 import aiohttp
@@ -19,7 +19,7 @@ from .base import BasePath, Metadata
 class SwiftPath(BasePath):
     """Class to interact with the OpenStack swift cloud storage system."""
 
-    _fs_type: str = "swift"
+    _fs_type = "swift"
 
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
@@ -45,7 +45,7 @@ class SwiftPath(BasePath):
         """Logon to the swfit system if necessary."""
         with PrintLock:
             self.os_password = self.os_password or Prompt.ask(
-                self.password_prompt, password=True
+                "Password for swift storage.", password=True
             )
         headers = {
             "X-Auth-User": f"{self.os_project_id}:{self.os_user_id}",
@@ -57,7 +57,7 @@ class SwiftPath(BasePath):
                     raise ValueError(f"Logon to {self.os_auth_url} failed")
                 self.os_auth_token = res.headers["X-Auth-Token"]
 
-    async def _url_fragments(self, url: str) -> str:
+    async def _url_fragments(self, url: str) -> Tuple[str, str]:
         url_split = urlsplit(url)
         parsed_url = SplitResult(
             url_split.scheme or self.url_split.scheme,
@@ -132,7 +132,7 @@ class SwiftPath(BasePath):
         return await self._get_dir_from_path(data) is not None
 
     async def iterdir(
-        self, path: str | Path | pathlib.Path
+        self, path: Union[str, Path, pathlib.Path]
     ) -> AsyncIterator[str]:
         try:
             for data in await self._read_json(str(path)):
@@ -174,7 +174,7 @@ class SwiftPath(BasePath):
             URI of the object store
 
         """
-        url = urlsplit(urljoin(self.os_storage_url, self.container, str(path)))
+        url = urlsplit(urljoin(self.os_storage_url, f"{self.container}/{path}"))
         return SplitResult(
             "swift", url.netloc, url.path, url.query, url.fragment
         ).geturl()

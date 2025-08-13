@@ -9,7 +9,7 @@ from copy import deepcopy
 from datetime import datetime
 from enum import Enum, StrEnum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Literal, Optional, Union
+from typing import Any, Callable, Dict, List, Literal, Optional, Union, cast
 from urllib.parse import urlsplit
 
 import numpy as np
@@ -25,7 +25,8 @@ from pydantic import (
     model_validator,
     root_validator,
 )
-from tomlkit.container import OutOfOrderTableProxy, Table
+from tomlkit.container import OutOfOrderTableProxy
+from tomlkit.items import Table
 
 from ..backends.base import Metadata
 from ..utils import convert_str_to_timestamp, load_plugins
@@ -65,7 +66,7 @@ class SchemaField(BaseModel):
     required: bool = False
     default: Optional[Any] = None
     length: Optional[int] = None
-    base_type: BaseType = Field(default_factory=str)
+    base_type: BaseType = BaseType.string
     multi_valued: bool = True
     indexed: bool = True
     name: Optional[str] = None
@@ -87,12 +88,16 @@ class SchemaField(BaseModel):
         if not m:
             raise ValueError(f"invalid type spec {v!r}")
         base, _, num = m.groups()
-        cls.__parsed_type = {"base": base, "length": int(num) if num else None}
+        setattr(
+            cls,
+            "__parsed_type",
+            {"base": base, "length": int(num) if num else None},
+        )
         return v
 
     @model_validator(mode="after")
     def set_parsed(self) -> "SchemaField":
-        parsed = self.__parsed_type
+        parsed = getattr(self, "__parsed_type")
         self.base_type = BaseType(parsed["base"])
         self.length = parsed["length"]
         self.name = self.name or self.key
@@ -151,14 +156,18 @@ class ConfigMerger:
             )
             self._merge_tables(self._system_doc, self._user_doc)
 
-    def _merge_tables(self, base: Table, override: Table) -> None:
+    def _merge_tables(
+        self,
+        base: Union[tomlkit.TOMLDocument, Table, OutOfOrderTableProxy],
+        override: Union[Table, tomlkit.TOMLDocument, OutOfOrderTableProxy],
+    ) -> None:
 
         for key, value in override.items():
             if key not in base:
                 base[key] = value
                 continue
             if isinstance(value, (Table, OutOfOrderTableProxy)):
-                self._merge_tables(base[key], value)
+                self._merge_tables(cast(Table, base[key]), value)
             else:
                 base[key] = value
 
@@ -182,7 +191,10 @@ class CrawlerSettings(BaseModel):
     """Define the user input for a data crawler session."""
 
     name: str
-    search_path: str
+    search_path: Union[str, Path]
+
+    def model_post_init(self, __context: Any = None) -> None:
+        self.search_path = str(self.search_path)
 
 
 class PathSpecs(BaseModel):
@@ -233,7 +245,7 @@ class DataSpecs(BaseModel):
     @staticmethod
     def _resolve_placeholder(value: str, data: Dict[str, Any]) -> Any:
         if value.startswith("__coord:"):
-            value.split(":", 1)[1]
+            value = value.split(":", 1)[1]
         # allow "{variable}" style
         for k, v in data.items():
             if k in value:
@@ -254,7 +266,7 @@ class DataSpecs(BaseModel):
         self, dset: "xarray.Dataset", out: Dict[str, Any]
     ) -> None:
 
-        def get_val(rule: VarAttrRule, vname: str):
+        def get_val(rule: VarAttrRule, vname: str) -> Any:
             default = rule.default.replace("__name__", vname) or vname
             if vname in dset:
                 return dset[vname].attrs.get(rule.attr, default)
@@ -294,7 +306,7 @@ class DataSpecs(BaseModel):
 
                 case "range":
                     coord = (
-                        self._resolve_placeholder(rule.coord, out, dset)
+                        self._resolve_placeholder(rule.coord, out)
                         if rule.coord
                         else None
                     )
@@ -306,7 +318,7 @@ class DataSpecs(BaseModel):
 
                 case "min" | "max" | "minmax":
                     var_name = (
-                        self._resolve_placeholder(rule.var, out, dset)
+                        self._resolve_placeholder(rule.var, out)
                         if rule.var
                         else None
                     )
@@ -375,8 +387,8 @@ class SpecialRule(BaseModel):
     false: Optional[Any] = None
     call: Optional[str] = None
     method: Optional[str] = None
-    args: List[str] = Field(default_factory=dict)
-    items: List[str] = Field(default_factory=dict)
+    args: List[str] = Field(default_factory=list)
+    items: List[str] = Field(default_factory=list)
 
 
 class Dialect(BaseModel):
@@ -414,7 +426,7 @@ class DRSConfig(BaseModel):
     dialect: Dict[str, Dialect]
 
     def model_post_init(self, __context: Any = None) -> None:
-        self._defaults = {}
+        self._defaults: Dict[str, Any] = {}
         self.suffixes = self.suffixes or [
             ".zarr",
             ".zar",
@@ -435,7 +447,7 @@ class DRSConfig(BaseModel):
                 self._defaults[key].setdefault(k, _def)
             for k, _def in self.dialect[dset.drs_format].defaults.items():
                 self._defaults[key].setdefault(k, _def)
-            for k, _def in self.defaults:
+            for k, _def in self.defaults.items():
                 self._defaults[key].setdefault(k, _def)
 
     @root_validator(pre=True)
@@ -445,7 +457,7 @@ class DRSConfig(BaseModel):
         merge any dialects that declare `inherits_from`.
         """
 
-        def _deep_merge(a: Dict[str, Any], b: Dict[str, Any]):
+        def _deep_merge(a: Dict[str, Any], b: Dict[str, Any]) -> None:
             for k, v in b.items():
                 if k in a and isinstance(a[k], dict) and isinstance(v, dict):
                     if not v:
@@ -500,11 +512,10 @@ class DRSConfig(BaseModel):
                 continue
             match rule.type:
                 case "conditional":
-                    cond = eval(rule.condition, {}, call)
+                    cond = eval(rule.condition or "", {}, call)
                     result = rule.true if cond else rule.false
                 case "lookup":
-                    args = [eval(arg, {}, call) for arg in rule.items]
-                    return
+                    args = [eval(arg or "", {}, call) for arg in rule.items]
                     result = self.datasets[standard].backend.lookup(
                         inp.path,
                         standard,
@@ -512,7 +523,9 @@ class DRSConfig(BaseModel):
                         **self.dialect[standard].data_specs.read_kws,
                     )
                 case "function":
-                    call_str = textwrap.dedent(rule.method or rule.call).strip()
+                    call_str = textwrap.dedent(
+                        (rule.method or rule.call) or ""
+                    ).strip()
                     func = eval(call_str, {}, call)
                     args = [eval(arg, {}, call) for arg in rule.args]
                     if is_async_callable(func):
@@ -520,7 +533,7 @@ class DRSConfig(BaseModel):
                     else:
                         result = func(*args)
                 case "call":
-                    result = eval(textwrap.dedent(rule.call).strip())
+                    result = eval(textwrap.dedent(rule.call or "").strip())
             if result:
                 inp.metadata[facet] = result
 
@@ -562,7 +575,9 @@ class DRSConfig(BaseModel):
         search_dir = strip_protocol(search_dir)
         root_path = strip_protocol(self.datasets[drs_type].root_path)
         standard = self.datasets[drs_type].drs_format
-        version = self.dialect[standard].facets.get("version", "version")
+        version = cast(
+            str, self.dialect[standard].facets.get("version", "version")
+        )
         try:
             version_idx = self.dialect[standard].path_specs.dir_parts.index(
                 version
@@ -619,7 +634,7 @@ class DRSConfig(BaseModel):
         """Get the meta data for a given file path."""
         try:
             return self._read_metadata(
-                standard, Metadata(path=inp.path, metdata=inp.metadata.copy())
+                standard, Metadata(path=inp.path, metadata=inp.metadata.copy())
             )
         except Exception as error:
             raise ValueError(error) from error
@@ -652,7 +667,7 @@ class DRSConfig(BaseModel):
                         inp.metadata.get(field) or defs.get(field)
                     )
                 case _:
-                    key = dia.facets.get(schema.key, field)
+                    key = cast(str, dia.facets.get(schema.key, field))
                     val = inp.metadata.get(key) or defs.get(field)
             val = val or schema.default
             if schema.multi_valued or schema.length:

@@ -14,9 +14,11 @@ from typing import (
     Optional,
     Tuple,
     Union,
+    cast,
 )
 
-from ..api.metadata_stores import CatalogueReader
+from ..api.config import SchemaField
+from ..api.metadata_stores import CatalogueReader, IndexStore
 from ..logger import logger
 
 
@@ -47,25 +49,28 @@ class BaseIndex(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def __init__(
         self,
-        catalogue_file: Union[str, Path] = None,
+        catalogue_file: Optional[Union[str, Path]] = None,
         batch_size: int = 2500,
         **kwargs: Any,
     ) -> None:
-        self._reader: Optional[CatalogueReader] = None
-        if catalogue_file:
-            self._reader = CatalogueReader(
-                catalogue_file=catalogue_file, batch_size=batch_size
+        self._store: Optional[IndexStore] = None
+        if catalogue_file is not None:
+            _reader = CatalogueReader(
+                catalogue_file=catalogue_file or "", batch_size=batch_size
             )
+            self._store = _reader.store
 
     @property
-    def index_schema(self) -> Dict[str, Any]:
+    def index_schema(self) -> Dict[str, SchemaField]:
         """Get the index schema."""
-        return getattr(getattr(self._reader, "store", None), "schema", {})
+        return cast(Dict[str, SchemaField], getattr(self._store, "schema", {}))
 
     @property
     def index_names(self) -> Tuple[str, str]:
         """Get the names of the indexs for latests and all data."""
-        return getattr(getattr(self._reader, "store", None), "index_names", ())
+        return cast(
+            Tuple[str, str], getattr(self._store, "index_names", ("", ""))
+        )
 
     async def get_metadata(
         self, index_name: str
@@ -78,13 +83,15 @@ class BaseIndex(metaclass=abc.ABCMeta):
             Name of the index that should be read.
 
         """
-        batch = []
-        num_items = 0
-        logger.info("Indexing %s", index_name)
-        async for batch in self._reader.store.read(index_name):
-            yield batch
-            num_items += len(batch)
-        logger.info("Indexed %i items for index %s", num_items, index_name)
+
+        if self._store:
+            batch = []
+            num_items = 0
+            logger.info("Indexing %s", index_name)
+            async for batch in self._store.read(index_name):
+                yield batch
+                num_items += len(batch)
+            logger.info("Indexed %i items for index %s", num_items, index_name)
 
     @abc.abstractmethod
     async def delete(self, **kwargs: Any) -> None:
