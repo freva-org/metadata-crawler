@@ -40,9 +40,11 @@ class Metadata(BaseModel):
 class TemplateMixin:
     """Apply templating egine jinja2."""
 
+    storage_options: Optional[Dict[str, Any]] = None
+
     def storage_template(self, key: str, default: Optional[str] = None) -> str:
         """Template a jinja2 string."""
-        value = self.storage_options.get(key) or ""
+        value = (self.storage_options or {}).get(key) or ""
         default = default or ""
         return Template(value).render(env=os.environ) or default
 
@@ -142,7 +144,7 @@ class PathTemplate(abc.ABC, PathMixin, TemplateMixin, metaclass=BasePath):
         self._user: str = os.environ.get("DRS_STORAGE_USER") or getuser()
         self._pw: str = os.environ.get("DRS_STORAGE_PASSWD") or ""
         self.suffixes = suffixes or [".nc", ".girb", ".zarr", ".tar", ".hdf5"]
-        self.storage_options = storage_options
+        self.storage_options = storage_options or {}
         self.__post_init__()
 
     def __post_init__(self) -> None:

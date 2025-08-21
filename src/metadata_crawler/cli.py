@@ -33,6 +33,12 @@ from .backends.intake import IntakePath
 from .logger import THIS_NAME, add_file_handle
 from .utils import exception_handler, load_plugins
 
+StorageScalar = Union[str, int, float, bool]
+StorageOptions = Dict[str, StorageScalar]
+KwargValue = Union[
+    str, int, float, Path, StorageOptions, List[str], List[int], None
+]
+
 
 def walk_catalogue(
     path: str, storage_options: Optional[Dict[str, Any]] = None, **kwargs: Any
@@ -42,7 +48,7 @@ def walk_catalogue(
     asyncio.run(ip.walk(path))
 
 
-def _process_storage_option(option: str) -> Any:
+def _process_storage_option(option: str) -> Union[str, bool, int, float]:
 
     if option.lower() in ("false", "true"):
         return option.lower() == "true"
@@ -78,7 +84,7 @@ class ArgParse:
             property holding all parsed keyword arguments.
     """
 
-    kwargs: Dict[str, Union[str, float, Path, int, Dict[str, str]]] = {}
+    kwargs: Optional[Dict[str, KwargValue]] = None
     verbose: int = 0
     epilog: str = (
         "See also "
@@ -425,15 +431,13 @@ class ArgParse:
                 "storage_option",
             )
         }
-
-        storage_options: List[Tuple[str, str]] = (
+        storage_option_pairs: List[Tuple[str, str]] = (
             getattr(args, "storage_option", None) or []
         )
-        self.kwargs["storage_options"] = {}
-        for option, value in storage_options:
-            self.kwargs["storage_options"][option] = _process_storage_option(
-                value
-            )
+        so: StorageOptions = {}
+        for option, value in storage_option_pairs:
+            so[option] = _process_storage_option(value)
+        self.kwargs["storage_options"] = so
         self.verbose = args.verbose
         add_file_handle(args.log_suffix)
         self.kwargs["verbosity"] = self.verbose
@@ -442,7 +446,7 @@ class ArgParse:
 
 def _run(
     parser: argparse.Namespace,
-    **kwargs: Union[str, int, float, bool, Path, None, Dict[str, str]],
+    **kwargs: KwargValue,
 ) -> None:
     """Apply the parsed method."""
     try:
@@ -457,6 +461,7 @@ def cli(sys_args: list[str] | None = None) -> None:
     try:
         parser = ArgParse()
         args = parser.parse_args(sys_args or sys.argv[1:])
-        _run(args, **parser.kwargs)
+        kwargs = parser.kwargs or {}
+        _run(args, **kwargs)
     except KeyboardInterrupt:
         raise SystemExit("Exiting program")

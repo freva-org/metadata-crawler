@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pathlib
 from fnmatch import fnmatch
-from typing import AsyncIterator, Optional, Tuple, Union, cast
+from typing import AsyncIterator, Dict, List, Optional, Tuple, Union, cast
 from urllib.parse import SplitResult, urljoin, urlsplit, urlunparse
 
 import aiohttp
@@ -23,12 +23,12 @@ class SwiftPath(PathTemplate):
 
     _fs_type = "swift"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
+        self.storage_options = self.storage_options or {}
         self.os_password = self.storage_template("os_password", self._pw)
         self.os_user_id = self.storage_template("os_user_id", self._user)
         self.os_project_id = self.storage_template("os_project_id")
         self.os_auth_token = self.storage_template("os_auth_token") or None
-        self._token_data = {}
         self._os_storage_url = self.storage_options.get(
             "os_storage_url", ""
         ).rstrip("/")
@@ -82,7 +82,6 @@ class SwiftPath(PathTemplate):
                 if res.status != 200:
                     raise ValueError(f"Logon to {self.os_auth_url} failed")
                 self.os_auth_token = res.headers["X-Auth-Token"]
-                self._token_data = {}
 
     def _is_zarr_like_match(self, key: str, glob_pattern: str) -> bool:
         key_l = key.lower()
@@ -108,9 +107,9 @@ class SwiftPath(PathTemplate):
             url_split.query,
             url_split.fragment,
         )
-        url_path = pathlib.PosixPath(parsed_url.path).parts[1:]
-        url_prefix = "/".join(url_path[:3])
-        prefix = "/".join(url_path[3:])
+        _path = pathlib.PosixPath(parsed_url.path).parts[1:]
+        url_prefix = "/".join(_path[:3])
+        prefix = "/".join(_path[3:])
         if prefix:
             prefix += "/"
         url_head = f"{parsed_url.scheme}://{parsed_url.netloc}/{url_prefix}"
@@ -118,7 +117,7 @@ class SwiftPath(PathTemplate):
 
     async def _read_json(
         self, path: str, delimiter: Optional[str] = "/"
-    ) -> list[dict[str, str]]:
+    ) -> List[Dict[str, str]]:
         url, prefix = await self._url_fragments(path)
         suffix = f"?format=json&prefix={prefix}"
         if delimiter:
@@ -138,9 +137,7 @@ class SwiftPath(PathTemplate):
                     if res.status == 401:
                         await self.logon()
                         continue
-                    raise errors.get(
-                        res.status, RuntimeError(f"Failed to query {path}")
-                    )
+        raise errors.get(res.status, RuntimeError(f"Failed to query {path}"))
 
     def _get_dir_from_path(self, data: dict[str, str]) -> str | None:
         if (
@@ -269,7 +266,7 @@ class SwiftPath(PathTemplate):
             URI of the object store
 
         """
-        url_split = urlsplit(path)
+        url_split = urlsplit(str(path))
         if not url_split.netloc:
             path = f"{self.url_split.path}/{url_split.path}"
         else:

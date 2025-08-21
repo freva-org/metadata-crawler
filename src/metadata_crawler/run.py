@@ -34,10 +34,12 @@ def _norm_files(catalogue_files: FilesArg) -> List[str]:
 
 def _get_search(
     config_file: Union[str, Path, Dict[str, Any], tomlkit.TOMLDocument],
-    search_dirs: list[str] | None = None,
-    datasets: list[str] | None = None,
+    search_dirs: Optional[List[str]] = None,
+    datasets: Optional[List[str]] = None,
 ) -> list[CrawlerSettings]:
     _search_items = []
+    search_dirs = search_dirs or []
+    datasets = datasets or []
     config = DRSConfig.load(config_file).datasets
     if not datasets and not search_dirs:
         return [

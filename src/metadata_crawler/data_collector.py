@@ -8,10 +8,13 @@ from typing import (
     AsyncIterator,
     Awaitable,
     Callable,
+    Dict,
     Optional,
     Union,
     cast,
 )
+
+import tomlkit
 
 from .api.config import CrawlerSettings, DRSConfig
 from .api.metadata_stores import CatalogueWriter, IndexName
@@ -25,9 +28,9 @@ class DataCollector:
 
     Parameters
     ----------
-    config_file: Path | str
-        Path to the drs config file holding the file type information
-    *search_objects: Path | str
+    config_file:
+        Path to the drs-config file / loaded configuration.
+    *search_objects:
         Paths of the search directories. e.g. `root_path` attr in drs_config
     uri: str
         the uir of the metadata store.
@@ -39,8 +42,10 @@ class DataCollector:
 
     def __init__(
         self,
-        config_file: Union[Path, str],
-        metadata_store: Optional[Union[Path, str]],
+        config_file: Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument],
+        metadata_store: Optional[
+            Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument]
+        ],
         index_name: IndexName,
         *search_objects: CrawlerSettings,
         **kwargs: Any,
@@ -162,7 +167,7 @@ class DataCollector:
         walk recursively content until files are found or until the version.
         """
 
-        op: Optional[Callable[[str, str], Awaitable[None]]] = None
+        op: Optional[Callable[..., Awaitable[None]]] = None
         store = self.config.datasets[drs_type].backend
         try:
             is_file = await store.is_file(inp_dir)

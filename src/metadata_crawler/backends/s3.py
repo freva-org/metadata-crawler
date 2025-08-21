@@ -17,7 +17,7 @@ class S3Path(PathTemplate):
 
     _fs_type = "s3"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self._client: Optional[S3FileSystem] = None
         self.storage_options = self.storage_options or {"anon": True}
 
