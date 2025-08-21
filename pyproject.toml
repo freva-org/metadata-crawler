@@ -126,7 +126,7 @@ allow_untyped_calls = true
 legacy_tox_ini = """
 [tox]
 min_version = 4.0
-env_list = types, lint, test
+env_list = types, lint
 [testenv]
 parallel_show_output = false
 [testenv:test]

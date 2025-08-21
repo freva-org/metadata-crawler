@@ -60,7 +60,7 @@ jobs:
   dependabot:
     name: Merge PR by dependabot
     runs-on: ubuntu-latest
-    needs: [tests, lint-and-docs, build-docker-image]
+    needs: [tests, lint-and-docs]
     if: github.event.pull_request.user.login == 'dependabot[bot]'
     steps:
       - name: Dependabot metadata
