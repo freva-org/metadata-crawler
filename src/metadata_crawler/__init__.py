@@ -1,4 +1,4 @@
-"""The metdata crawler."""
+"""Metadata Crawler API high level functions:"""
 
 import asyncio
 from pathlib import Path
@@ -27,6 +27,7 @@ __all__ = [
     "async_index",
     "async_delete",
     "async_add",
+    "get_config",
 ]
 
 
@@ -37,7 +38,7 @@ def get_config(config: Optional[Union[Path, str]] = None) -> ConfigMerger:
     default values.
 
     Parameters
-    ----------
+    ^^^^^^^^^^
     config:
         Path to a user defined config file that is going to be merged with
         the default config.
@@ -55,7 +56,7 @@ def index(
     """Index metadata in the indexing system.
 
     Parameters
-    ----------
+    ^^^^^^^^^^
 
     index_system:
         The index server where the metadata is indexed.
@@ -67,6 +68,19 @@ def index(
         Set the verbosity level.
     **kwargs:
         Keyword arguments used to delete data from the index.
+
+    Example
+    ^^^^^^^
+
+    .. code-block:: python
+
+        index(
+            "solr",
+            "/tmp/catalog-1.yml",
+            "/tmp/catalog-2.yml",
+            batch_size=50,
+        )
+
 
     """
 
@@ -90,7 +104,7 @@ def delete(
     """Delete metadata from the indexing system.
 
     Parameters
-    ----------
+    ^^^^^^^^^^
 
     index_system:
         The index server where the metadata is indexed.
@@ -100,6 +114,18 @@ def delete(
         Set the verbosity of the system.
     **kwargs:
         Keyword arguments used to delete data from the index.
+
+
+    Example
+    ^^^^^^^
+
+    .. code-block:: python
+
+        delete(
+            "solr",
+            server="loaclhost:8983",
+            facets=[("project", "CMIP6"), ("institute", "MPI-M")],
+        )
 
     """
     uvloop.run(async_delete(index_system, batch_size=batch_size, **kwargs))
@@ -126,7 +152,7 @@ def add(
     """Harvest metadata from sotrage systems and add them to an intake catalogue
 
     Parameters
-    ----------
+    ^^^^^^^^^^
 
     store:
         Path to the intake catalogue.
@@ -167,14 +193,16 @@ def add(
 
 
     Example
-    -------
+    ^^^^^^^^
 
-        ::
-            add(
-                "my-data.yaml",
-                "~/data/drs-config.toml",
-                data_set=["cmip6", "cordex"],
-            )
+    .. code-block:: python
+
+        add(
+            "my-data.yaml",
+            "~/data/drs-config.toml",
+            data_set=["cmip6", "cordex"],
+        )
+
     """
     uvloop.run(
         async_add(

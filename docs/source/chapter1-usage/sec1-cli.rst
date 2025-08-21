@@ -1,0 +1,79 @@
+Command‑line interface
+----------------------
+
+`metadata‑crawler` installs a console entry point named
+``metadata-crawler`` or ``mdc`` that exposes three high‑level subcommands:
+
+* ``crawl``  – Collect metadata into a temporary catalog.
+* ``config`` – Display general configuration
+* ``solr``   - Index and delete metadata to/from Apache solr.
+* ``mongo``  – Index and deleta metadata to/from MongoDB.
+
+Use ``--help`` on any command to see available options.  Below are
+some examples.
+
+Basic crawling
+^^^^^^^^^^^^^^
+
+To crawl a directory of files into a JSON lines catalog:
+
+.. code-block:: console
+
+   mdc crawl \
+        /tmp/cat.yml \
+       -c /path/to/drs_config.toml \
+       --catalogue-backend jsonlines \
+       --threads 4 \
+       --batch-size 100 \
+       --data-object /path/to/data
+
+Alternatively you can provide one or more dataset names defined in
+your DRS config instead of explicit file paths:
+
+.. code-block:: bash
+
+   metadata-crawler crawl \
+       /tmp/catalog.duckdb \
+       -c /path/to/drs_config.toml \
+       --catalogue-backend duckdb \
+       --data-set cmip6-fs obs-fs
+
+
+Indexing
+^^^^^^^^
+
+Once a catalog has been generated you can index it into a backend.
+Apach Slor and MongoDB backends are supported out of the box.  The
+following example writes to a DuckDB file and index named ``latest``:
+
+.. code-block:: bash
+
+   metadata-crawler solr index \
+       /tmp/catalog.yml \
+       --server localhost:8983
+
+For MongoDB, supply the database URL and name:
+
+.. code-block:: bash
+
+   metadata-crawler mongo index \
+       /tmp/catalog.yml /tmp/catalog-2.yml \
+       --url mongodb://localhost:27017 \
+       --database metadata
+
+Deleting
+^^^^^^^^
+
+The ``delete`` command removes documents from the index using one or
+more facet filters.  Facet values may contain shell wildcards
+(``*`` and ``?``) which are translated to MongoDB regular expressions
+(DuckDB deletion uses filters internally).  For example:
+
+.. code-block:: bash
+
+   metadata-crawler mongo delete \
+       --url mongodb://localhost:27017 \
+       --database metadata \
+       -f project CMIP6 -f file "*.nc"
+
+See ``metadata-crawler --help`` for a complete list of options.

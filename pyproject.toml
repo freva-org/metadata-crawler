@@ -41,6 +41,7 @@ dependencies = [
         "pydantic",
         "pyarrow",
         "rich",
+        "rich-argparse",
         "tomli",
         "tomlkit",
         "typing_extensions",
@@ -53,10 +54,15 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["flit", "tox"]
 doc = [
-    "furo",
     "sphinx",
     "sphinxcontrib_github_alt",
     "sphinx-execute-code-python3",
+    "sphinx-copybutton",
+    "sphinx-sitemap",
+    "sphinx-togglebutton",
+    "sphinxext-opengraph",
+    "pydata-sphinx-theme",
+    "myst-parser",
 ]
 tests = [
     "types-appdirs",
@@ -82,6 +88,7 @@ Home = "https://github.com/freva-org/freva-admin"
 
 [project.scripts]
 metadata-crawler = "metadata_crawler.cli:cli"
+mdc = "metadata_crawler.cli:cli"
 
 [project.entry-points."metadata_crawler.ingester"]
 solr = "metadata_crawler.ingester.solr:SolrIndex"
@@ -137,7 +144,7 @@ commands =
     python3 -m coverage report --fail-under=5 --precision=2
 
 [testenv:docs]
-deps = .[doc]
+deps = -e .[doc]
 setenv =
     LC_ALL = C
     LANG = C

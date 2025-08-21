@@ -1,0 +1,94 @@
+Harvest your climate metadata
+=============================
+
+
+Overview
+--------
+
+**Metadata Crawler** is a tool for harvesting, normalising, and indexing
+metadata from climate and earth‑system datasets stored on POSIX file
+systems, S3/MinIO object stores, or OpenStack Swift. The project is highly
+configurable: dataset definitions, directory and filename patterns, and
+metadata extraction are controlled via TOML configuration files.
+You can use the asynchronous and synchronous Python APIs directly or drive
+everything through a command‑line interface (CLI).
+
+Installation & Quick Start
+--------------------------
+
+Install via `pip <https://pypi.org>`_ or `conda-forge <https://conda-forge.org>`_:
+
+.. code-block:: console
+
+    python -m pip install metadata-crawler
+    conda install -c conda-forge metadata-crawler
+
+After installation, use the CLI immediately (see TL;DR below) or import
+the modules in your own code.
+
+CLI usage (TL;DR)
+-----------------
+
+The CLI uses a **custom framework** inspired by Typer but is **not** Typer. Commands are grouped under three verbs: ``crawl``, ``index`` and ``delete``.
+
+*Harvest metadata into a catalogue*:
+
+.. code-block:: console
+
+   mdc crawl cat.yaml -c drs_config.toml --dataset cmip6-fs --dataset obs-fs \
+             --threads 4 --batch-size 100
+
+This reads dataset definitions from ``drs_config.toml`` and writes harvested
+metadata into a temporary **catalogue** file. You can specify one or
+more dataset names via ``--dataset`` or explicit paths via ``--data-object``.
+Catalogue formats include JSONLines (gzipped) or DuckDB.
+
+*Index catalogue entries*:
+
+.. code-block:: console
+
+   mdc solr index cat-1.yaml cat2.yaml --server https://myserver:8983
+
+This reads entries from a catalogue and inserts/updates them in the chosen
+index backend. Supported backends include **Solr**
+and **MongoDB** (see :doc:`chapter3-api/index`).
+
+*Delete entries from an index*:
+
+.. code-block:: console
+
+   mdc solr delete --server https://myserver:8983 --facets file /path/to/*.nc
+
+Deletes entries matching facet/value pairs.
+Wildcards in the value are supported (e.g., ``"file *.nc"``).
+
+For detailed options and examples, see the usage
+chapter and :doc:`chapter3-api/index`.
+
+Contents
+--------
+
+.. toctree::
+   :maxdepth: 1
+
+   chapter1-usage/index
+   chapter2-config/index
+   chapter3-api/index
+   whatsnew
+   code-of-conduct
+
+.. seealso::
+
+   `Freva <https://pypi.org/project/freva-client/>`_
+        The freva evaluation system.
+   `Freva admin docs <https://freva-deployment.readthedocs.io>`_
+        Installation and configuration of the freva services.
+
+
+
+Indices and tables
+------------------
+
+* :ref:`genindex`
+* :ref:`modindex`
+* :ref:`search`

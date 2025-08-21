@@ -25,6 +25,8 @@ from typing import (
     get_type_hints,
 )
 
+from rich_argparse import ArgumentDefaultsRichHelpFormatter
+
 from metadata_crawler import add, delete, get_config, index
 
 from ._version import __version__
@@ -98,7 +100,7 @@ class ArgParse:
         self.parser = argparse.ArgumentParser(
             prog=THIS_NAME,
             description="Add/Remove metadata to/from a metadata index.",
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            formatter_class=ArgumentDefaultsRichHelpFormatter,
             epilog=self.epilog,
         )
         self.parser.add_argument(
@@ -123,7 +125,7 @@ class ArgParse:
             "config",
             description="Display config",
             help="Display config",
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            formatter_class=ArgumentDefaultsRichHelpFormatter,
             epilog=self.epilog,
         )
         parser.add_argument(
@@ -143,7 +145,7 @@ class ArgParse:
             "crawl",
             description="Collect (crawl) metadata",
             help="Collect (crawl) metadata",
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            formatter_class=ArgumentDefaultsRichHelpFormatter,
             epilog=self.epilog,
         )
         parser.add_argument(
@@ -273,7 +275,7 @@ class ArgParse:
             "walk-intake",
             description="Walk an intake catalogue",
             help="Walk an intake catalogue",
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            formatter_class=ArgumentDefaultsRichHelpFormatter,
             epilog=self.epilog,
         )
 
@@ -308,7 +310,7 @@ class ArgParse:
                     plugin,
                     help=cls.__doc__,
                     description=cls.__doc__,
-                    formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+                    formatter_class=ArgumentDefaultsRichHelpFormatter,
                     epilog=self.epilog,
                 )
                 cmd_parser = subparser.add_subparsers(required=True)
@@ -317,7 +319,7 @@ class ArgParse:
                     name,
                     help=getattr(method, "_cli_help", ""),
                     description=getattr(method, "_cli_help", ""),
-                    formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+                    formatter_class=ArgumentDefaultsRichHelpFormatter,
                     epilog=self.epilog,
                 )
                 parser.add_argument(

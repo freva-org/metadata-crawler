@@ -113,7 +113,7 @@ async def async_index(
     """Index metadata in the indexing system.
 
     Parameters
-    ----------
+    ^^^^^^^^^^
 
     index_system:
         The index server where the metadata is indexed.
@@ -125,6 +125,21 @@ async def async_index(
         Set the verbosity of the system.
     **kwargs:
         Keyword arguments used to delete data from the index.
+
+
+    Example
+    ^^^^^^^
+
+    .. code-block:: python
+
+        await async_add(
+            store="/tmp/catalog.yaml",
+            config_file="/path/to/",
+            data_set=["cmip6-fs", "obs-fs"],
+            catalogue_backend="duckdb",
+            threads=8,
+            batch_size=50,
+        )
 
     """
     kwargs.setdefault("catalogue_files", catalogue_files)
@@ -146,8 +161,7 @@ async def async_delete(
     """Delete metadata from the indexing system.
 
     Parameters
-    ----------
-
+    ^^^^^^^^^^^
     index_system:
         The index server where the metadata is indexed.
     batch_size:
@@ -156,6 +170,18 @@ async def async_delete(
         Set the verbosity of the system.
     **kwargs:
         Keyword arguments used to delete data from the index.
+
+    Example
+    ^^^^^^^^
+
+    .. code-block:: python
+
+        await async_delete(
+            "solr"
+            server="localhost:8983",
+            latest_version="latest",
+            facets=[("file", "*.nc"), ("project", "OBS")],
+        )
 
     """
     await async_call(
@@ -190,7 +216,7 @@ async def async_add(
     """Harvest metadata from sotrage systems and add them to an intake catalogue
 
     Parameters
-    ----------
+    ^^^^^^^^^^
 
     store:
         Path to the intake catalogue.
@@ -229,14 +255,16 @@ async def async_add(
 
 
     Example
-    -------
+    ^^^^^^^
 
-        ::
-            await async_add(
-                "my-data.yaml",
-                "~/data/drs-config.toml",
-                data_set=["cmip6", "cordex"],
-            )
+     .. code-block:: python
+
+         await async_add(
+             "my-data.yaml",
+             "~/data/drs-config.toml",
+             data_set=["cmip6", "cordex"],
+         )
+
     """
     env = cast(os._Environ[str], os.environ.copy())
     old_level = apply_verbosity(verbosity)
