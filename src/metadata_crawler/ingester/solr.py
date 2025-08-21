@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Annotated, Any, Dict, List, Optional
 
@@ -92,13 +93,12 @@ class SolrIndex(BaseIndex):
                 async with session.post(
                     url, json={"delete": {"query": query_str}}
                 ) as resp:
-                    if resp.status not in (200, 201):
-                        logger.debug(await resp.text())
-
-                        logger.error(
-                            "Status failed with: %i",
-                            resp.status,
-                        )
+                    level = (
+                        logging.WARNING
+                        if resp.status not in (200, 201)
+                        else logging.DEBUG
+                    )
+                    logger.log(level, await resp.text())
 
     def _convert(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
         for k, v in metadata.items():
@@ -133,9 +133,9 @@ class SolrIndex(BaseIndex):
                     async with session.post(
                         url, json=list(map(self._convert, chunk))
                     ) as resp:
-                        if resp.status not in (200, 201):
-                            logger.error(await resp.text())
-                            raise ValueError(
-                                "Solr Ingest failed with: "
-                                f"{resp.status} in {core}"
-                            )
+                        level = (
+                            logging.WARNING
+                            if resp.status not in (200, 201)
+                            else logging.DEBUG
+                        )
+                        logger.log(level, await resp.text())

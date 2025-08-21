@@ -32,7 +32,6 @@ from pydantic import (
     ValidationError,
     field_validator,
     model_validator,
-    root_validator,
 )
 from tomlkit.container import OutOfOrderTableProxy
 from tomlkit.items import Table
@@ -382,18 +381,18 @@ class Datasets(BaseModel):
     storage_options: Dict[str, Any] = Field(default_factory=dict)
     glob_pattern: str = "*.*"
 
-    @root_validator(pre=True)
-    def validate_storage_options(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        # ensure only allowed sources are present
-        storage_options = values.get("storage_options", {})
+    @field_validator("storage_options", mode="after")
+    @classmethod
+    def _render_storage_options(
+        cls, storage_options: Dict[str, Any]
+    ) -> Dict[str, Any]:
         for option in storage_options:
             value = storage_options[option]
 
             if isinstance(value, str):
                 storage_options[option] = Template(value).render(env=os.getenv)
 
-        values["storage_options"] = storage_options
-        return values
+        return storage_options
 
     def model_post_init(self, __context: Any = None) -> None:
         storage_plugins = load_plugins("metadata_crawler.storage")
@@ -442,14 +441,19 @@ class Dialect(BaseModel):
     )
     inherits_from: Optional[str] = None
 
-    @root_validator(pre=True)
-    def validate_sources(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+    @field_validator("sources", mode="after")
+    @classmethod
+    def validate_sources(cls, srcs: List[str]) -> Dict[str, Any]:
         # ensure only allowed sources are present
-        srcs = values.get("sources", [])
-        for s in srcs:
-            if s not in MetadataSource:
-                raise ValueError(f"Invalid metadata source: {s}")
-        return values
+        names = {name.upper() for name in MetadataSource.__members__.keys()}
+        values = {m.value for m in MetadataSource}
+        invalid = [s for s in srcs if s.upper() not in names and s not in values]
+        if invalid:
+            allowed = sorted(values | {n.lower() for n in names})
+            raise ValueError(
+                f"Invalid metadata source(s): {invalid!r}. Allowed: {allowed}"
+            )
+        return srcs
 
 
 class DRSConfig(BaseModel):
@@ -486,12 +490,14 @@ class DRSConfig(BaseModel):
             for k, _def in self.defaults.items():
                 self._defaults[key].setdefault(k, _def)
 
-    @root_validator(pre=True)
-    def _resolve_inheritance(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+    @model_validator(mode="before")
+    def _resolve_inheritance(cls, values: Any) -> Any:
         """
         After loading raw TOML into dicts, but before model instantiation,
         merge any dialects that declare `inherits_from`.
         """
+        if not isinstance(values, dict):
+            return values  # pragma: no cover
 
         def _deep_merge(a: Dict[str, Any], b: Dict[str, Any]) -> None:
             for k, v in b.items():
@@ -525,9 +531,12 @@ class DRSConfig(BaseModel):
         values["dialect"] = merged
         return values
 
-    @root_validator(pre=True)
-    def _ensure_dialects(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+    @model_validator(mode="before")
+    def _ensure_dialects(cls, values: Any) -> Any:
         """Ensure every dialect is a Dialect model."""
+        if not isinstance(values, dict):
+            return values  # pragma: no cover
+
         raw = values.get("dialect", {})
         values["dialect"] = {k: v for k, v in raw.items()}
         return values

@@ -109,4 +109,5 @@ def test_delete_solr(
     )
     num = res.json().get("response", {}).get("numFound", 0)
     assert num == 0
-    delete("solr", facets=[("file", "*")], server=solr_server)
+    delete("solr", facets=[("file", "/foo/*")], server=solr_server)
+    delete("solr", facets=[("file", "/foo/*")], server=solr_server)
