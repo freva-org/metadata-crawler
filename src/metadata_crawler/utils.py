@@ -1,6 +1,5 @@
 """Random utility functions."""
 
-import asyncio
 import difflib
 import threading
 from datetime import datetime, timedelta

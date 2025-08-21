@@ -28,7 +28,6 @@ from typing import (
     Tuple,
     Type,
     Union,
-    cast,
 )
 from urllib.parse import urlsplit
 
