@@ -1,21 +1,30 @@
 from __future__ import annotations
 
-import asyncio
-import inspect
 import os
 import re
 import textwrap
 from copy import deepcopy
 from datetime import datetime
 from enum import Enum, StrEnum
+from fnmatch import fnmatch
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Literal, Optional, Union, cast
+from typing import (
+    Annotated,
+    Any,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Union,
+    cast,
+)
 from urllib.parse import urlsplit
+from warnings import catch_warnings
 
-import numpy as np
 import tomli
 import tomlkit
 import xarray
+from jinja2 import Template
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -28,15 +37,8 @@ from pydantic import (
 from tomlkit.container import OutOfOrderTableProxy
 from tomlkit.items import Table
 
-from ..backends.base import Metadata
 from ..utils import convert_str_to_timestamp, load_plugins
-
-
-def is_async_callable(fn: Callable[..., Any]) -> bool:
-    """
-    Return True if `fn` is an async function (i.e. defined with `async def`).
-    """
-    return asyncio.iscoroutinefunction(fn) or inspect.iscoroutinefunction(fn)
+from .storage_backend import Metadata
 
 
 class BaseType(str, Enum):
@@ -104,15 +106,22 @@ class SchemaField(BaseModel):
         return self
 
     @staticmethod
-    def get_time_range(time_stamp: str) -> List[datetime]:
+    def get_time_range(
+        time_stamp: Optional[Union[str, List[str]]],
+    ) -> List[datetime]:
         """Convert a from to time range to a begin or end time step."""
-        start_str, _, end_str = (
-            time_stamp.replace(":", "").replace("_", "-").partition("-")
-        )
-        start = convert_str_to_timestamp(
-            start_str or "fx", alternative="0001-01-01"
-        )
-        end = convert_str_to_timestamp(end_str or "fx", alternative="9999-12-31")
+        time_stamp = time_stamp or ""
+        if isinstance(time_stamp, str):
+            start_str, _, end_str = (
+                time_stamp.replace(":", "").replace("_", "-").partition("-")
+            )
+            time_stamp = [start_str or "fx", end_str or "fx"]
+        for n, ts in enumerate(time_stamp):
+            if hasattr(ts, "isoformat"):
+                time_stamp[n] = ts.isoformat()
+            time_stamp[n] = str(ts) or "fx"
+        start = convert_str_to_timestamp(time_stamp[0], alternative="0001-01-01")
+        end = convert_str_to_timestamp(time_stamp[-1], alternative="9999-12-31")
         return [start, end]
 
 
@@ -125,7 +134,7 @@ class MetadataSource(StrEnum):
 
 
 class VarAttrRule(BaseModel):
-    var: str  # "__variable__" or literal; supports "{variable}" format
+    var: str
     attr: str  # attribute name on DataArray.attrs
     default: Any = None
 
@@ -133,8 +142,7 @@ class VarAttrRule(BaseModel):
 class StatRule(BaseModel):
     stat: Literal["min", "max", "minmax", "range", "bbox"]
     var: Optional[str] = None  # for numeric stats on a single var
-    vars: Optional[List[str]] = None  # for bbox: [lat, lon]
-    coord: Optional[str] = None  # for time range, etc.
+    coords: Optional[Union[List[str], str]] = None  # for time range, etc.
     lat: Optional[str] = None  # convenience keys for bbox
     lon: Optional[str] = None
     default: Any = None
@@ -146,14 +154,37 @@ class ConfigMerger:
     preserves comments/formatting, and lets you inspect or write the result.
     """
 
-    def __init__(self, user_path: Optional[Union[Path, str]] = None):
+    def __init__(
+        self,
+        user_path: Optional[
+            Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument]
+        ] = None,
+    ):
         # parse both documents
         system_path = Path(__file__).parent / "drs_config.toml"
         self._system_doc = tomlkit.parse(system_path.read_text(encoding="utf-8"))
-        if user_path:
-            self._user_doc = tomlkit.parse(
-                Path(user_path).read_text(encoding="utf-8")
-            )
+        _config: str = ""
+        if user_path is not None:
+            if isinstance(user_path, (str, Path)) and os.path.isdir(user_path):
+                _config = (
+                    Path(user_path).expanduser().absolute() / "drs_config.toml"
+                ).read_text(encoding="utf-8")
+            if isinstance(user_path, (str, Path)) and os.path.isfile(user_path):
+                _config = (
+                    Path(user_path)
+                    .expanduser()
+                    .absolute()
+                    .read_text(encoding="utf-8")
+                )
+            elif isinstance(user_path, (str, Path)):
+                _config = str(user_path)
+            else:
+                _config = tomlkit.dumps(user_path)
+        if _config:
+            try:
+                self._user_doc = tomlkit.parse(_config)
+            except Exception:
+                raise ValueError("Could not load config path.")
             self._merge_tables(self._system_doc, self._user_doc)
 
     def _merge_tables(
@@ -242,16 +273,6 @@ class DataSpecs(BaseModel):
     stats: Dict[str, StatRule] = Field(default_factory=dict)
     read_kws: Dict[str, Any] = Field(default_factory=dict)
 
-    @staticmethod
-    def _resolve_placeholder(value: str, data: Dict[str, Any]) -> Any:
-        if value.startswith("__coord:"):
-            value = value.split(":", 1)[1]
-        # allow "{variable}" style
-        for k, v in data.items():
-            if k in value:
-                return v
-        return value
-
     def _set_global_attributes(
         self, dset: "xarray.Dataset", out: Dict[str, Any]
     ) -> None:
@@ -265,17 +286,26 @@ class DataSpecs(BaseModel):
     def _set_variable_attributes(
         self, dset: "xarray.Dataset", out: Dict[str, Any]
     ) -> None:
+        data_vars = list(dset.data_vars)
 
-        def get_val(rule: VarAttrRule, vname: str) -> Any:
-            default = rule.default.replace("__name__", vname) or vname
-            if vname in dset:
-                return dset[vname].attrs.get(rule.attr, default)
-            return default
+        def get_val(
+            rule: VarAttrRule, vnames: Union[str, List[str]]
+        ) -> List[Any]:
+            if isinstance(vnames, str):
+                vnames = [dv for dv in data_vars if fnmatch(dv, vnames)]
+            attr_list: List[Any] = []
+            for vname in vnames:
+                default = (rule.default or "").replace("__name__", vname) or vname
+                attr = (rule.attr or "").replace("__name__", vname) or vname
+                if vname in dset:
+                    attr_list.append(dset[vname].attrs.get(attr, default))
+                else:
+                    attr_list.append(default)
+            return attr_list
 
         for facet, rule in self.var_attrs.items():
-            resolved: str | List[str] = self._resolve_placeholder(rule.var, out)
-            var_list = [resolved] if isinstance(resolved, str) else list(resolved)
-            vals = [get_val(rule, v) for v in var_list]
+            resolved: Union[str, List[str]] = rule.var
+            vals = get_val(rule, resolved)
             if len(vals) == 1:
                 out[facet] = vals[0]
             else:
@@ -286,12 +316,20 @@ class DataSpecs(BaseModel):
     ) -> None:
 
         for facet, rule in self.stats.items():
+            coords: Optional[List[str]] = None
+            if rule.coords:
+                coords = (
+                    rule.coords
+                    if isinstance(rule.coords, list)
+                    else [rule.coords]
+                )
             match rule.stat:
                 case "bbox":
-                    lat = rule.lat or (rule.vars[0] if rule.vars else None)
+                    lat = rule.lat or (coords[0] if coords else "lat")
                     lon = rule.lon or (
-                        rule.vars[1] if rule.vars and len(rule.vars) > 1 else None
+                        coords[1] if coords and len(coords) > 1 else "lon"
                     )
+                    out[facet] = rule.default
                     if lat in dset and lon in dset:
                         latv = dset[lat].values
                         lonv = dset[lon].values
@@ -301,40 +339,27 @@ class DataSpecs(BaseModel):
                             float(latv.min()),
                             float(latv.max()),
                         ]
-                    else:
-                        out[facet] = rule.default
 
                 case "range":
-                    coord = (
-                        self._resolve_placeholder(rule.coord, out)
-                        if rule.coord
-                        else None
-                    )
+                    coord = coords[0] if coords else None
+                    out[facet] = rule.default
                     if coord and coord in dset.coords:
                         arr = dset.coords[coord].values
-                        out[facet] = [str(arr.min()), str(arr.max())]
-                    else:
-                        out[facet] = rule.default
+                        out[facet] = [arr.min(), arr.max()]
 
                 case "min" | "max" | "minmax":
-                    var_name = (
-                        self._resolve_placeholder(rule.var, out)
-                        if rule.var
-                        else None
-                    )
+
+                    coord = coords[0] if coords else None
+                    var_name = rule.var if rule.var else coord
+                    out[facet] = rule.default
                     if var_name and var_name in dset:
                         arr = dset[var_name].values
                         if rule.stat == "min":
-                            out[facet] = float(np.nanmin(arr))
+                            out[facet] = arr.min()
                         elif rule.stat == "max":
-                            out[facet] = float(np.nanmax(arr))
+                            out[facet] = arr.max()
                         else:
-                            out[facet] = [
-                                float(np.nanmin(arr)),
-                                float(np.nanmax(arr)),
-                            ]
-                    else:
-                        out[facet] = rule.default
+                            out[facet] = [arr.min(), arr.max()]
 
     def extract_from_data(self, dset: xarray.Dataset) -> Dict[str, Any]:
         """Extract metadata from the data."""
@@ -363,9 +388,9 @@ class Datasets(BaseModel):
         storage_options = values.get("storage_options", {})
         for option in storage_options:
             value = storage_options[option]
-            if isinstance(value, str) and value.lower().startswith("__env:"):
-                key, _, default = value.split(":", 1)[1].partition(",")
-                storage_options[option] = os.getenv(key.upper(), default)
+
+            if isinstance(value, str):
+                storage_options[option] = Template(value).render(env=os.getenv)
 
         values["storage_options"] = storage_options
         return values
@@ -380,15 +405,26 @@ class Datasets(BaseModel):
             ) from None
 
 
-class SpecialRule(BaseModel):
-    type: Literal["conditional", "lookup", "function", "call"]
-    condition: Optional[str] = None
-    true: Optional[Any] = None
-    false: Optional[Any] = None
-    call: Optional[str] = None
-    method: Optional[str] = None
-    args: List[str] = Field(default_factory=list)
-    items: List[str] = Field(default_factory=list)
+class ConditionalRule(BaseModel):
+    type: Literal["conditional"] = "conditional"
+    condition: str
+    true: Any
+    false: Any
+
+
+class CallRule(BaseModel):
+    type: Literal["call"] = "call"
+    call: str
+
+
+class LookupRule(BaseModel):
+    type: Literal["lookup"] = "lookup"
+    items: List[str]
+
+
+SpecialRule = Annotated[
+    Union[ConditionalRule, CallRule, LookupRule], Field(discriminator="type")
+]
 
 
 class Dialect(BaseModel):
@@ -499,56 +535,52 @@ class DRSConfig(BaseModel):
     def _apply_special_rules(
         self, standard: str, inp: Metadata, specials: Dict[str, SpecialRule]
     ) -> None:
-        call = {
-            "self": self,
-            "data": inp.metadata,
-            "standard": standard,
-            "__file_name__": inp.path,
-            "storage_backend": self.datasets[standard].backend,
-        }
+        data = {**inp.metadata, **{"file": inp.path, "uri": inp.path}}
+        call = {**{"dialect": self.dialect[standard]}, **data}
+
         for facet, rule in specials.items():
             result: Any = None
             if inp.metadata.get(facet):
                 continue
             match rule.type:
                 case "conditional":
-                    cond = eval(rule.condition or "", {}, call)
+                    _rule = textwrap.dedent(rule.condition or "").strip()
+                    cond = Template(_rule).render(**data)
+                    cond = eval(cond, {}, call)
                     result = rule.true if cond else rule.false
                 case "lookup":
-                    args = [eval(arg or "", {}, call) for arg in rule.items]
+                    args = [Template(r).render(**data) for r in rule.items]
                     result = self.datasets[standard].backend.lookup(
                         inp.path,
                         standard,
                         *args,
                         **self.dialect[standard].data_specs.read_kws,
                     )
-                case "function":
-                    call_str = textwrap.dedent(
-                        (rule.method or rule.call) or ""
-                    ).strip()
-                    func = eval(call_str, {}, call)
-                    args = [eval(arg, {}, call) for arg in rule.args]
-                    if is_async_callable(func):
-                        result = asyncio.run(func(*args))
-                    else:
-                        result = func(*args)
                 case "call":
-                    result = eval(textwrap.dedent(rule.call or "").strip())
+                    _call = textwrap.dedent(rule.call or "").strip()
+                    result = eval(Template(_call).render(**data), {}, call)
             if result:
                 inp.metadata[facet] = result
 
     def _metadata_from_path(self, path: str, standard: str) -> Dict[str, Any]:
         """Extract the metadata from the path."""
         drs_type = self.datasets[standard].drs_format
-        rel_path = (
-            strip_protocol(path)
-            .with_suffix("")
-            .relative_to(self.datasets[standard].root_path)
+        root_path = strip_protocol(
+            self.datasets[standard].backend.path(
+                self.datasets[standard].root_path
+            )
         )
+        _path = strip_protocol(self.datasets[standard].backend.path(path))
+        rel_path = _path.with_suffix("").relative_to(root_path)
         return self.dialect[drs_type].path_specs.get_metadata_from_path(rel_path)
 
     @classmethod
-    def load(cls, config_path: Optional[Union[Path, str]] = None) -> DRSConfig:
+    def load(
+        cls,
+        config_path: Optional[
+            Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument]
+        ] = None,
+    ) -> DRSConfig:
         cfg = tomli.loads(ConfigMerger(config_path).dumps())
         settings = cfg.pop("drs_settings")
         try:
@@ -572,8 +604,14 @@ class DRSConfig(BaseModel):
         This level is set as a hard threshold. If the drs type has no version
         we can indeed go all the way down to the file level.
         """
-        search_dir = strip_protocol(search_dir)
-        root_path = strip_protocol(self.datasets[drs_type].root_path)
+        root_path = strip_protocol(
+            self.datasets[drs_type].backend.path(
+                self.datasets[drs_type].root_path
+            )
+        )
+        search_dir = strip_protocol(
+            self.datasets[drs_type].backend.path(search_dir)
+        )
         standard = self.datasets[drs_type].drs_format
         version = cast(
             str, self.dialect[standard].facets.get("version", "version")
@@ -617,14 +655,15 @@ class DRSConfig(BaseModel):
                         self._metadata_from_path(inp.path, standard)
                     )
                 case MetadataSource.data:
-                    with self.datasets[standard].backend.open_dataset(
-                        inp.path, **self.dialect[standard].data_specs.read_kws
-                    ) as ds:
-                        inp.metadata.update(
-                            self.dialect[standard].data_specs.extract_from_data(
-                                ds
+                    with catch_warnings(action="ignore", category=RuntimeWarning):
+                        with self.datasets[standard].backend.open_dataset(
+                            inp.path, **self.dialect[standard].data_specs.read_kws
+                        ) as ds:
+                            inp.metadata.update(
+                                self.dialect[
+                                    standard
+                                ].data_specs.extract_from_data(ds)
                             )
-                        )
         for key, default in self._defaults[standard].items():
             inp.metadata.setdefault(key, default)
         self._apply_special_rules(standard, inp, self.dialect[standard].special)
@@ -668,7 +707,7 @@ class DRSConfig(BaseModel):
                     )
                 case _:
                     key = cast(str, dia.facets.get(schema.key, field))
-                    val = inp.metadata.get(key) or defs.get(field)
+                    val = inp.metadata.get(key) or defs.get(key)
             val = val or schema.default
             if schema.multi_valued or schema.length:
                 if not isinstance(val, list) and val:

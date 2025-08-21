@@ -4,17 +4,18 @@ import asyncio
 import os
 import time
 from pathlib import Path
+from types import NoneType
 from typing import Any, Dict, List, Optional, Sequence, Union, cast
 
+import tomlkit
 from rich import print as pprint
 from rich.prompt import Prompt
 
 from .api.config import CrawlerSettings, DRSConfig, strip_protocol
 from .api.metadata_stores import IndexName
 from .data_collector import DataCollector
-from .logger import logger
+from .logger import apply_verbosity, logger
 from .utils import (
-    deprecated_key,
     find_closest,
     load_plugins,
     timedelta_to_str,
@@ -31,9 +32,8 @@ def _norm_files(catalogue_files: FilesArg) -> List[str]:
     return [str(p) for p in catalogue_files]
 
 
-@deprecated_key({"root_dir": "root_path"})
 def _get_search(
-    config_file: Path,
+    config_file: Union[str, Path, Dict[str, Any], tomlkit.TOMLDocument],
     search_dirs: list[str] | None = None,
     datasets: list[str] | None = None,
 ) -> list[CrawlerSettings]:
@@ -52,11 +52,11 @@ def _get_search(
         except KeyError:
             msg = find_closest(f"No such dataset: {item}", item, config.keys())
             raise ValueError(msg) from None
-    for _dir in map(strip_protocol, search_dirs or []):
+    for num, _dir in enumerate(map(strip_protocol, search_dirs or [])):
         for name, cfg in config.items():
             if _dir.is_relative_to(strip_protocol(cfg.root_path)):
                 _search_items.append(
-                    CrawlerSettings(name=name, search_path=str(_dir))
+                    CrawlerSettings(name=name, search_path=str(search_dirs[num]))
                 )
 
     return _search_items
@@ -67,39 +67,45 @@ async def async_call(
     method: str,
     batch_size: int = 2500,
     catalogue_files: Optional[Sequence[Union[Path, str]]] = None,
+    verbosity: int = 0,
     *args: Any,
     **kwargs: Any,
 ) -> None:
     """Index metadata."""
-    backends = load_plugins("metadata_crawler.ingester")
+    old_level = apply_verbosity(verbosity)
     try:
-        cls = backends[index_system]
-    except KeyError:
-        msg = find_closest(
-            f"No such backend: {index_system}", index_system, backends.keys()
-        )
-        raise ValueError(msg) from None
-    flat_files = _norm_files(catalogue_files)
-    _event_loop = asyncio.get_event_loop()
-    flat_files = flat_files or [""]
-    futures = []
-    storage_options = kwargs.pop("storage_options", {})
-    for catalogue_file in flat_files:
-        obj = cls(
-            batch_size=batch_size,
-            catalogue_file=catalogue_file or None,
-            storage_options=storage_options,
-        )
-        func = getattr(obj, method)
-        future = _event_loop.create_task(func(**kwargs))
-        futures.append(future)
-    await asyncio.gather(*futures)
+        backends = load_plugins("metadata_crawler.ingester")
+        try:
+            cls = backends[index_system]
+        except KeyError:
+            msg = find_closest(
+                f"No such backend: {index_system}", index_system, backends.keys()
+            )
+            raise ValueError(msg) from None
+        flat_files = _norm_files(catalogue_files)
+        _event_loop = asyncio.get_event_loop()
+        flat_files = flat_files or [""]
+        futures = []
+        storage_options = kwargs.pop("storage_options", {})
+        for cf in flat_files:
+            obj = cls(
+                batch_size=batch_size,
+                catalogue_file=cf or None,
+                storage_options=storage_options,
+            )
+            func = getattr(obj, method)
+            future = _event_loop.create_task(func(**kwargs))
+            futures.append(future)
+        await asyncio.gather(*futures)
+    finally:
+        logger.set_level(old_level)
 
 
 async def async_index(
     index_system: str,
     *catalogue_files: Union[Path, str, List[str], List[Path]],
     batch_size: int = 2500,
+    verbosity: int = 0,
     **kwargs: Any,
 ) -> None:
     """Index metadata in the indexing system.
@@ -113,6 +119,8 @@ async def async_index(
         Path to the file where the metadata was stored.
     batch_size:
         If the index system supports batch-sizes, the size of the batches.
+    verbosity:
+        Set the verbosity of the system.
     **kwargs:
         Keyword arguments used to delete data from the index.
 
@@ -122,12 +130,16 @@ async def async_index(
         index_system,
         "index",
         batch_size=batch_size,
+        verbosity=verbosity,
         **kwargs,
     )
 
 
 async def async_delete(
-    index_system: str, batch_size: int = 2500, **kwargs: Any
+    index_system: str,
+    batch_size: int = 2500,
+    verbosity: int = 0,
+    **kwargs: Any,
 ) -> None:
     """Delete metadata from the indexing system.
 
@@ -138,27 +150,40 @@ async def async_delete(
         The index server where the metadata is indexed.
     batch_size:
         If the index system supports batch-sizes, the size of the batches.
+    verbosity:
+        Set the verbosity of the system.
     **kwargs:
         Keyword arguments used to delete data from the index.
 
     """
-    await async_call(index_system, "delete", batch_size=batch_size, **kwargs)
+    await async_call(
+        index_system,
+        "delete",
+        batch_size=batch_size,
+        verbosity=verbosity,
+        **kwargs,
+    )
 
 
 async def async_add(
-    store: str | None = None,
-    config_file: Path | None | str = None,
-    data_object: list[str] | None = None,
-    data_set: list[str] | None = None,
+    store: Optional[
+        Union[str, Path, Dict[str, Any], tomlkit.TOMLDocument]
+    ] = None,
+    config_file: Optional[
+        Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument]
+    ] = None,
+    data_object: Optional[Union[str, List[str]]] = None,
+    data_set: Optional[Union[List[str], str]] = None,
     data_store_prefix: str = "metadata",
     batch_size: int = 2500,
     comp_level: int = 4,
     storage_options: Optional[Dict[str, Any]] = None,
-    catalogue_backend: str = "sqlite",
+    catalogue_backend: str = "duckdb",
     latest_version: str = IndexName().latest,
     all_versions: str = IndexName().all,
     password: bool = False,
     threads: Optional[int] = None,
+    verbosity: int = 0,
 ) -> None:
     """Harvest metadata from sotrage systems and add them to an intake catalogue
 
@@ -168,12 +193,12 @@ async def async_add(
     store:
         Path to the intake catalogue.
     config_file:
-        Path to the drs-config file.
+        Path to the drs-config file / loaded configuration.
     data_objects:
         Instead of defining datasets that are to be crawled you can crawl
         data based on their directories. The directories must be a root dirs
         given in the drs-config file. By default all root dirs are crawled.
-    data_ojbect:
+    data_object:
         Objects (directories or catalogue files) that are processed.
     data_set:
         Dataset(s) that should be crawled. The datasets need to be defined
@@ -197,6 +222,8 @@ async def async_add(
         Display a password prompt before beginning
     threads:
         Set the number of threads for collecting.
+    verbosity:
+        Set the verbosity of the system.
 
 
     Example
@@ -209,32 +236,38 @@ async def async_add(
                 data_set=["cmip6", "cordex"],
             )
     """
-    config_file = Path(
-        config_file or os.environ.get("EVALUATION_SYSTEM_CONFIG_DIR") or "."
-    )
-    if not config_file:
-        raise ValueError(("You must give a config file/directory"))
-    if config_file.is_dir():
-        cfg_file = Path(config_file).expanduser().absolute() / "drs_config.toml"
-    else:
-        cfg_file = Path(config_file).expanduser().absolute()
-
-    st = time.time()
-    passwd = ""
-    if password:  # pragma: no cover
-        passwd = Prompt.ask(
-            "[b]Enter the password", password=True
-        )  # pragma: no cover
-
     env = cast(os._Environ[str], os.environ.copy())
+    old_level = apply_verbosity(verbosity)
     try:
+        config_file = config_file or os.environ.get(
+            "EVALUATION_SYSTEM_CONFIG_DIR"
+        )
+        if not config_file:
+            raise ValueError("You must give a config file/directory")
+        st = time.time()
+        passwd = ""
+        if password:  # pragma: no cover
+            passwd = Prompt.ask(
+                "[b]Enter the password", password=True
+            )  # pragma: no cover
+
         if passwd:
             os.environ["DRS_STORAGE_PASSWD"] = passwd
+        data_object = (
+            data_object
+            if isinstance(data_object, (NoneType, list))
+            else [str(data_object)]
+        )
+        data_set = (
+            data_set
+            if isinstance(data_set, (NoneType, list))
+            else [str(data_set)]
+        )
         async with DataCollector(
-            cfg_file,
+            config_file,
             store,
             IndexName(latest=latest_version, all=all_versions),
-            *_get_search(cfg_file, data_object, data_set),
+            *_get_search(config_file, data_object, data_set),
             batch_size=batch_size,
             comp_level=comp_level,
             backend=catalogue_backend,
@@ -245,15 +278,16 @@ async def async_add(
             await data_col.ingest_data()
             num_files = data_col.ingested_objects
             files_discovered = data_col.crawled_files
+            dt = timedelta_to_str(time.time() - st)
+        logger.info("Discovered: %s files", f"{files_discovered:10,.0f}")
+        logger.info("Ingested: %s files", f"{num_files:10,.0f}")
+        logger.info("Spend: %s", dt)
+        pprint(
+            (
+                f"[bold]Ingested [green]{num_files:10,.0f}[/green] "
+                f"within [green]{dt}[/green][/bold]"
+            )
+        )
     finally:
         os.environ = env
-    dt = timedelta_to_str(time.time() - st)
-    logger.info("Discovered: %s files", f"{files_discovered:10,.0f}")
-    logger.info("Ingested: %s files", f"{num_files:10,.0f}")
-    logger.info("Spend: %s", dt)
-    pprint(
-        (
-            f"[bold]Ingested [green]{num_files:10,.0f}[/green] "
-            f"within [green]{dt}[/green][/bold]"
-        )
-    )
+        logger.set_level(old_level)

@@ -63,7 +63,7 @@ class BaseIndex:
             self._store = _reader.store
         self.__post_init__()
 
-    def __post_init__(self): ...
+    def __post_init__(self) -> None: ...
 
     @property
     def index_schema(self) -> Dict[str, SchemaField]:

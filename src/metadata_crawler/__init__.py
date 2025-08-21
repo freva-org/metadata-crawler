@@ -4,9 +4,11 @@ import asyncio
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
+import tomlkit
 import uvloop
 
 from ._version import __version__
+from .api.config import ConfigMerger
 from .api.metadata_stores import IndexName
 from .data_collector import DataCollector
 from .logger import logger
@@ -21,16 +23,33 @@ __all__ = [
     "index",
     "add",
     "delete",
+    "get_config",
     "async_index",
     "async_delete",
     "async_add",
 ]
 
 
+def get_config(config: Optional[Union[Path, str]] = None) -> ConfigMerger:
+    """Get a drs config file merged with the default config.
+
+    The method is helpful to inspect all possible configurations and their
+    default values.
+
+    Parameters
+    ----------
+    config:
+        Path to a user defined config file that is going to be merged with
+        the default config.
+    """
+    return ConfigMerger(config)
+
+
 def index(
     index_system: str,
     *catalogue_files: Union[Path, str, List[str], List[Path]],
     batch_size: int = 2500,
+    verbosity: int = 0,
     **kwargs: Any,
 ) -> None:
     """Index metadata in the indexing system.
@@ -44,6 +63,8 @@ def index(
         Path to the file(s) where the metadata was stored.
     batch_size:
         If the index system supports batch-sizes, the size of the batches.
+    verbosity:
+        Set the verbosity level.
     **kwargs:
         Keyword arguments used to delete data from the index.
 
@@ -54,12 +75,18 @@ def index(
             index_system,
             *catalogue_files,
             batch_size=batch_size,
+            verbosity=verbosity,
             **kwargs,
         )
     )
 
 
-def delete(index_system: str, batch_size: int = 2500, **kwargs: Any) -> None:
+def delete(
+    index_system: str,
+    batch_size: int = 2500,
+    verbosity: int = 0,
+    **kwargs: Any,
+) -> None:
     """Delete metadata from the indexing system.
 
     Parameters
@@ -69,6 +96,8 @@ def delete(index_system: str, batch_size: int = 2500, **kwargs: Any) -> None:
         The index server where the metadata is indexed.
     batch_size:
         If the index system supports batch-sizes, the size of the batches.
+    verbosity:
+        Set the verbosity of the system.
     **kwargs:
         Keyword arguments used to delete data from the index.
 
@@ -77,18 +106,21 @@ def delete(index_system: str, batch_size: int = 2500, **kwargs: Any) -> None:
 
 
 def add(
-    store: Optional[str] = None,
-    config_file: Optional[Union[Path, str]] = None,
+    store: Optional[Union[str, Path]] = None,
+    config_file: Optional[
+        Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument]
+    ] = None,
     data_object: Optional[List[str]] = None,
     data_set: Optional[List[str]] = None,
     data_store_prefix: str = "metadata",
-    catalogue_backend: str = "sqlite",
+    catalogue_backend: str = "duckdb",
     batch_size: int = 2500,
     comp_level: int = 4,
     storage_options: Optional[Dict[str, Any]] = None,
     latest_version: str = IndexName().latest,
     all_versions: str = IndexName().all,
     threads: Optional[int] = None,
+    verbosity: int = 0,
     password: bool = False,
 ) -> None:
     """Harvest metadata from sotrage systems and add them to an intake catalogue
@@ -99,7 +131,7 @@ def add(
     store:
         Path to the intake catalogue.
     config_file:
-        Path to the drs-config file.
+        Path to the drs-config file / loaded configuration.
     data_ojbect:
         Instead of defining datasets that are to be crawled you can crawl
         data based on their directories. The directories must be a root dirs
@@ -130,6 +162,8 @@ def add(
         Display a password prompt and set password before beginning.
     threads:
         Set the number of threads for collecting.
+    verbosity:
+        Set the verbosity of the system.
 
 
     Example
@@ -157,5 +191,6 @@ def add(
             all_versions=all_versions,
             threads=threads,
             storage_options=storage_options,
+            verbosity=verbosity,
         )
     )

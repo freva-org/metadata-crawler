@@ -39,10 +39,10 @@ import yaml
 
 import metadata_crawler
 
-from ..backends.base import Metadata
 from ..logger import logger
 from ..utils import create_async_iterator
 from .config import DRSConfig, SchemaField
+from .storage_backend import Metadata
 
 ISO_FORMAT_REGEX = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?$"
@@ -114,20 +114,6 @@ class DuckDBTypeMap(str, Enum):
         return f"{cls[_type].value}[]"
 
 
-def json_hook(d: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    JSON object‐hook that attempts to parse any ISO‐8601 string
-    values back into datetime.datetime.
-    """
-    for k, v in d.items():
-        if isinstance(v, str):
-            try:
-                d[k] = datetime.fromisoformat(v)
-            except ValueError:
-                pass
-    return d
-
-
 class IndexName(NamedTuple):
     """A paired set of metadata indexes representing:
 
@@ -185,24 +171,6 @@ class IndexStore:
         fs = fsspec.filesystem(protocol, **storage_options)
         return fs, protocol == "file"
 
-    async def serialise_or_deserialise(
-        self, obj: Dict[str, Any], action: Literal["serialise", "deserialise"]
-    ) -> Dict[str, Any]:
-        """Searialise or deserialise collections of items."""
-        funcs: Dict[str, Dict[str, Callable[[Any], Any]]] = {
-            "timestamp": {
-                "serialise": datetime.isoformat,
-                "deserialise": datetime.fromisoformat,
-            }
-        }
-        for key, value in obj.items():
-            if self.schema[key].length or self.schema[key].multi_valued:
-                typ = cast(str, self.schema[key].base_type)
-                if typ in funcs:
-
-                    obj[key] = list(map(funcs[typ][action], value))
-        return obj
-
     @abc.abstractmethod
     async def read(
         self,
@@ -224,24 +192,27 @@ class IndexStore:
     def get_path(self, path_suffix: Optional[str] = None) -> str:
         """Construct a path name for a given suffix."""
         path = self._path.removesuffix(self.suffix)
-        if path_suffix:
-            return f"{path}-{path_suffix}{self.suffix}"
-        return f"{path}{self.suffix}"
+        new_path = (
+            f"{path}-{path_suffix}{self.suffix}"
+            if path_suffix
+            else f"{path}{self.suffix}"
+        )
+        return new_path
 
     @abc.abstractmethod
     async def add(self, metadata_batch: List[Tuple[str, Dict[str, Any]]]) -> None:
         """Add a chunk metadata to the store."""
-        ...
+        ...  # pragma: no cover
 
     @abc.abstractmethod
     def close(self) -> None:
         """Close the data store."""
-        ...
+        ...  # pragma: no cover
 
     @abc.abstractmethod
     def get_args(self, index_name: str) -> Dict[str, Any]:
         """Define the intake arguments."""
-        ...
+        ...  # pragma: no cover
 
 
 class DuckDB(IndexStore):
@@ -308,16 +279,15 @@ class DuckDB(IndexStore):
 
         endpoint_hostport = None
         use_ssl = None
-        url_style = so.get("addressing_style") or "path"
 
+        use_ssl = True
+        url_style = "auto"
+        url_style = "auto"
         if endpoint_url:
+            url_style = so.get("addressing_style") or "path"
             ep = urlsplit(endpoint_url)
-            endpoint_hostport = ep.netloc or ep.path  # allow host:port form
+            endpoint_hostport = ep.netloc or ep.path
             use_ssl = ep.scheme == "https"
-        else:
-            # No explicit endpoint (likely AWS). Let DuckDB default to AWS S3.
-            use_ssl = True
-            url_style = "auto"
 
         settings: Dict[str, Any] = {
             "s3_access_key_id": key or "",
@@ -738,12 +708,6 @@ class CatalogueWriter:
             self._done = 1
         for task in self._tasks.values():
             task.join()
-
-    async def __aenter__(self) -> "CatalogueWriter":
-        return self
-
-    async def __aexit__(self, *args: Any, **kwargs: Any) -> None:
-        await self.close()
 
     async def close(self) -> None:
         """Base method for closing any connections."""

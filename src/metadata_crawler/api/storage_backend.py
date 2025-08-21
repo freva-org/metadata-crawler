@@ -19,14 +19,15 @@ from typing import (
     Tuple,
     Union,
 )
+from urllib.parse import urlsplit
 
 import fsspec
 import xarray as xr
 from anyio import Path
+from jinja2 import Template
 from pydantic import BaseModel, Field
 
-from ..utils import fs_and_path
-from .lookup_tables import cmor_lookup
+from ..backends.lookup_tables import cmor_lookup
 
 
 class Metadata(BaseModel):
@@ -36,58 +37,53 @@ class Metadata(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
-class BasePath(metaclass=abc.ABCMeta):
-    """Base class for interacting with different storage systems.
+class TemplateMixin:
+    """Apply templating egine jinja2."""
 
-    This class defines fundamental methods that should be implemented
-    to retrieve information across different storage systems.
+    def storage_template(self, key: str, default: Optional[str] = None) -> str:
+        """Template a jinja2 string."""
+        value = self.storage_options.get(key) or ""
+        default = default or ""
+        return Template(value).render(env=os.environ) or default
 
-    Parameters
-    ----------
-    url: str, default: None
-        The url of the storage system. If None given (default) no url is needed.
-    username: str, default: None
-        The user name used to interact with the storage system. Only relevant
-        if a user name is needed.
-    account: str, default: None
-        The account name used to interact with the storage system. Only
-        relevant if an account name is needed.
-    password: str, default: None
-        The password used to sign in to the storage system. Only
-        relevant if a sign in is supported by the storage system.
 
-    Attributes
-    ----------
-    """
+class PathMixin:
+    """Class that defines typical Path operations."""
 
-    _fs_type: ClassVar[Optional[str]]
-    """Defination of the file system time for each implementation."""
+    async def suffix(self, path: Union[str, Path, pathlib.Path]) -> str:
+        """Get the suffix of a given input path.
 
-    _lock = threading.RLock()
+        Parameters
+        ----------
+        path: str, asyncio.Path, pathlib.Path
+            Path of the object store
 
-    def __init__(
-        self, suffixes: Optional[List[str]] = None, **storage_options: Any
-    ) -> None:
-        self._user: str = os.environ.get("DRS_STORAGE_USER") or getuser()
-        self._pw: str = os.environ.get("DRS_STORAGE_PASSWD") or ""
-        self.suffixes = suffixes or [".nc", ".girb", ".zarr", ".tar", ".hdf5"]
-        self.storage_options = storage_options
+        Returns
+        -------
+        str: The file type extension of the path.
+        """
+        return Path(path).suffix
 
-    async def __aenter__(self) -> "BasePath":
-        return self
+    async def name(self, path: Union[str, Path, pathlib.Path]) -> str:
+        """Get the name of the object store.
 
-    async def __aexit__(self, *args: Any, **kwargs: Any) -> None:
-        await self.close()
+        Parameters
+        ----------
+        path: str, asyncio.Path, pathlib.Path
+            Path of the object store
 
-    async def close(self) -> None:
-        """Close any open sessions."""
+        Returns
+        -------
+        str: The 'file name' of the path.
+        """
+        return Path(path).name
 
-    def get_fs_and_path(self, path: str) -> Tuple[fsspec.AbstractFileSystem, str]:
+    def get_fs_and_path(self, uri: str) -> Tuple[fsspec.AbstractFileSystem, str]:
         """Return (fs, path) suitable for xarray.
 
         Parameters
         ----------
-        path:
+        uri:
             Path to the object store / file name
 
 
@@ -98,7 +94,70 @@ class BasePath(metaclass=abc.ABCMeta):
             data store.
 
         """
-        return fs_and_path(path)
+        protocol, path = fsspec.core.split_protocol(uri)
+        protocol = protocol or "file"
+        path = urlsplit(uri.removeprefix(f"{protocol}://")).path
+        return fsspec.filesystem(protocol), path
+
+
+class BasePath(abc.ABCMeta):
+    """Every storage backend class should be of this type."""
+
+
+class PathTemplate(abc.ABC, PathMixin, TemplateMixin, metaclass=BasePath):
+    """Base class for interacting with different storage systems.
+
+    This class defines fundamental methods that should be implemented
+    to retrieve information across different storage systems.
+
+    Parameters
+    ----------
+    suffixes: List[str], default:  [".nc", ".girb", ".zarr", ".tar", ".hdf5"]
+        A list of available file suffixes.
+
+    **storage_options: Any
+        Information needed to interact with the storage system.
+
+    Attributes
+    ----------
+    _user : str
+        Value of the ``DRS_STORAGE_USER`` env variable (defaults to current user)
+    _pw : str
+        a password passed by the ``DRS_STORAGE_PASSWD`` env variable
+    suffixes: List[str]
+        A list of available file suffixes.
+    storage_options: Dist[str, Any]
+        A dict with information needed to interact with the storage system.
+    """
+
+    _fs_type: ClassVar[Optional[str]]
+    """Defination of the file system time for each implementation."""
+
+    _lock = threading.RLock()
+
+    def __init__(
+        self, suffixes: Optional[List[str]] = None, **storage_options: Any
+    ) -> None:
+
+        self._user: str = os.environ.get("DRS_STORAGE_USER") or getuser()
+        self._pw: str = os.environ.get("DRS_STORAGE_PASSWD") or ""
+        self.suffixes = suffixes or [".nc", ".girb", ".zarr", ".tar", ".hdf5"]
+        self.storage_options = storage_options
+        self.__post_init__()
+
+    def __post_init__(self) -> None:
+        """This method is called after the __init__ method. If you need to
+        assign any attributes redifine this method in your class.
+        """
+
+    async def __aenter__(self) -> "PathTemplate":
+        return self
+
+    async def __aexit__(self, *args: Any, **kwargs: Any) -> None:
+        await self.close()
+
+    async def close(self) -> None:
+        """Close any open sessions."""
 
     def open_dataset(self, path: str, **read_kws: Any) -> xr.Dataset:
         """Open a dataset with xarray.
@@ -119,7 +178,7 @@ class BasePath(metaclass=abc.ABCMeta):
 
         def _get_engine(file_name: str) -> str:
             engines = {
-                "cfgrib": (".grb", ".grib", "gb"),
+                "cfgrib": (".grb", ".grib", ".gb"),
                 "h5netcdf": (".nc", ".nc4", ".netcdf", ".cdf", ".hdf5", ".h5"),
                 "zarr": (".zarr", ".zar"),
             }
@@ -129,13 +188,16 @@ class BasePath(metaclass=abc.ABCMeta):
                         return eng
             return ""
 
-        engine = read_kws.pop("engine", _get_engine(path)) or None
+        kwargs = read_kws.copy()
+        engine = kwargs.setdefault("engine", _get_engine(path) or None)
 
         if engine == "zarr":
             dset: xr.Dataset = xr.open_zarr(fs.get_mapper(path))
             return dset
+        if fs.protocol[0] == "file":
+            return xr.open_mfdataset(path, **kwargs)
         with fs.open(path, "rb") as stream:
-            return xr.open_dataset(stream, engine=engine)
+            return xr.open_dataset(stream, **kwargs)
 
     def lookup(self, path: str, *attrs: str, **read_kws: Any) -> Any:
         """Get metdata from a lookup table.
@@ -221,7 +283,7 @@ class BasePath(metaclass=abc.ABCMeta):
             True if path is file object, False if otherwise or doesn't exist
 
         """
-        ...
+        ...  # pragma: no cover
 
     @abc.abstractmethod
     async def iterdir(
@@ -261,36 +323,6 @@ class BasePath(metaclass=abc.ABCMeta):
         """
         yield Metadata(path="")  # pragma: no cover
 
-    @staticmethod
-    async def suffix(path: Union[str, Path, pathlib.Path]) -> str:
-        """Get the suffix of a given input path.
-
-        Parameters
-        ----------
-        path: str, asyncio.Path, pathlib.Path
-            Path of the object store
-
-        Returns
-        -------
-        str: The file type extension of the path.
-        """
-        return Path(path).suffix
-
-    @staticmethod
-    async def name(path: Union[str, Path, pathlib.Path]) -> str:
-        """Get the name of the object store.
-
-        Parameters
-        ----------
-        path: str, asyncio.Path, pathlib.Path
-            Path of the object store
-
-        Returns
-        -------
-        str: The 'file name' of the path.
-        """
-        return Path(path).name
-
     def fs_type(self, path: Union[str, Path, pathlib.Path]) -> str:
         """Define the file system type."""
         return self._fs_type or ""
@@ -310,7 +342,7 @@ class BasePath(metaclass=abc.ABCMeta):
             URI of the object store
 
         """
-        ...
+        ...  # pragma: no cover
 
     @abc.abstractmethod
     def uri(self, path: Union[str, Path, pathlib.Path]) -> str:
@@ -326,4 +358,4 @@ class BasePath(metaclass=abc.ABCMeta):
         str:
             URI of the object store
         """
-        ...
+        ...  # pragma: no cover

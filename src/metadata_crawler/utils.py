@@ -4,7 +4,6 @@ import asyncio
 import difflib
 import threading
 from datetime import datetime, timedelta
-from functools import wraps
 from importlib.metadata import entry_points
 from typing import (
     Any,
@@ -13,14 +12,11 @@ from typing import (
     Dict,
     Iterable,
     Optional,
-    Tuple,
     TypeVar,
     Union,
 )
 
-import fsspec
 import rich.console
-import toml
 
 from .logger import logger
 
@@ -35,19 +31,6 @@ async def create_async_iterator(itt: Iterable[Any]) -> AsyncIterator[Any]:
     """Create an async iterator from as sync iterable."""
     for item in itt:
         yield item
-
-
-def fs_and_path(
-    url: str,
-    **storage_options: Any,
-) -> Tuple[fsspec.AbstractFileSystem, str]:
-    """
-    Return (fs, path) for any URL that fsspec understands (file, s3, swift, http, ...).
-    """
-    protocol, path = fsspec.core.split_protocol(url)
-    protocol = protocol or "file"
-    fs = fsspec.filesystem(protocol, **storage_options)
-    return fs, path
 
 
 def convert_str_to_timestamp(
@@ -157,23 +140,8 @@ def load_plugins(group: str) -> Dict[str, Any]:
     return plugins
 
 
-async def call_sync_in_async(
-    sync_func: Callable[..., T], *args: Any, **kwargs: Any
-) -> T:
-    """Wrapper for calling a synchronous function in an async context."""
-
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, sync_func, *args, **kwargs)
-
-
 def exception_handler(exception: BaseException) -> None:
     """Handle raising exceptions appropriately."""
-
-    trace_back = exception.__traceback__
-    # Set only the last traceback of the exception
-    while trace_back:
-        exception.__traceback__ = trace_back
-        trace_back = trace_back.tb_next
     msg = str(exception)
     if logger.level > 30:
         msg += " - increase verbosity for more information"
@@ -181,7 +149,7 @@ def exception_handler(exception: BaseException) -> None:
     else:
         exc_info = exception
     logger.error(msg, exc_info=exc_info)
-    raise SystemExit
+    raise SystemExit(1)
 
 
 def daemon(
@@ -212,28 +180,3 @@ def timedelta_to_str(seconds: Union[int, float]) -> str:
         if num > 0:
             out.append(f"{num} {letter}")
     return " ".join(out[::-1])
-
-
-def deprecated_key(
-    deprecated_keys: Dict[str, str],
-) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-        @wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            config_file = args[0]
-            for dataset, config in toml.loads(config_file.read_text()).items():
-                for deprecated_key, new_key in deprecated_keys.items():
-                    if config.get(deprecated_key) is not None:
-                        logger.critical(
-                            "The '%s' key for '%s' in 'drs_config.toml' "
-                            "is deprecated. Please update your config file "
-                            "to use '%s' instead.",
-                            deprecated_key,
-                            config[deprecated_key],
-                            new_key,
-                        )
-            return func(*args, **kwargs)
-
-        return wrapper
-
-    return decorator

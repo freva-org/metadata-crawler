@@ -2,25 +2,24 @@
 
 import asyncio
 import pathlib
-from typing import Any, AsyncIterator, Optional, Tuple, Union, cast
-from urllib.parse import SplitResult, urlsplit
+from typing import AsyncIterator, Optional, Tuple, Union, cast
 
 import fsspec
 from anyio import Path
 from s3fs import S3FileSystem
 
+from ..api.storage_backend import Metadata, PathTemplate
 from ..logger import logger
-from .base import BasePath, Metadata
 
 
-class S3Path(BasePath):
+class S3Path(PathTemplate):
     """Class to interact with an S3 object store."""
 
     _fs_type = "s3"
 
-    def __init__(self, **kwargs: Any):
-        super().__init__(**kwargs)
+    def __post_init__(self):
         self._client: Optional[S3FileSystem] = None
+        self.storage_options = self.storage_options or {"anon": True}
 
     async def close(self) -> None:
         client = await self._get_client()
@@ -73,8 +72,9 @@ class S3Path(BasePath):
     async def iterdir(
         self, path: Union[str, Path, pathlib.Path]
     ) -> AsyncIterator[str]:
+        path = str(path)
         client = await self._get_client()
-        for _content in await client._lsdir(str(path)):
+        for _content in await client._lsdir(path):
             if _content.get("type", "") == "directory":
                 yield f'{_content.get("name", "")}'
 
@@ -97,11 +97,11 @@ class S3Path(BasePath):
             E.g.: '*.zarr|*.nc|*.hdf5'
         """
         client = await self._get_client()
-        if self.is_file(path):
+        if await self.is_file(path):
             yield Metadata(path=str(path))
         else:
-            for content in await client._glob(f"{path}/**/{glob_pattern}"):
-                if Path(content).suffix in self.suffixes:
+            for suffix in self.suffixes:
+                for content in await client._glob(f"{path}/**/*{suffix}"):
                     yield Metadata(path=f"/{content}")
 
     def path(self, path: Union[str, Path, pathlib.Path]) -> str:
@@ -118,12 +118,9 @@ class S3Path(BasePath):
             URI of the object store
 
         """
-        url = urlsplit(
-            fsspec.filesystem("s3", **self.storage_options).url(str(path))
+        return cast(
+            str, fsspec.filesystem("s3", **self.storage_options).url(str(path))
         )
-        return SplitResult(
-            "s3", url.netloc, url.path, url.query, url.fragment
-        ).geturl()
 
     def uri(self, path: Union[str, Path, pathlib.Path]) -> str:
         """Get the uri of the object store.

@@ -1,7 +1,25 @@
-[nextGems]
+[nextGems_cat]
 root_path = "test_intake.json"
 drs_format = "nextgems"
 fs_type = "intake"
+
+[nextGems_cycle3]
+root_path = "data/intake/work/bm1235"
+drs_format = "nextgems_cycle3"
+fs_type = "posix"
+[nextGems_cycle3.defaults]
+project = "nextgems"
+simulation_id = "cycle3"
+
+[drs_settings.dialect.nextGems_cycle3]
+inherits_from = "nextgems"
+[drs_settings.dialect.nextgems_cycle3.data_specs.var_attrs]
+variable_id = { var="*", attr="short_name", default="__name__" }
+
+
+[fool]
+# Definition of some not working datasets.
+root_path = "/foo/bar"
 
 
 [catalogue_intake_local]
@@ -38,6 +56,8 @@ project = "observations"
 bbox = [0, 360, -60, 60]
 level_type = "2d"
 model = "sat"
+
+
 #[foo]
 #root_path = "./data/observations"
 #drs_format = "foo"
@@ -62,22 +82,11 @@ model = "sat"
 root_path = "./data/model/global/cmip6"
 drs_format = "cmip6"
 
-[reana-fs]
-root_path = "./data/model/obs"
-drs_format = "reana"
-[reana-fs.defaults]
-project = "observations"
-
-[drs_settings.dialect.reana]
-inherits_from = "cmip5"
-[drs_settings.dialect.reana.data_specs.read_kws]
-engine = "h5netcdf"
-
 [cordex-fs]
 root_path = "./data/model/regional"
 drs_format = "cordex"
 [cordex-fs.defaults]
-bbox."domain"."EUR-11" = [-10, 30, 30, 60]
+domain = "EUR-11"
 time_frequency = "mon"
 
 [obs-swift]
@@ -87,8 +96,7 @@ drs_format = "obs-swift"
 [obs-swift.defaults]
 project = "observations"
 [obs-swift.storage_options]
-os_storage_url = "https://swift.dkrz.de/v1/dkrz_a32dc0e8-2299-4239-a47d-6bf45c8b0160/freva_test"
-os_auth_url = "https://swift.dkrz.de/auth/v1"
+os_storage_url = "http://localhost:8081/v1/AUTH_test/test-obs"
 [drs_settings.dialect.obs-swift]
 inherits_from = "cmip5"
 
@@ -100,43 +108,26 @@ dir_parts = [
 file_parts = ["variable", "time_frequency", "model", "experiment", "ensemble", "time"]
 
 [cmip6-swift]
-root_path = "https://swift.dkrz.de/v1/dkrz_a32dc0e8-2299-4239-a47d-6bf45c8b0160/freva_test/model/global/cmip6"
+root_path = "http://localhost:8081/v1/AUTH_test/test/model/global/cmip6"
 drs_format = "cmip6"
 fs_type = "swift"
-
-[reana-swift]
-root_path = "https://swift.dkrz.de/v1/dkrz_a32dc0e8-2299-4239-a47d-6bf45c8b0160/freva_test/model/obs"
-drs_format = "cmip5"
-fs_type = "swift"
-[reana-swift.defaults]
-project = "observations"
-
-[cordex-swift]
-root_path = "https://swift.dkrz.de/v1/dkrz_a32dc0e8-2299-4239-a47d-6bf45c8b0160/freva_test/model/regional"
-drs_format = "cordex"
-fs_type = "swift"
-
-[mpi-ge]
-root_path = "/ch1187/public/work/mh1007/CMOR"
-drs_format = "mpi-ge"
-fs_type = "s3"
-[mpi-ge.storage_options]
-endpoint_url = "https://s3.eu-dkrz-1.dkrz.cloud"
-key = "hE5iPXDt9oYkGMIdZRg9"
-secret = "AeKu1BCQE3W9rbcAresOYcGFWlobXFg2grKtYtWO"
-[drs_settings.dialect.mpi-ge]
-inherits_from = "cmip6"
-special = {}
-[drs_settings.dialect.mpi-ge.path_specs]
-dir_parts = ["activity_id", "mip_era", "institution", "source_id", "experiment_id", "time_frequency", "table_id", "variable_id", "member_id", "version"]
-file_parts = ["variable_id", "table_id", "source_id", "experiment_id", "member_id","time"]
+[cmip6-swift.storage_options]
+os_storage_url = "http://localhost:8081/v1/AUTH_test/test"
+os_auth_url = "http://localhost:8081/auth/v1.0"
+os_password = "testing"
+os_project_id = "test"
+os_user_id = "tester"
 
 
 [obs-s3]
-root_path = "https://play.min.io/freva/data/observations"
+root_path = "s3://test/data/obs"
 fs_type = "s3"
 [obs-s3.defaults]
 project = "observations"
+product = "grid"
+[obs-s3.storage_options]
+endpoint_url = "http://localhost:9000"
+anon = true
 
 [drs_settings.dialect.obs-s3]
 specs_dir = [
@@ -146,21 +137,38 @@ specs_dir = [
 specs_file = ["variable", "time_frequency", "model", "experiment", "ensemble", "time"]
 
 [cmip6-s3]
-root_path = "https://play.min.io/freva/data/model/global/cmip6"
+root_path = "s3://test/data/model/global/cmip6"
 drs_format = "cmip6"
 fs_type = "s3"
 [cmip6-s3.storage_options]
-endpoint_url = "https://s3.eu-dkrz-1.dkrz.cloud"
-[reana-s3]
-root_path = "https://play.min.io/freva/data/model/obs"
-drs_format = "cmip5"
-fs_type = "s3"
-[reana-s3.storage_options]
-endpoint_url = "https://play.min.io/freva/data/model/global/cmip6"
-[reana-s3.defaults]
-project = "observations"
+endpoint_url = "http://localhost:9000"
+key = "minioadmin"
+secret = "minioadmin"
 
-[cordex-s3]
-root_path = "https://play.min.io/freva/data/model/regional"
-drs_format = "cordex"
+
+[nextgems-s3]
+root_path = "s3://test/data/model/nextgems"
+drs_format = "nextGems_cycle3"
 fs_type = "s3"
+[nextgems-s3.storage_options]
+endpoint_url = "http://localhost:9000"
+key = "minioadmin"
+secret = "minioadmin"
+[nextgems-s3.defaults]
+project = "nextgems"
+simulation_id = "cycle3"
+
+
+[nextgems-swift]
+root_path = "/model/nextgems"
+drs_format = "nextGems_cycle3"
+fs_type = "swift"
+[nextgems-swift.storage_options]
+os_storage_url = "http://localhost:8081/v1/AUTH_test/test"
+os_auth_url = "http://localhost:8081/auth/v1.0"
+os_password = "testing"
+os_project_id = "test"
+os_user_id = "tester"
+[nextgems-swift.defaults]
+project = "nextgems"
+simulation_id = "cycle3"

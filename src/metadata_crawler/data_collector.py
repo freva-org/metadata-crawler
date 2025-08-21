@@ -10,12 +10,13 @@ from typing import (
     Callable,
     Optional,
     Union,
+    cast,
 )
 
 from .api.config import CrawlerSettings, DRSConfig
 from .api.metadata_stores import CatalogueWriter, IndexName
 from .logger import logger
-from .utils import Console, PrintLock, daemon
+from .utils import Console, PrintLock, create_async_iterator, daemon
 
 
 class DataCollector:
@@ -39,7 +40,7 @@ class DataCollector:
     def __init__(
         self,
         config_file: Union[Path, str],
-        metadata_store: Optional[str],
+        metadata_store: Optional[Union[Path, str]],
         index_name: IndexName,
         *search_objects: CrawlerSettings,
         **kwargs: Any,
@@ -51,17 +52,14 @@ class DataCollector:
         self.index_name = index_name
         self.config = DRSConfig.load(config_file)
         self.ingest_queue = CatalogueWriter(
-            metadata_store or "metadata.yaml",
+            str(metadata_store or "metadata.yaml"),
             index_name=index_name,
             config=self.config,
             **kwargs,
         )
         self.ingest_queue.run_consumer()
         self._print_status = False
-        try:
-            self._event_loop = asyncio.get_event_loop()
-        except RuntimeError:
-            self._event_loop = asyncio.new_event_loop()
+        self._event_loop = asyncio.get_event_loop()
 
     @property
     def crawled_files(
@@ -124,13 +122,23 @@ class DataCollector:
         Console.print()
 
     async def _ingest_dir(
-        self, drs_type: str, search_dir: str, iterable: bool = True
+        self,
+        drs_type: str,
+        search_dir: str,
+        iterable: bool = True,
     ) -> None:
-        try:
-            sub_dirs = self.config.datasets[drs_type].backend.iterdir(search_dir)
-        except Exception as error:
-            logger.error(error)
-            return
+        if iterable:
+            try:
+                sub_dirs = self.config.datasets[drs_type].backend.iterdir(
+                    search_dir
+                )
+            except Exception as error:
+                logger.error(error)
+                return
+        else:
+            sub_dirs = cast(
+                AsyncIterator[str], create_async_iterator([search_dir])
+            )
         rank = 0
         async for _dir in sub_dirs:
             async for _inp in self.config.datasets[drs_type].backend.rglob(
@@ -158,6 +166,7 @@ class DataCollector:
         store = self.config.datasets[drs_type].backend
         try:
             is_file = await store.is_file(inp_dir)
+            is_dir = await store.is_dir(inp_dir)
             suffix = await store.suffix(inp_dir)
         except Exception as error:
             logger.error("Error checking file %s", error)
@@ -168,7 +177,7 @@ class DataCollector:
             op = self._ingest_dir
         if op:
             try:
-                await op(drs_type, inp_dir)
+                await op(drs_type, inp_dir, iterable=is_dir)
             except Exception as error:
                 logger.error(error)
             return
@@ -190,8 +199,6 @@ class DataCollector:
                 self._iter_content(drs_type, path, pos)
             )
             futures.append(future)
-        if not futures:
-            return
         self._print_status = True
         self._print_performance()
         await asyncio.gather(*futures)

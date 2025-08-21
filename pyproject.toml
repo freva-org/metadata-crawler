@@ -25,10 +25,17 @@ dependencies = [
         "anyio",
         "fsspec",
         "s3fs",
+        "jinja2",
         "intake",
+        "intake-xarray",
+        "intake-esm",
+        "pandas",
+        "numpy",
         "duckdb",
         "pyarrow",
         "h5netcdf",
+        "pydantic",
+        "pyarrow",
         "rich",
         "tomli",
         "tomlkit",
@@ -37,6 +44,7 @@ dependencies = [
         "xarray",
         "httpx",
         "uvloop",
+        "motor",
 ]
 [project.optional-dependencies]
 dev = ["flit", "tox"]
@@ -53,11 +61,13 @@ tests = [
     "mock",
     "mypy",
     "pandas",
+    "intake-parquet",
     "pytest-asyncio",
     "pytest-cov",
     "pytest-env",
     "requests",
     "pre-commit",
+    "toml",
 ]
 deploy = [ "pyinstaller"]
 
@@ -117,11 +127,11 @@ env_list = types, lint, test
 [testenv]
 parallel_show_output = false
 [testenv:test]
-deps = -e .
+deps = -e .[tests]
 
 commands =
-    deploy-freva cmd --help
-    deploy-freva --help
+    pytest -vv --cov=metadata_crawler --cov-report=html:coverage_report --junitxml report.xml --cov-report xml tests/
+    python3 -m coverage report --fail-under=5 --precision=2
 
 [testenv:docs]
 deps = .[doc]

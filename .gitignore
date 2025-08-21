@@ -4,7 +4,7 @@ metadata-*.csv.gz
 __pycache__/
 *.py[codz]
 *$py.class
-
+report.xml
 # C extensions
 *.so
 

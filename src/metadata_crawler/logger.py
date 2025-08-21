@@ -52,12 +52,6 @@ class Logger(logging.Logger):
     datefmt: str = "%Y-%m-%dT%H:%M:%S"
     no_debug: list[str] = ["watchfiles", "httpcore", "pymongo", "pika"]
 
-    def _check_for_debug(self, name: str) -> bool:
-        for service in self.no_debug:
-            if name.startswith(service):
-                return False
-        return True
-
     def __init__(
         self, name: Optional[str] = None, level: Optional[int] = None
     ) -> None:
@@ -69,6 +63,8 @@ class Logger(logging.Logger):
         self._logger_file_handle: Optional[RotatingFileHandler] = None
         self._logger_stream_handle = RichHandler(
             rich_tracebacks=True,
+            tracebacks_max_frames=10,
+            tracebacks_extra_lines=5,
             show_path=True,
             console=Console(
                 soft_wrap=False,
@@ -86,7 +82,10 @@ class Logger(logging.Logger):
     def set_level(self, level: int) -> None:
         """Set the logger level to level."""
         for handler in self.handlers:
-            handler.setLevel(level)
+            log_level = level
+            if isinstance(handler, RotatingFileHandler):
+                log_level = min(level, logging.INFO)
+            handler.setLevel(log_level)
         self.setLevel(level)
 
     def error(
@@ -95,17 +94,9 @@ class Logger(logging.Logger):
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        if self.level < logging.WARNING:
+        if self.level < logging.INFO:
             kwargs.setdefault("exc_info", True)
         self._log(logging.ERROR, msg, args, **kwargs)
-
-    def reset_loggers(self, level: Optional[int] = None) -> None:
-        """Unify all loggers that we have currently aboard."""
-        for name in logging.root.manager.loggerDict.keys():
-            if not name.startswith(THIS_NAME):
-                logging.getLogger(name).handlers = self.handlers
-            logging.getLogger(name).propagate = False
-            logging.getLogger(name).level = level or self.getEffectiveLevel()
 
 
 logger = Logger()
@@ -113,9 +104,8 @@ logger = Logger()
 
 def add_file_handle(suffix: Optional[str], log_level: int = logging.INFO) -> None:
     """Add a file log handle to the logger."""
-    base_name = THIS_NAME
-    if suffix:
-        base_name += f"-{suffix}"
+
+    base_name = f"{THIS_NAME}-{suffix}" if suffix else THIS_NAME
     log_dir = Path(appdirs.user_log_dir(THIS_NAME))
     log_dir.mkdir(exist_ok=True, parents=True)
     logger_file_handle = RotatingFileHandler(
@@ -131,11 +121,9 @@ def add_file_handle(suffix: Optional[str], log_level: int = logging.INFO) -> Non
     logger.addHandler(logger_file_handle)
 
 
-def set_log_level(level: int) -> None:
+def apply_verbosity(level: int) -> int:
     """Set the logging level of the handlers to a certain level."""
-    for handler in logger.handlers:
-        log_level = level
-        if isinstance(handler, RotatingFileHandler):
-            log_level = min(level, logging.INFO)
-        handler.setLevel(log_level)
-    logger.setLevel(level)
+    old_level = logger.level
+    level = max(logging.ERROR - 10 * level, -1)
+    logger.set_level(level)
+    return old_level

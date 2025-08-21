@@ -3,20 +3,17 @@
 from __future__ import annotations
 
 import pathlib
-from typing import Any, AsyncIterator, Union
+from typing import AsyncIterator, Union
 
 from anyio import Path
 
-from .base import BasePath, Metadata
+from ..api.storage_backend import Metadata, PathTemplate
 
 
-class PosixPath(BasePath):
+class PosixPath(PathTemplate):
     """Class to interact with a Posix file system."""
 
     _fs_type = "posix"
-
-    def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
 
     async def is_dir(self, path: Union[str, Path, pathlib.Path]) -> bool:
         """Check if a given path is a directory object on the storage system.

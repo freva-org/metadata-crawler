@@ -5,7 +5,7 @@
 [drs_settings]
 
 # 1) Allowed file extensions
-suffixes = [".zarr", ".zar", ".nc4", ".nc", ".tar", ".hdf5", ".h5"]
+suffixes = [".zarr", ".zar", ".nc4", ".nc", ".tar", ".hdf5", ".h5", ".grib", ".grb"]
 
 # 2) Canonical index facets → raw keys in `data`
 [drs_settings.index_schema]
@@ -155,7 +155,7 @@ default     = "mean"
 # 3) Global special rules
 [drs_settings.special.time_aggregation]
 type      = "conditional"
-condition = "'pt' in data.get('time_frequency', '').lower()"
+condition = "'pt' in '{{ time_frequency | default('mean') | lower}}'"
 true      = "inst"
 false     = "mean"
 
@@ -235,7 +235,7 @@ realm = "realm"
 time_aggregation = "time_aggregation"
 time = "time"
 bbox = "bbox"
-[drs_settings.dialect.cmpi6.path_specs]
+[drs_settings.dialect.cmip6.path_specs]
 dir_parts  = [
     "mip_era",
     "activity_id",
@@ -262,9 +262,9 @@ file_sep = "_"
 # override async methods for cmip6
 [drs_settings.dialect.cmip6.special]
 realm.type   = "lookup"
-realm.items   = ["data['table_id']", "data['variable_id']", "'realm'"]
+realm.items   = ["{{ table_id }}", "{{ variable_id }}", "realm"]
 time_frequency.type   = "lookup"
-time_frequency.items   = ["data['table_id']","data['variable_id']","'frequency'"]
+time_frequency.items   = ["{{ table_id }}","{{ variable_id }}","frequency"]
 
 # -- CMIP5 --------------------------------------------------------
 [drs_settings.dialect.cmip5]
@@ -388,14 +388,12 @@ CEU-3    = [1.62, 18.28, 44.85, 56.24]
 
 # override bbox logic for CORDEX
 [drs_settings.dialect.cordex.special.bbox]
-type = "function"
-method = "self.dialect[standard].domains.get"
-args = ["data['domain'].upper()", "[0, 360, -90, 90]"]
+type = "call"
+call = 'dialect.domains.get("{{ domain | upper }}", [0, 360, -90, 90])'
 
 [drs_settings.dialect.cordex.special.model]
-type = "function"
-method = "'-'.join"
-args = ["[data['driving_model'], data['rcm_name'], data['rcm_version']]"]
+type = "call"
+call = "'{{ driving_model }}-{{ rcm_name }}-{{ rcm_version }}'"
 
 # -- NextGems -------------------------------------------------------
 [drs_settings.dialect.nextgems]
@@ -424,13 +422,13 @@ source_id = "source_id"
 institution_id = "institution_id"
 simulation_id = "simulation_id"
 frequency = "frequency"
-time_reductin = "time_reduction"
-variable = "__variables__"
+time_reduction = "time_reduction"
+variable_id = "__variables__"
 
 [drs_settings.dialect.nextgems.data_specs.stats.time]
-stat = "minmax"
+stat = "range"
 coord = "time"
 
-[drs_settings.dialect.nextgem.special.grid_label]
+[drs_settings.dialect.nextgems.special.grid_label]
 type = "call"
-call = "__file_name__.rpartition('.')[0].split('_')[-1]"
+call = "'{{ file }}'.rpartition('.')[0].split('_')[-1]"

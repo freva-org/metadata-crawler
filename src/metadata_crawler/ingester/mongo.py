@@ -119,8 +119,7 @@ class MongoIndex(BaseIndex):
 
     async def close(self) -> None:
         """Close the mongoDB connection."""
-        if self._client is not None:
-            self._client.close()
+        self._client.close() if self._client is not None else None
         self._url = ""
         self._raw_uri = ""
 

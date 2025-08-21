@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import inspect
-import logging
 import os
 import sys
 from functools import partial
+from json import dumps
 from pathlib import Path
 from typing import (
     Annotated,
@@ -15,6 +16,7 @@ from typing import (
     Callable,
     Dict,
     List,
+    Optional,
     Tuple,
     Union,
     cast,
@@ -23,16 +25,24 @@ from typing import (
     get_type_hints,
 )
 
-from metadata_crawler import add, index
+from metadata_crawler import add, delete, get_config, index
 
 from ._version import __version__
-from .api.config import ConfigMerger
 from .api.metadata_stores import CatalogueBackends, IndexName
-from .logger import THIS_NAME, add_file_handle, set_log_level
+from .backends.intake import IntakePath
+from .logger import THIS_NAME, add_file_handle
 from .utils import exception_handler, load_plugins
 
 
-def _process_storage_option(option: str) -> Union[float, str, int, bool]:
+def walk_catalogue(
+    path: str, storage_options: Optional[Dict[str, Any]] = None, **kwargs: Any
+) -> None:
+
+    ip = IntakePath(**(storage_options or {}))
+    asyncio.run(ip.walk(path))
+
+
+def _process_storage_option(option: str) -> Any:
 
     if option.lower() in ("false", "true"):
         return option.lower() == "true"
@@ -47,12 +57,16 @@ def _process_storage_option(option: str) -> Union[float, str, int, bool]:
     return option
 
 
-def display_config(config: Path | None) -> None:
+def display_config(
+    config: Optional[Union[Path, str]], json: bool = False, **kwargs: Any
+) -> None:
     """Display the config file."""
 
-    default_config = Path(__file__).parent / "drs_config.toml"
-    cfg = ConfigMerger(config or default_config)
-    print(cfg.dumps())
+    cfg = get_config(config)
+    if json is False:
+        print(cfg.dumps())
+    else:
+        print(dumps(cfg.merged_doc, indent=3))
 
 
 class ArgParse:
@@ -94,6 +108,7 @@ class ArgParse:
             required=True,
         )
         self._add_config_parser()
+        self._add_walk_catalogue()
         self._add_crawler_subcommand()
         self._index_submcommands()
 
@@ -110,6 +125,9 @@ class ArgParse:
             "--config",
             help="Path to the config_file",
             type=Path,
+        )
+        parser.add_argument(
+            "--json", help="Print in json format.", action="store_true"
         )
         parser.set_defaults(apply_func=display_config)
 
@@ -243,6 +261,33 @@ class ArgParse:
             default=None,
         )
 
+    def _add_walk_catalogue(self) -> None:
+        """Add a subcommand for walking an intake catalogue."""
+        parser = self.subparsers.add_parser(
+            "walk-intake",
+            description="Walk an intake catalogue",
+            help="Walk an intake catalogue",
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            epilog=self.epilog,
+        )
+
+        parser.add_argument(
+            "path",
+            type=str,
+            help="Path/Url to the intake catalogue",
+        )
+        parser.add_argument(
+            "--storage_option",
+            "-s",
+            help=(
+                "Set addtional storage options for adding metadata to the"
+                "metadta store"
+            ),
+            action="append",
+            nargs=2,
+        )
+        parser.set_defaults(apply_func=walk_catalogue)
+
     def _index_submcommands(self) -> None:
         """Add sub command for adding metadata to the solr server."""
         entry_point = "metadata_crawler.ingester"
@@ -346,10 +391,14 @@ class ArgParse:
                         nargs="*",
                     )
 
+                    parser.set_defaults(
+                        apply_func=partial(index, index_system=plugin)
+                    )
+                else:
+                    parser.set_defaults(
+                        apply_func=partial(delete, index_system=plugin)
+                    )
                 self._add_general_config_to_parser(parser)
-                parser.set_defaults(
-                    apply_func=partial(index, index_system=plugin)
-                )
 
     def parse_args(self, argv: list[str]) -> argparse.Namespace:
         """Parse the arguments for the command line interface.
@@ -377,25 +426,18 @@ class ArgParse:
             )
         }
 
-        storage_options: List[Tuple[str, str]] = getattr(
-            args, "storage_option", []
+        storage_options: List[Tuple[str, str]] = (
+            getattr(args, "storage_option", None) or []
         )
-        self.kwargs["storage_options"]: Dict[
-            str, Union[str, int, float, bool]
-        ] = {}
+        self.kwargs["storage_options"] = {}
         for option, value in storage_options:
             self.kwargs["storage_options"][option] = _process_storage_option(
                 value
             )
         self.verbose = args.verbose
         add_file_handle(args.log_suffix)
-        set_log_level(self.log_level)
+        self.kwargs["verbosity"] = self.verbose
         return args
-
-    @property
-    def log_level(self) -> int:
-        """Get the log level."""
-        return max(logging.ERROR - 10 * self.verbose, logging.DEBUG)
 
 
 def _run(
