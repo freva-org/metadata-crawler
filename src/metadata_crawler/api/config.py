@@ -443,7 +443,7 @@ class Dialect(BaseModel):
 
     @field_validator("sources", mode="after")
     @classmethod
-    def validate_sources(cls, srcs: List[str]) -> Dict[str, Any]:
+    def validate_sources(cls, srcs: List[str]) -> List[str]:
         # ensure only allowed sources are present
         names = {name.upper() for name in MetadataSource.__members__.keys()}
         values = {m.value for m in MetadataSource}
