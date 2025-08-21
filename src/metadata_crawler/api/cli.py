@@ -16,10 +16,15 @@ class Parameter(BaseModel):
 
 
 def cli_parameter(*args: str, **kwargs: Any) -> Dict[str, Any]:
-    """Parameters for the argparse.Namespace.
-    *args:
+    """Parameters used to construct a
+    `argparse.Namespace <https://docs.python.org/3/library/argparse.html>`_.
 
+    Parameters
+    ^^^^^^^^^^
+    *args:
+        Any arguments passed to ``argparse.ArgumentParser().add_argument``
     **kwargs:
+        Any keyword arguments passed to ``argparse.ArgumentParser().add_arguent``
 
 
     """
@@ -33,7 +38,14 @@ def cli_function(
     """Wrap command line arguments around a method.
 
     Those arguments represent the arguments you would normally use to create
-    a argparse.Namespace"""
+    a `argparse subcommand <https://docs.python.org/3/library/argparse.html>`_.
+
+    Parameters
+    ^^^^^^^^^^
+    help:
+        Help string for this sub command.
+
+    """
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         setattr(func, "_cli_help", help or func.__doc__)

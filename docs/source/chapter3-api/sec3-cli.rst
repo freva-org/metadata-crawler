@@ -1,60 +1,53 @@
 Extending the CLI
 -----------------
 
-metadata‑crawler’s command–line interface is built using the
-`Typer <https://typer.tiangolo.com/>`_ library.  The CLI entry point
-``metadata-crawler`` registers its commands in ``cli.py``.  You can
-extend the CLI by defining new commands or options and registering
-them with Typer.
+The CLI entry point ``metadata-crawler`` registers its commands in ``cli.py``.
+You can extend the CLI by defining new commands or options and registering
+them. This registration is inspired by the `Typer <https://typer.tiangolo.com/>`_
+library.
 
 Structure of ``cli.py``
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-``cli.py`` defines decorators ``@cli_parameter`` and ``@cli_function``
+``cli.py`` defines decorators ``cli_parameter`` and ``@cli_function``
 to annotate functions with help messages and parameter metadata.  The
-actual CLI commands are defined in ``run.py`` using Typer groups and
-are imported into ``cli.py``.  To add a new command:
+actual CLI commands are defined in your :ref:`add_backends`  via the
+``@cli_function`` decorator and.  To add a new command:
 
-1. **Define** a function in ``run.py`` (or another module) that
-   performs your desired operation.  Use Typer’s ``@app.command``
-   decorator to register it.
+1. **Decorate** the ``index`` and ``delete`` functions in our :ref:`add_backends`
+   Use the ``@cli_function`` decorator to register it.
 2. **Annotate** the function parameters with ``Annotated`` and
-   ``cli_parameter`` to supply CLI options (see ``run.py`` for
+   ``cli_parameter`` to supply CLI options (see ``SolrIndex`` for
    examples).
-3. **Register** the command in the Typer app defined in ``cli.py``.
+3. **Registering** Once decorated the registering will happend automatically.
 
-Example: adding a ``stats`` command
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Example: adding a ``MySQL`` database
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Suppose you want a command that prints the number of records in an
-index.  You could implement it as follows:
+Suppose you've definde a MySQL backend and want to add a CLI method for indexing.
+You could implement it as follows:
 
 .. code-block:: python
 
-   # in run.py
    import typer
+   from typing import Optinal
    from typing_extensions import Annotated
    from .metadata_stores import IndexStore
 
    app = typer.Typer()
 
-   @app.command()
-   def stats(
-       index_name: Annotated[str, cli_parameter("--index-name", help="Index to inspect")],
-       index_backend: Annotated[str, cli_parameter("--index-backend", help="Backend type")],
-       **common_kwargs,
+   @cli_function(help="Index data in MySQL")
+   def index(
+       server: Annotated[str, cli_parameter("--server", help="Server name")],
+       user: Annotate[Optional[str], cli_parameter("--user", help="User name")] = None,
+       db: Annotated[str, cli_parameter("--database", help="Database name")] = "foo",
+       pw: Annotate[bool, cli_parmeter("--password", "-p", action="store_true", help="Ask for password")] = False,
    ) -> None:
-       """Show record counts for a given index."""
-       store = load_index_store(index_backend, index_name, **common_kwargs)
-       count = sum(1 for _ in store.read(index_name))
-       print(f"Index {index_name} contains {count} records")
+       """Index."""
 
-   # import the command in cli.py
-   from .run import app as run_app
-   app = typer.Typer()
-   app.add_typer(run_app, name="run")
 
-When you run ``metadata-crawler stats --index-name latest --index-backend duckdb``
+When you run ``metadata-crawler mysql --server localhost -p``
 the function executes your custom logic.
 
-For more details on Typer, refer to its official documentation.
+.. automodule:: metadata_crawler.api.cli
+   :exclude-members: Parameter

@@ -1,6 +1,6 @@
 .. _add_backends:
 
-Adding index backends
+Custom index backends
 ---------------------
 
 An *index backend* stores the final, translated metadata records.
@@ -21,25 +21,13 @@ The ``metadata_stores.py`` module defines two key abstractions:
 * ``StorageIndex`` – A simple data class grouping together the index
   name and any configuration needed by the backend.
 
-DuckDBIndexStore
-^^^^^^^^^^^^^^^^
+SolrIndex
+^^^^^^^^^
 
-``DuckDBIndexStore`` indexes metadata into a DuckDB database.  When
-initialised you specify the database path and the table names to
-create (``latest``, ``time_aggregation``, etc.).  The schema is
+``SolrIndex`` indexes metadata into a Apach Solr.  When
+initialised you specify the solr server and the core names to
+create (``latest``, ``files``, etc.).  The schema is
 derived from the configuration.  The store supports two modes:
-
-* ``w`` – Write mode: drop any existing tables and create fresh
-  tables based on the schema.  Use this when building an index from
-  scratch.
-* ``r`` – Read‑only mode: tables must already exist; data can be
-  appended but not structural changes.
-
-DuckDB supports writing to local files, to ``:memory:``, or to
-remote S3/MinIO using the httpfs extension.  To write to S3 you must
-install ``httpfs`` inside your DuckDB connection and set PRAGMA
-properties to configure endpoint, credentials and region (see
-``sec4-storage-options`` for details).
 
 MongoIndexStore
 ^^^^^^^^^^^^^^^
@@ -96,6 +84,12 @@ Example skeleton
            # remove matching records
            ...
 
-   # register in pyproject.toml
-   # [project.entry-points."metadata_crawler.index_backends"]
-   # mybackend = "my_package.my_index:MyIndexStore"
+
+.. code-block:: toml
+
+    # register in pyproject.toml
+    [project.entry-points."metadata_crawler.index_backends"]
+    mybackend = "my_package.my_index:MyIndexStore"
+
+
+.. automodule:: metadata_crawler.api.index

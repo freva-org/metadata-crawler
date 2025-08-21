@@ -144,11 +144,9 @@ html_static_path = ["_static"]
 # theme’s CSS.
 
 # -- Intersphinx configuration --------------------------------------------
-intersphinx_mapping = {
-    "python": ("https://docs.python.org/3", None),
-    "pydantic": ("https://docs.pydantic.dev/latest/", None),
-    "xarray": ("https://docs.xarray.dev/en/stable", None),
-}
+# intersphinx_mapping = {
+#    "python": ("https://docs.python.org/3", None),
+# }
 
 # The master toctree document.
 master_doc = "index"

@@ -29,19 +29,24 @@ Implementing a backend
 
 To implement a new backend:
 
-1. **Subclass** ``PathTemplate`` and set the class variable
-   ``_fs_type`` to a short name identifying your backend.
+1. **Subclass** ``PathTemplate`` and set the class variable ``_fs_type`` to a
+   short name identifying your backend.
 2. **Implement** the abstract methods:
-   - ``is_dir(path)`` should return True if the given URI is a directory/prefix.
-   - ``is_file(path)`` should return True if the given URI is a file/object containing data.
-   - ``iterdir(path)`` should asynchronously iterate over immediate children (directories and files) of the given path.
-   - ``rglob(path, glob_pattern="*")`` should asynchronously yield ``Metadata`` objects for all files matching the glob pattern.
-   - ``path(path)`` should return a URI with scheme/authority as required by your backend.
-   - ``uri(path)`` should return the raw URI (including bucket or container names as appropriate).
+    * ``is_dir(path)`` should return True if the given URI is a directory/prefix.
+    * ``is_file(path)`` should return True if the given URI is a file/object containing data.
+    * ``iterdir(path)`` should asynchronously iterate over immediate children (directories and files) of the given path.
+    * ``rglob(path, glob_pattern="*")`` should asynchronously yield ``Metadata`` objects for all files matching the glob pattern.
+    * ``path(path)`` should return a URI with scheme/authority as required by your backend.
+    * ``uri(path)`` should return the raw URI (including bucket or container names as appropriate).
 3. **Register** your backend by adding it to the entry point group
-   ``metadata_crawler.storage_backends`` in your ``setup.cfg`` or
-   ``pyproject.toml``.  This allows the ``fs_type`` string in the
-   configuration to resolve to your backend class.
+    * ``metadata_crawler.storage_backends`` in your ``setup.cfg`` or
+    * ``pyproject.toml``.  This allows the ``fs_type`` string in the configuration to resolve to your backend class.
+
+        .. code-block:: toml
+
+            [project.entry-points."metadata_crawler.storage_backends"]
+            foo = "my_package.foo_backend:FooBackend"
+
 
 Example skeleton
 ^^^^^^^^^^^^^^^^
@@ -84,10 +89,16 @@ hypothetical ``foo`` protocol:
        def uri(self, path: str) -> str:
            return self.path(path)
 
+
+.. code-block:: toml
+
    # Then register in your packaging config:
-   # [project.entry-points."metadata_crawler.storage_backends"]
-   # foo = "my_package.foo_backend:FooBackend"
+   [project.entry-points."metadata_crawler.storage_backends"]
+   foo = "my_package.foo_backend:FooBackend"
 
 Once registered, you can set ``fs_type = "foo"`` in a dataset
 definition and optionally provide ``storage_options`` that will be
 passed into your backend’s constructor.
+
+
+.. automodule:: metadata_crawler.api.storage_backend
