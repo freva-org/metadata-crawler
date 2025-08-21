@@ -143,12 +143,6 @@ When ``fs_type = "intake"`` the crawler reads from a CSV or other
 Intake catalog rather than walking a directory.  The ``root_path``
 points to the CSV file and ``storage_options`` are not required.
 
-FDB5 (ECMWF)
-^^^^^^^^^^^^
-
-``fs_type = "fdb5"`` uses the ECMWF FDB5 indexing system.  Specify
-the FDB5 root directory or database path as ``root_path``.  Only
-Posix operations are needed, so no additional options.
 
 Custom backends
 ^^^^^^^^^^^^^^^

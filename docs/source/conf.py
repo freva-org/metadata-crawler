@@ -123,8 +123,8 @@ exclude_patterns: list[str] = []
 
 # -- Options for HTML output ----------------------------------------------
 html_theme = "pydata_sphinx_theme"
-html_logo = "_static/freva_owl.svg"
-html_favicon = "_static/freva_owl.svg"
+html_logo = "_static/final_logo.png"
+html_favicon = "_static/favicon.png"
 html_theme_options = {
     "github_url": "https://github.com/freva-org/metadata-crawler",
     "navbar_end": ["theme-switcher", "navbar-icon-links"],
