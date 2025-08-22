@@ -35,6 +35,7 @@ The following attributes are available:
     * ``dataset``  - name of the dataset.
     * ``fmt``      - datset format.
     * ``storage``  - name of the storage backend.
+    * ``daterange``- Alias for ``datetime[2]``
 
     You can declare array types with brackets.  For
     example ``float[4]`` means a list of four floats (e.g. for bounding boxes),
