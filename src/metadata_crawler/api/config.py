@@ -493,7 +493,7 @@ class DRSConfig(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _dump_(cls, values: Any) -> Any:
-        cls._model_dict = values
+        setattr(cls, "_model_dict", values)
         return values
 
     @model_validator(mode="before")
@@ -560,7 +560,7 @@ class DRSConfig(BaseModel):
                 case "conditional":
                     _rule = textwrap.dedent(rule.condition or "").strip()
                     cond = Template(_rule).render(**data)
-                    cond = eval(cond, {}, self._model_dict)
+                    cond = eval(cond, {}, getattr(self, "_model_dict", {}))
                     result = rule.true if cond else rule.false
                 case "lookup":
                     args = [Template(r).render(**data) for r in rule.items]
@@ -573,7 +573,9 @@ class DRSConfig(BaseModel):
                 case "call":
                     _call = textwrap.dedent(rule.call or "").strip()
                     result = eval(
-                        Template(_call).render(**data), {}, self._model_dict
+                        Template(_call).render(**data),
+                        {},
+                        getattr(self, "_model_dict", {}),
                     )
             if result:
                 inp.metadata[facet] = result

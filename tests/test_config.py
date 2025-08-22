@@ -73,7 +73,7 @@ def test_bad_config() -> None:
         DRSConfig.load(wrong_config)
     wrong_config = Template(CONFIG).render(
         vars='{var = "foo", attr = "long_name", default = "__name__" }',
-        sources="foo",
+        sources='["foo"]',
     )
     with pytest.raises(ValueError):
         DRSConfig.load(wrong_config)

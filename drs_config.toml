@@ -21,7 +21,6 @@ variable_id = { var="*", attr="short_name", default="__name__" }
 # Definition of some not working datasets.
 root_path = "/foo/bar"
 
-
 [catalogue_intake_local]
 root_path = "./data/intake/catalog/catalog.yaml"
 drs_format = "nextgems"

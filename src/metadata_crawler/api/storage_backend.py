@@ -66,20 +66,6 @@ class PathMixin:
         """
         return Path(path).suffix
 
-    async def name(self, path: Union[str, Path, pathlib.Path]) -> str:
-        """Get the name of the object store.
-
-        Parameters
-        ----------
-        path: str, asyncio.Path, pathlib.Path
-            Path of the object store
-
-        Returns
-        -------
-        str: The 'file name' of the path.
-        """
-        return Path(path).name
-
     def get_fs_and_path(self, uri: str) -> Tuple[fsspec.AbstractFileSystem, str]:
         """Return (fs, path) suitable for xarray.
 
@@ -151,12 +137,6 @@ class PathTemplate(abc.ABC, PathMixin, TemplateMixin, metaclass=BasePath):
         """This method is called after the __init__ method. If you need to
         assign any attributes redifine this method in your class.
         """
-
-    async def __aenter__(self) -> "PathTemplate":
-        return self
-
-    async def __aexit__(self, *args: Any, **kwargs: Any) -> None:
-        await self.close()
 
     async def close(self) -> None:
         """Close any open sessions."""
