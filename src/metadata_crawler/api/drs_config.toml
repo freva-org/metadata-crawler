@@ -389,7 +389,7 @@ CEU-3    = [1.62, 18.28, 44.85, 56.24]
 # override bbox logic for CORDEX
 [drs_settings.dialect.cordex.special.bbox]
 type = "call"
-call = 'dialect.domains.get("{{ domain | upper }}", [0, 360, -90, 90])'
+call = 'dialect["cordex"]["domains"].get("{{ domain | upper }}", [0, 360, -90, 90])'
 
 [drs_settings.dialect.cordex.special.model]
 type = "call"

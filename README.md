@@ -1,5 +1,11 @@
 # metadata-crawler
 
+[![License](https://img.shields.io/badge/License-BSD-purple.svg)](LICENSE)
+[![PyPI](https://img.shields.io/pypi/pyversions/freva-client.svg)](https://pypi.org/project/metadata-crawler/)
+[![Docs](https://readthedocs.org/projects/metadata-crawler/badge/?version=latest)](https://metadata-crawler.readthedocs.io/en/latest/?badge=latest)
+[![Tests](https://github.com/freva-org/metadata-crawler/actions/workflows/ci_job.yml/badge.svg)](https://github.com/freva-org/metadata-crawler/actions)
+[![Test-Coverage](https://codecov.io/gh/freva-org/metadata-crawler/graph/badge.svg?token=W2YziDnh2N)](https://codecov.io/gh/freva-org/metadata-crawler)
+
 Harvest, normalise, and index climate / earth-system metadata from **POSIX**,
 **S3/MinIO**, and **OpenStack Swift** using configurable **DRS dialects**
 (CMIP6, CMIP5, CORDEX, …). Output to a temporary **catalogue** (DuckDB or
@@ -24,7 +30,7 @@ Configuration is **TOML** with inheritance, templating, and computed rules.
 - **DRS dialects**: packaged CMIP6/CMIP5/CORDEX; build your own via inheritance
 - **Path specs & data specs**: parse directory/filename parts and/or read
   dataset attributes/vars
-- **Special rules**: conditionals and method/function calls (e.g. CMIP6 realm,
+- **Special rules**: conditionals, cache lookups and function calls (e.g. CMIP6 realm,
   time aggregation)
 - **Index backends**: DuckDB (local/S3), MongoDB (Motor), Solr
 - **Sync + Async APIs** and a clean CLI

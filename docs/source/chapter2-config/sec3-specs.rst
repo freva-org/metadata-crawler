@@ -25,7 +25,12 @@ Path specs (specs_dir and specs_file)
 
 This mechanism makes it easy to support DRS naming conventions like:
 
-``mip_era/activity_id/institution_id/source_id/experiment_id/member_id/table_id/variable_id/grid_label/version/variable_id_table_id_source_id_experiment_id_member_id_grid_label_time.nc``
+
+.. code-block:: console
+
+    mip_era/activity_id/institution_id/source_id/experiment_id/member_id\
+        /table_id/variable_id/grid_label/version/\
+        variable_id_table_id_source_id_experiment_id_member_id_grid_label_time.nc
 
 Data specs (data_specs)
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -41,10 +46,8 @@ contains three subsections:
 * ``var_attrs`` – Rules to extract attributes from specific
   variables.  Each entry describes the target facet, the variable
   name (can be a placeholder like ``__variable__`` meaning all
-  variables, or a format string like ``{variable}`` that refers to
-  the parsed ``variable`` facet), the attribute name, and optionally
-  how to aggregate multiple values.  Supported ``aggregate`` modes
-  include ``first``, ``list``, ``set`` and ``dict``.
+  variables, or a format string like ``{{variable}}`` that refers to
+  the parsed ``variable`` facet), the attribute name
 
   Example:
 
@@ -52,7 +55,7 @@ contains three subsections:
 
      [drs_settings.dialect.cmip6.data_specs.var_attrs]
      # attach standard_name attribute of each variable to the facet 'variable'
-     variable = { var="__variables__", attr="standard_name", aggregate="list" }
+     variable = { var="__variables__", attr="standard_name"}
 
 * ``stats`` – Extract numeric statistics from variables or coordinate
   arrays.  Each entry specifies a ``stat`` type (``min``, ``max``,

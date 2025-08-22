@@ -12,6 +12,7 @@ layers:
 * :ref:`datasets`: entries that specify where to find data (root paths,
   storage backends, authentication) and how to inherit from a dialect.
 * :ref:`specs`: instrcutions on how to extract metadata.
+* :ref:`special`: instructions on how to apply additional retrieval rules.
 
 .. toctree::
    :maxdepth: 1
@@ -20,6 +21,7 @@ layers:
    sec1-datasets
    sec2-dialects
    sec3-specs
-   sec4-schema
-   sec5-templates
-   sec6-inheritance
+   sec4-special
+   sec5-schema
+   sec6-templates
+   sec7-inheritance

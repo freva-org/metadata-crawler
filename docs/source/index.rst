@@ -13,10 +13,8 @@ Harvest your climate metadata
 .. image:: https://github.com/freva-org/metadata-crawler/actions/workflows/ci_job.yml/badge.svg
    :target: https://github.com/freva-org/metadata-crawler/actions
 
-.. image:: https://codecov.io/github/freva-org/freva-nextgen/branch/init/graph/badge.svg?token=dGhXxh7uP3
-   :target: https://codecov.io/github/freva-org/freva-nextgen
-
-
+.. image:: https://codecov.io/gh/freva-org/metadata-crawler/graph/badge.svg?token=W2YziDnh2N
+   :target: https://codecov.io/gh/freva-org/metadata-crawler
 
 
 Overview
