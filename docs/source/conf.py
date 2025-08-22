@@ -14,6 +14,7 @@ import os
 import sys
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime
+from urllib.parse import urljoin
 
 # Include the project source on the Python path so sphinx can find it.
 sys.path.insert(0, os.path.abspath("."))
@@ -49,15 +50,30 @@ extensions = [
     "myst_parser",  # support for Markdown files if desired
 ]
 
-ogp_site_url = "https://freva-org.github.io/freva-admin"
-opg_image = (
-    "https://freva-org.github.io/freva-admin/_images/freva_flowchart-new.png",
+# Public base URL where the built docs are served.
+# Prefer an ENV var; fall back to GitHub Pages for this repo.
+SITE_BASEURL = os.environ.get(
+    "SITE_BASEURL", "https://freva-org.github.io/metadata-crawler/"
 )
+
+# Paths to your social preview image (ideal size: 1200x630).
+# Put a copy in docs/_static/social_card.png (wide) for best results.
+OG_IMAGE = urljoin(SITE_BASEURL, "_static/final_logo.png")
+ogp_site_url = SITE_BASEURL
+ogp_image = OG_IMAGE
+ogp_image_alt = "Metadata Crawler – pastel node web logo"
 ogp_type = "website"
+ogp_description_length = 300
+ogp_use_first_image = False  # keep explicit ogp_image
 ogp_custom_meta_tags = [
+    '<meta property="og:site_name" content="metadata-crawler">',
+    '<meta property="og:locale" content="en_US">',
     '<meta name="twitter:card" content="summary_large_image">',
-    '<meta name="keywords" content="metadata, climate, data, freva, science, reproducibility">',
+    '<meta name="twitter:site" content="@freva_org">',  # adjust or remove
+    '<meta name="twitter:creator" content="@freva_org">',  # adjust or remove
+    '<meta name="theme-color" content="#5B6C8F">',  # matches logo line colour
 ]
+
 html_meta = {
     "description": "Index climate metadata.",
     "keywords": "freva, climate, data analysis, freva, metadata, climate science",
@@ -65,13 +81,14 @@ html_meta = {
     "og:title": "Metadata Crawler",
     "og:description": "Index climate metadata.",
     "og:type": "website",
-    "og:url": "https://freva-org.github.io/freva-admin/",
-    "og:image": "https://freva-org.github.io/freva-admin/_images/freva_flowchart-new.png",
+    "og:url": SITE_BASEURL,
+    "og:image": OG_IMAGE,
     "twitter:card": "summary_large_image",
-    "twitter:title": "Freva – Evaluation System Framework",
+    "twitter:title": "Metadata Crawler",
     "twitter:description": "Search, analyse and evaluate climate model data.",
-    "twitter:image": "https://freva-org.github.io/freva-admin/_images/freva_flowchart-new.png",
+    "twitter:image": OG_IMAGE,
 }
+
 
 # -- MyST options ------------------------------------------------------------
 
@@ -123,17 +140,36 @@ exclude_patterns: list[str] = []
 
 # -- Options for HTML output ----------------------------------------------
 html_theme = "pydata_sphinx_theme"
-html_logo = "_static/final_logo.png"
+html_logo = None
 html_favicon = "_static/favicon.png"
+
 html_theme_options = {
     "github_url": "https://github.com/freva-org/metadata-crawler",
     "navbar_end": ["theme-switcher", "navbar-icon-links"],
+    "logo": {
+        "image_light": "_static/final_logo-light.png",
+        "image_dark": "_static/final_logo-dark.png",
+        "text": "Metadata Crawler",
+    },
+    "icon_links": [
+        {
+            "name": "GitHub",
+            "url": "https://github.com/freva-org/metadata-crawler",
+            "icon": "fab fa-github",
+            "type": "fontawesome",
+        },
+        # {"name": "PyPI", "url": "https://pypi.org/project/metadata-crawler/",
+        #  "icon": "fas fa-box", "type": "fontawesome"}
+    ],
 }
+
+
 html_context = {
     "github_user": "freva-org",
     "github_repo": "metadata-crawler",
     "github_version": "main",
     "doc_path": "docs",
+    "default_mode": "dark",
 }
 
 html_static_path = ["_static"]
@@ -163,7 +199,7 @@ copyright = f"{datetime.now().year}, freva.org"
 if not os.environ.get("READTHEDOCS"):
     extensions += ["sphinx_sitemap"]
 
-    html_baseurl = os.environ.get("SITEMAP_URL_BASE", "http://127.0.0.1:8000/")
+    html_baseurl = SITE_BASEURL
     sitemap_locales = [None]
     sitemap_url_scheme = "{link}"
 
