@@ -379,6 +379,7 @@ class Datasets(BaseModel):
     defaults: Dict[str, Any] = Field(default_factory=dict)
     storage_options: Dict[str, Any] = Field(default_factory=dict)
     glob_pattern: str = "*.*"
+    inherits_from: str = Field(default_factory=str)
 
     @field_validator("storage_options", mode="after")
     @classmethod
@@ -511,26 +512,29 @@ class DRSConfig(BaseModel):
                 else:
                     a[k] = v
 
-        raw = values.get("dialect", {})
-        merged = deepcopy(raw)
-        for name, cfg in raw.items():
-            parent = cfg.get("inherits_from")
-            if parent:
-                if parent not in merged:
-                    raise ValueError(
-                        f"Dialect '{name}' inherits from unknown " f"'{parent}'"
-                    )
-                # take parent base, then overlay this dialect
-                base = deepcopy(merged[parent])  # shallow copy of parent raw dict
-                # remove inherits_from to avoid cycles
-                child = deepcopy(cfg)
-                child.pop("inherits_from", None)
-                # deep-merge child into base
-                _deep_merge(base, child)
-                base["inherits_from"] = parent
-                merged[name] = base
+        for key in ("dialect", "datasets"):
+            raw = values.get(key, {})
+            merged = deepcopy(raw)
+            for name, cfg in raw.items():
+                parent = cfg.get("inherits_from")
+                if parent:
+                    if parent not in merged:
+                        raise ValueError(
+                            f"'{name}' inherits from unknown " f"'{parent}'"
+                        )
+                    # take parent base, then overlay this dialect
+                    base = deepcopy(
+                        merged[parent]
+                    )  # shallow copy of parent raw dict
+                    # remove inherits_from to avoid cycles
+                    child = deepcopy(cfg)
+                    child.pop("inherits_from", None)
+                    # deep-merge child into base
+                    _deep_merge(base, child)
+                    base["inherits_from"] = parent
+                    merged[name] = base
 
-        values["dialect"] = merged
+            values[key] = merged
         return values
 
     @model_validator(mode="before")

@@ -20,6 +20,7 @@ variable_id = { var="*", attr="short_name", default="__name__" }
 [fool]
 # Definition of some not working datasets.
 root_path = "/foo/bar"
+inherits_from = "nextgems-s3"
 
 [catalogue_intake_local]
 root_path = "./data/intake/catalog/catalog.yaml"
