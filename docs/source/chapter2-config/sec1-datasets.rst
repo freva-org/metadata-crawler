@@ -33,8 +33,8 @@ constructed.
    # NextGems stored on s3
    [ngm-s3]
    root_path = "/freva/nexgems"
-   inherits_from = "obs-s3" (anything else like for obs-s3)
-   glob_pattern = "*.zarr" (get only zarr stores)
+   inherits_from = "obs-s3" # (anything else like for obs-s3)
+   glob_pattern = "*.zarr" # (get only zarr stores)
 
 
    # Observational data on S3/MinIO
