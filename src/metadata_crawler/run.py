@@ -132,13 +132,11 @@ async def async_index(
 
     .. code-block:: python
 
-        await async_add(
-            store="/tmp/catalog.yaml",
-            config_file="/path/to/",
-            data_set=["cmip6-fs", "obs-fs"],
-            catalogue_backend="duckdb",
-            threads=8,
-            batch_size=50,
+        await async_index(
+           "solr"
+            "/tmp/catalog.yaml",
+            server="localhost:8983",
+            batch_size=1000,
         )
 
     """
@@ -260,8 +258,8 @@ async def async_add(
      .. code-block:: python
 
          await async_add(
-             "my-data.yaml",
-             "~/data/drs-config.toml",
+            store="my-data.yaml",
+             config_file="~/data/drs-config.toml",
              data_set=["cmip6", "cordex"],
          )
 

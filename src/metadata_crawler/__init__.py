@@ -79,6 +79,7 @@ def index(
             "/tmp/catalog-1.yml",
             "/tmp/catalog-2.yml",
             batch_size=50,
+            server="localhost:8983",
         )
 
 

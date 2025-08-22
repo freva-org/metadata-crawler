@@ -1,6 +1,23 @@
 Harvest your climate metadata
 =============================
 
+.. image:: https://img.shields.io/badge/License-BSD-purple.svg
+   :target: LICENSE
+
+.. image:: https://img.shields.io/pypi/pyversions/freva-client.svg
+   :target: https://pypi.org/project/freva-client
+
+.. image:: https://img.shields.io/badge/ViewOn-GitHub-purple
+   :target: https://github.com/freva-org/metadata-crawler
+
+.. image:: https://github.com/freva-org/metadata-crawler/actions/workflows/ci_job.yml/badge.svg
+   :target: https://github.com/freva-org/metadata-crawler/actions
+
+.. image:: https://codecov.io/github/freva-org/freva-nextgen/branch/init/graph/badge.svg?token=dGhXxh7uP3
+   :target: https://codecov.io/github/freva-org/freva-nextgen
+
+
+
 
 Overview
 --------
@@ -26,10 +43,23 @@ Install via `pip <https://pypi.org>`_ or `conda-forge <https://conda-forge.org>`
 After installation, use the CLI immediately (see TL;DR below) or import
 the modules in your own code.
 
-CLI usage (TL;DR)
------------------
+Usage (TL;DR)
+-------------
 
-The CLI uses a **custom framework** inspired by Typer but is **not** Typer. Commands are grouped under three verbs: ``crawl``, ``index`` and ``delete``.
+- **Multi-backend discovery**: POSIX, S3/MinIO, Swift (async REST), Intake
+- **Two-stage pipeline**: *crawl → catalogue* then *catalogue → index*
+- **Schema driven**: strong types (e.g. ``string``, ``datetime[2]``,
+  ``float[4]``, ``string[]``)
+- **DRS dialects**: packaged CMIP6/CMIP5/CORDEX; build your own via inheritance
+- **Path specs & data specs**: parse directory/filename parts and/or read
+  dataset attributes/vars
+- **Special rules**: conditionals and method/function calls (e.g. CMIP6 realm,
+  time aggregation)
+- **Index backends**: DuckDB (local/S3), MongoDB (Motor), Solr
+
+
+The CLI uses a **custom framework** inspired by Typer but is **not** Typer.
+Commands are grouped under three verbs: ``crawl``, ``index`` and ``delete``.
 
 *Harvest metadata into a catalogue*:
 
