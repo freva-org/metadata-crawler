@@ -10,8 +10,8 @@ Field attributes
 
 Every schema entry is a table keyed by the facet name. For example::
 
-   [drs_settings.schema.file]
-   key         = "__file_name__"
+   [drs_settings.schema.product]
+   key         = "domain"
    type        = "string"
    required    = true
 
