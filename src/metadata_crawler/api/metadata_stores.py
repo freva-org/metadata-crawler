@@ -178,7 +178,7 @@ class IndexStore:
         """Yield batches of metadata records from a specific table.
 
         Parameters
-        ----------
+        ^^^^^^^^^^
         index_name:
             The name of the index_name.
 
@@ -236,7 +236,7 @@ class DuckDB(IndexStore):
     ):
         """
         Parameters
-        ----------
+        ^^^^^^^^^^
         path
             file:// path, local filepath, ':memory:', or 's3://bucket/path.duckdb'
         index_names
@@ -525,7 +525,7 @@ class JSONLines(IndexStore):
         """Yield batches of metadata records from a specific table.
 
         Parameters
-        ----------
+        ^^^^^^^^^^
         index_name:
             The name of the index_name.
 
@@ -555,7 +555,7 @@ class CatalogueReader:
     """Backend for reading the content of an intake catalogue.
 
     Parameters
-    ----------
+    ^^^^^^^^^^
 
     catalogue_file:
         Path to the intake catalogue
@@ -598,7 +598,7 @@ class CatalogueWriter:
     datasets (all versions and leatest versions).
 
     Parameters
-    ----------
+    ^^^^^^^^^^
     yaml_path:
         Path the to intake catalogue that should be created.
     index_name:
@@ -680,7 +680,7 @@ class CatalogueWriter:
         type of dataset.
 
         Parameters
-        ----------
+        ^^^^^^^^^^
         info_obj:
             The name of the input object path where the metadata should be
             retrieved from catalogue_entry

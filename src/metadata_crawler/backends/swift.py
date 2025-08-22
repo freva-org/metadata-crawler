@@ -25,10 +25,10 @@ class SwiftPath(PathTemplate):
 
     def __post_init__(self) -> None:
         self.storage_options = self.storage_options or {}
-        self.os_password = self.storage_template("os_password", self._pw)
-        self.os_user_id = self.storage_template("os_user_id", self._user)
-        self.os_project_id = self.storage_template("os_project_id")
-        self.os_auth_token = self.storage_template("os_auth_token") or None
+        self.os_password = self.storage_options.get("os_password", self._pw)
+        self.os_user_id = self.storage_options.get("os_user_id", self._user)
+        self.os_project_id = self.storage_options.get("os_project_id")
+        self.os_auth_token = self.storage_options.get("os_auth_token") or None
         self._os_storage_url = self.storage_options.get(
             "os_storage_url", ""
         ).rstrip("/")

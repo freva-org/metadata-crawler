@@ -9,10 +9,10 @@ library.
 Structure of ``cli.py``
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-``cli.py`` defines decorators ``cli_parameter`` and ``@cli_function``
+``cli.py`` defines decorators ``@cli_function`` and the ``cli_parameter`` method
 to annotate functions with help messages and parameter metadata.  The
 actual CLI commands are defined in your :ref:`add_backends`  via the
-``@cli_function`` decorator and.  To add a new command:
+``@cli_function`` decorator.  To add a new command:
 
 1. **Decorate** the ``index`` and ``delete`` functions in our :ref:`add_backends`
    Use the ``@cli_function`` decorator to register it.
@@ -29,12 +29,9 @@ You could implement it as follows:
 
 .. code-block:: python
 
-   import typer
    from typing import Optinal
    from typing_extensions import Annotated
    from .metadata_stores import IndexStore
-
-   app = typer.Typer()
 
    @cli_function(help="Index data in MySQL")
    def index(
@@ -45,6 +42,10 @@ You could implement it as follows:
    ) -> None:
        """Index."""
 
+.. note::
+
+    The arguments and keyword arguments of th e``cli_parameter`` method
+    follow the logic of `argparse.ArgumentParser.add_argument <https://docs.python.org/3/library/argparse.html#argparse.ArgumentParser.add_argument>`_.
 
 When you run ``metadata-crawler mysql --server localhost -p``
 the function executes your custom logic.

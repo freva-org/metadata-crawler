@@ -30,9 +30,9 @@ all canonical facets plus the current dataset entry.  See the
 .. note::
 
    Quoting matters: Remember that when defning templates that should serve as
-   code that get's evaluated the quoting of variables becomes important:
+   code and have to be evaluated the quoting of variables becomes important:
 
-        ``'{{ test }}' `` is not ``{{ test }}``.
+   ``'{{ test }}' `` is not ``{{ test }}``.
 
 Another example uses templating to compute the ``dataset`` name from
 the dataset entry itself:
@@ -42,9 +42,9 @@ the dataset entry itself:
    [drs_settings.schema.dataset]
    key = "__dataset__"
    type = "string"
-   default = "{{ dataset_name }}"
+   default = "{{ dataset }}"
 
-Here ``dataset_name`` refers to the section name (e.g. ``cmip6-fs``)
+Here ``dataset`` refers to the section name (e.g. ``cmip6-fs``)
 under which the dataset is defined.
 
 Templating is also supported in ``defaults`` and in special rule
@@ -53,7 +53,7 @@ arguments.  Remember to escape braces if you need literal ``{{`` or
 
 .. tip::
 
-   You can also resolve environment variables to pass sensitive infromations
+   You can also resolve environment variables to pass sensitive information
    such as passwords or keys:
 
    [foo.storage_settings]

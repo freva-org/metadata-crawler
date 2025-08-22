@@ -42,8 +42,8 @@ Provide the MongoDB connection URL and database name via the
 ``url`` and ``database`` parameters.  You may specify additional
 options (e.g. TLS settings) in ``storage_options``.
 
-Implementing a custom backend
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Recipe: Implementing a custom index
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 To add a new index backend:
 
@@ -92,4 +92,6 @@ Example skeleton
     mybackend = "my_package.my_index:MyIndexStore"
 
 
-.. automodule:: metadata_crawler.api.index
+**API Reference:**
+
+.. autoclass:: metadata_crawler.api.index.BaseIndex

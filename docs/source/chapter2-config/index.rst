@@ -2,7 +2,7 @@ Configuration
 =============
 
 This chapter describes how to configure metadata‑crawler via a
-``drs_config.toml`` file.  The configuration is divided into three
+``drs_config.toml`` file.  The configuration is divided into different
 layers:
 
 * :ref:`schema`: definitions for canonical facets and their data types.

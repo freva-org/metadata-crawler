@@ -1,11 +1,11 @@
 .. _specs:
 
-Specs: path versus data
------------------------
+Path and data specs
+-------------------
 
-Metadata can be extracted from two primary sources: the file system
-path and the dataset contents.  Dialects declare how to interpret
-each via ``specs_dir``/``specs_file`` and ``data_specs``.
+Metadata can be extracted from three primary sources: the file system
+path and the dataset contents and the filesystem itself.  Dialects declare
+how to interpret each via ``specs_dir``/``specs_file`` and ``data_specs``.
 
 Path specs (specs_dir and specs_file)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -42,7 +42,6 @@ constructed.
    region = "us-east-1"
    [obs-s3.defaults]
    project = "observations"
-   format = "nc"
 
    # NextGEMS data on Swift
    [ngm-swift]
@@ -66,12 +65,12 @@ Keys
 * **root_path** – Path or prefix to search for files.  For S3 and
   Swift backends it is the prefix inside the bucket/container.  For
   POSIX it is an absolute directory.  When using the intake backend
-  this can be a CSV catalog file.
+  this can be a intake or intake-esm catalog file.
 * **drs_format** – Name of the DRS dialect to use.  Must match one of
   the dialects defined under ``[drs_settings.dialect]``.
 * **fs_type** – Optional override of the storage backend for this
   dataset.  Supported values include ``posix`` (default), ``s3``,
-  ``swift``, ``intake``, and ``fdb5``.  Backends determine how the
+  ``swift`` and ``intake``.  Backends determine how the
   crawler traverses paths and reads data.
 * **storage_options** – A table of backend specific options.  For
   S3 this may include ``endpoint_url``, ``aws_access_key_id``,
@@ -82,24 +81,20 @@ Keys
   corresponding key is absent in the parsed metadata.  These
   defaults override the dialect defaults if both are specified.
 
-Datasets may also specify the number of threads and other crawling
-parameters via CLI options rather than in the config file.
-
 
 Storage options
 ---------------
 
 The ``fs_type`` key determines which storage backend the crawler uses
-to traverse files.  Each backend accepts a set of parameters under
-``storage_options``.  This section summarises supported backends and
+to traverse files.  Each backend accepts a set of backend specific parameters
+under ``storage_options``.  This section summarises supported backends and
 their options.
 
 POSIX (default)
 ^^^^^^^^^^^^^^^
 
 If ``fs_type`` is omitted or set to ``posix``, the crawler walks a
-local filesystem.  No special options are required.  The ``root_path``
-must be an absolute path.
+local filesystem.  No special options are required.
 
 S3/MinIO
 ^^^^^^^^
@@ -109,15 +104,10 @@ API.  Required options include:
 
 * ``endpoint_url`` – The full URL of the S3 endpoint (e.g.
   ``https://s3.amazonaws.com`` or a MinIO server).
-* ``aws_access_key_id``, ``aws_secret_access_key`` – Credentials.
+* ``key``, ``secret`` – Credentials.
 * ``region`` – Region name (may be optional for MinIO).
-* ``bucket`` – You can embed the bucket name at the beginning of
-  ``root_path`` (``my-bucket/path``) or supply it via
+  ``root_path`` (``s3://my-bucket/path``) or supply it via
   ``storage_options.bucket``.
-
-DuckDB and DuckDB’s httpfs integration rely on PRAGMA settings rather
-than ``storage_options``; see the :ref:`add_backends`
-section.
 
 Swift
 ^^^^^
@@ -128,10 +118,9 @@ Swift uses Keystone v3 credentials.  Required options include:
 * ``os_auth_url`` – Keystone authentication URL.
 * ``os_storage_url`` – Storage URL for object endpoints; typically
   ends in ``/v1``.
-* ``os_username``, ``os_password``, ``os_user_domain_name``,
-  ``os_project_name``, ``os_project_domain_name`` – Identity
+* ``os_username``, ``os_password``,
+  ``os_project_id`` – Identity
   credentials.
-* ``os_storage_options`` – Additional options such as ``os_region``.
 * ``container`` – The container name may be specified either in the
   ``storage_options`` or as part of the ``root_path`` (first path
   component).
@@ -139,7 +128,7 @@ Swift uses Keystone v3 credentials.  Required options include:
 Intake
 ^^^^^^
 
-When ``fs_type = "intake"`` the crawler reads from a CSV or other
+When ``fs_type = "intake"`` the crawler reads from a intake-esm or other
 Intake catalog rather than walking a directory.  The ``root_path``
 points to the CSV file and ``storage_options`` are not required.
 

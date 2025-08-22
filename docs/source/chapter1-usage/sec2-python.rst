@@ -22,13 +22,12 @@ and raise exceptions on error.  A typical workflow consists of
 1. **Crawling**: collect metadata from one or more files or datasets
    into a temporary catalog (e.g. JSON lines or DuckDB).
 2. **Indexing**: read entries from the catalog and write them to the
-   configured index backend (e.g. DuckDB or MongoDB).
+   configured index backend (e.g. Apache Solr or MongoDB).
 3. **Deleting**: remove previously indexed entries matching a set
    of search facets (optional).
 
 Below is a minimal example that crawls data from a local directory,
-stores it in a JSON lines catalog, and indexes it into a DuckDB
-database:
+stores it in a JSON lines catalog, and indexes it to Apache Solr:
 
 .. code-block:: python
 

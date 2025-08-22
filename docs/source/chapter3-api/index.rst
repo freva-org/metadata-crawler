@@ -7,6 +7,24 @@ index systems, and how to provide CLI extensions.  The public API
 consists of abstract base classes and helper functions defined in
 ``storage_backend.py``, ``metadata_stores.py``, and ``index.py``.
 
+
+To make any custom implementations available inside ``metadata-crawler`` you
+need to `create entry points <https://packaging.python.org/en/latest/guides/creating-and-discovering-plugins/#using-package-metadata>`_
+in your ``pyproject.toml`` file:
+
+.. code-block:: toml
+
+    # register a new index system
+    [project.entry-points."metadata_crawler.index_backends"]
+    mybackend = "my_package.my_index:MyIndexStore"
+
+    # register in your storage backend
+    [project.entry-points."metadata_crawler.storage_backends"]
+    foo = "my_package.foo_backend:FooBackend"
+
+
+
+
 .. toctree::
    :maxdepth: 1
    :caption: Sections

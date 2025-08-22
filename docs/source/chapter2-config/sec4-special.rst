@@ -42,8 +42,8 @@ Two namespaces are available depending on the step:
   - The entire parsed model (your TOML) exposed as a nested dictionary:
     ``datasets``, ``suffixes``, ``index_schema``, ``special``, ``storage_options``,
     ``dialect``. For example:
-    - ``dialect['cordex'].domains['EUR-11']``
-    - ``datasets['cmip6-fs'].root_path``
+    - ``dialect['cordex']['domains']['EUR-11']``
+    - ``datasets['cmip6-fs']['root_path']``
 
 Rule types
 ^^^^^^^^^^^
@@ -70,25 +70,42 @@ Flow:
 
 Lookup
 ~~~~~~
+Lookup is a special type of data attribute lookup that stores the results of the
+attribute lookup in a nested cache. This allows for efficient retrieval of
+attributes that have already been retrieved from datasets.
 
-Call the dataset backend’s ``lookup(path, standard, *items, **read_kws)`` to fetch
-a value from a **cached tree** (e.g., mapping CMIP6 ``table_id`` + ``variable_id`` to
+Internally this call the dataset storage backend’s ``lookup(path, attribute, *tree, **read_kws)``
+method to fetch values from a **cached tree** (e.g., mapping CMIP6 ``table_id`` + ``variable_id`` to
 ``realm`` or ``frequency``). Items are first rendered via Jinja.
+
+Below you can find the signature of the method that get's involved when applying
+the lookup rule:
+
+.. automethod:: metadata_crawler.api.storage_backend::PathTemplate.lookup
+   :no-index:
 
 .. code-block:: toml
 
-   [drs_settings.dialect.cmip6.special]
-   realm.type            = "lookup"
-   realm.items           = ["{{ table_id }}", "{{ variable_id }}", "realm"]
+   [drs_settings.dialect.cmip6.special.realm]
+   type            = "lookup"
+   attribute       = "realm"
+   tree           = ["{{ table_id }}", "{{ variable_id }}"]
 
-   time_frequency.type   = "lookup"
-   time_frequency.items  = ["{{ table_id }}", "{{ variable_id }}", "frequency"]
+   [drs_settings.dialect.cmip6.special.time_frequency]
+   type   = "lookup"
+   attribute = "frequency"
+   tree  = ["{{ table_id }}", "{{ variable_id }}"]
+
 
 Notes:
 
 - The backend should **memoize** lookups in a tree cache
   so repeated calls across millions of files are O(1) hits after the first read.
 - ``read_kws`` come from ``dialect[standard].data_specs.read_kws`` (e.g., xarray engine).
+
+
+
+
 
 Call
 ~~~~
@@ -102,13 +119,14 @@ dict scope. Useful for string composition or referencing config data structures.
    type = "call"
    call = "'{{ driving_model }}-{{ rcm_name }}-{{ rcm_version }}'"
 
-You may also reference config structures in the expression, for example:
+You may also reference config structures as nested dicts in the expression,
+for example:
 
 .. code-block:: toml
 
    [drs_settings.dialect.cordex.special.default_bbox]
    type = "call"
-   call = "dialect['cordex'].domains.get('{{ domain | upper }}', [0,360,-90,90])"
+   call = "dialect['cordex']['domains'].get('{{ domain | upper }}', [0,360,-90,90])"
 
 Order and scoping
 ^^^^^^^^^^^^^^^^^^
@@ -156,10 +174,12 @@ CMIP6 lookups (realm / frequency)
 
    [drs_settings.dialect.cmip6.special]
    realm.type            = "lookup"
-   realm.items           = ["{{ table_id }}", "{{ variable_id }}", "realm"]
+   realm.tree            = ["{{ table_id }}", "{{ variable_id }}"]
+   realm.attribute       = "realm"
 
    time_frequency.type   = "lookup"
-   time_frequency.items  = ["{{ table_id }}", "{{ variable_id }}", "frequency"]
+   time_frequency.tree   = ["{{ table_id }}", "{{ variable_id }}"]
+   realm.attribute       = "frequency"
 
 Performance notes
 ^^^^^^^^^^^^^^^^^^
@@ -175,6 +195,8 @@ Performance notes
     - Prefer Jinja templating (``{{ ... }}``) for string assembly and limit Python
       expressions to straightforward logic.
     - When using Jinja templating variable quoting is important.
+    - Don't use this method if you can't expect consistency of attributes across
+      many files.
 
 Troubleshooting
 ^^^^^^^^^^^^^^^

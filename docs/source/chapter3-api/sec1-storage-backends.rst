@@ -3,8 +3,8 @@ Adding storage backends
 
 Storage backends provide the abstraction for traversing files and
 directories, reading datasets and extracting metadata.  The crawler
-ships with built‑in backends for Posix, S3/MinIO, Swift, Intake and
-FDB5.  You can add your own backend by subclassing
+ships with built‑in backends for Posix, S3/MinIO, Swift and Intake.
+You can add your own backend by subclassing
 ``PathTemplate`` defined in ``storage_backend.py``.
 
 Base classes
@@ -24,8 +24,8 @@ The core classes used for storage backends are:
   overrides include ``open_dataset`` (open an xarray dataset given
   a URI) and ``read_attr`` (read a metadata attribute).
 
-Implementing a backend
-^^^^^^^^^^^^^^^^^^^^^^
+Recipe: Implement a backend
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 To implement a new backend:
 
@@ -100,5 +100,13 @@ Once registered, you can set ``fs_type = "foo"`` in a dataset
 definition and optionally provide ``storage_options`` that will be
 passed into your backend’s constructor.
 
+**API Reference:**
 
-.. automodule:: metadata_crawler.api.storage_backend
+.. autoclass:: metadata_crawler.api.storage_backend.PathTemplate
+   :inherited-members: False
+
+.. autoclass:: metadata_crawler.api.storage_backend.PathMixin
+   :inherited-members: False
+
+.. autoclass:: metadata_crawler.api.storage_backend.TemplateMixin
+   :inherited-members: False

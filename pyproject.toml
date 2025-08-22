@@ -53,6 +53,16 @@ dependencies = [
 ]
 [project.optional-dependencies]
 dev = ["flit", "tox"]
+mkdoc = [
+  "mkdocs",
+  "mkdocs-material",
+  "mkdocstrings[python]",
+  "mkdocs-macros-plugin",
+  "mkdocs-minify-plugin",
+  "mkdocs-redirects",
+  #"mkdocs-open-graph-plugin",
+  "mike",
+]
 doc = [
     "sphinx",
     "sphinxcontrib_github_alt",

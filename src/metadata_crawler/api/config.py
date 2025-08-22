@@ -24,7 +24,6 @@ from warnings import catch_warnings
 import tomli
 import tomlkit
 import xarray
-from jinja2 import Template
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -37,7 +36,7 @@ from tomlkit.container import OutOfOrderTableProxy
 from tomlkit.items import Table
 
 from ..utils import convert_str_to_timestamp, load_plugins
-from .storage_backend import Metadata
+from .storage_backend import Metadata, TemplateMixin
 
 
 class BaseType(str, Enum):
@@ -78,7 +77,7 @@ class SchemaField(BaseModel):
     def parse_type(cls, v: str) -> str:
         """
         Accepts
-        -------
+        ^^^^^^^
           - 'string', 'integer', 'float', 'timestamp' -> length=None
           - 'float[2]', 'int[5]' -> length=number
           - 'string[]'  -> length=None, multi_valued semantics
@@ -386,17 +385,14 @@ class Datasets(BaseModel):
     def _render_storage_options(
         cls, storage_options: Dict[str, Any]
     ) -> Dict[str, Any]:
-        for option in storage_options:
-            value = storage_options[option]
-
-            if isinstance(value, str):
-                storage_options[option] = Template(value).render(env=os.getenv)
-
-        return storage_options
+        return cast(
+            Dict[str, Any], TemplateMixin.render_templates(storage_options, {})
+        )
 
     def model_post_init(self, __context: Any = None) -> None:
         storage_plugins = load_plugins("metadata_crawler.storage")
         try:
+            print(self.storage_options)
             self.backend = storage_plugins[self.fs_type](**self.storage_options)
         except KeyError:
             raise NotImplementedError(
@@ -418,7 +414,8 @@ class CallRule(BaseModel):
 
 class LookupRule(BaseModel):
     type: Literal["lookup"] = "lookup"
-    items: List[str]
+    tree: List[str] = Field(default_factory=list)
+    attribute: str
 
 
 SpecialRule = Annotated[
@@ -559,13 +556,16 @@ class DRSConfig(BaseModel):
             match rule.type:
                 case "conditional":
                     _rule = textwrap.dedent(rule.condition or "").strip()
-                    cond = Template(_rule).render(**data)
-                    cond = eval(cond, {}, getattr(self, "_model_dict", {}))
+                    s_cond = TemplateMixin.render_templates(_rule, data)
+                    cond = eval(s_cond, {}, getattr(self, "_model_dict", {}))
                     result = rule.true if cond else rule.false
                 case "lookup":
-                    args = [Template(r).render(**data) for r in rule.items]
+                    args = cast(
+                        List[str], TemplateMixin.render_templates(rule.tree, data)
+                    )
                     result = self.datasets[standard].backend.lookup(
                         inp.path,
+                        TemplateMixin.render_templates(rule.attribute, data),
                         standard,
                         *args,
                         **self.dialect[standard].data_specs.read_kws,
@@ -573,7 +573,7 @@ class DRSConfig(BaseModel):
                 case "call":
                     _call = textwrap.dedent(rule.call or "").strip()
                     result = eval(
-                        Template(_call).render(**data),
+                        TemplateMixin.render_templates(_call, data),
                         {},
                         getattr(self, "_model_dict", {}),
                     )
@@ -730,5 +730,7 @@ class DRSConfig(BaseModel):
             if schema.multi_valued or schema.length:
                 if not isinstance(val, list) and val:
                     val = [val]
-            out[field] = val
+            out[field] = self.datasets[standard].backend.render_templates(
+                val, out
+            )
         return out

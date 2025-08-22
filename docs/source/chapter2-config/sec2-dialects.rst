@@ -15,7 +15,7 @@ The dialect definition typically consists of several components:
 * **sources** – A list describing where to obtain metadata.  Valid
   values include ``path`` (parse directory/file names), ``data``
   (read attributes from the dataset), and ``storage`` (obtain from
-  the storage catalog).  Order matters: if the first source yields a
+  the storage backend).  Order matters: if the first source yields a
   value it will not be overridden by later sources.
 * **specs_dir** – An ordered list of facet names corresponding to
   directory components between the ``root_path`` and the file name.  The
@@ -39,11 +39,10 @@ The dialect definition typically consists of several components:
   - ``conditional`` rules evaluate a Python expression on the
     temporary ``data`` dictionary and choose ``true`` or ``false``
     values accordingly.
-  - ``method`` rules call a registered method on the config class
-    (e.g. ``_get_realm`` or ``_get_aggregation``) with arguments
-    referencing other facets or the file name.
-  - ``function`` rules evaluate an arbitrary expression using the
-    ``self`` object and the ``data`` dictionary.
+  - ``lookup`` rules call a registered lookup method on the config class
+     with arguments referencing other facets and data attributes for lookup.
+  - ``call`` rules evaluate an arbitrary expression using the
+    ``drs_config`` entries and the alreday retrieved ``metadata``.
 * **domains** – For CORDEX, a table mapping domain codes (e.g.
   ``EUR-11``) to bounding boxes; used by the ``bbox`` special rule.
 * **data_specs** – (see :doc:`sec3-specs`) define rules for reading
@@ -77,13 +76,13 @@ realm and time aggregation.
    facets = { model = "source_id", ensemble = "member_id" }
    defaults = { grid_label = "gn", version = -1 }
    [drs_settings.dialect.cmip6.special.realm]
-   type = "method"
-   method = "_get_realm"
-   args = ["table_id", "variable_id", "__file_name__"]
+   type = "lookup"
+   items = ["{{ table_id }}", "{{ variable_id }}", "realm"]
    [drs_settings.dialect.cmip6.special.time_aggregation]
-   type = "method"
-   method = "_get_aggregation"
-   args = ["table_id", "variable_id", "__file_name__"]
+   type = "conditional"
+   condition = "'pt' in '{{ time_frequency | lower}}'"
+   true = "inst"
+   false = "mean"
 
 Example: CORDEX dialect with domain lookup
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -96,7 +95,7 @@ section defines a function rule that concatenates three facets, and
 .. code-block:: toml
 
    [drs_settings.dialect.cordex]
-   sources = ["path", "data"]
+   sources = ["path"]
    specs_dir = [
      "project", "product", "domain", "institution", "driving_model",
      "experiment", "ensemble", "rcm_name", "rcm_version",

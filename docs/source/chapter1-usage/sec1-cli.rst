@@ -1,13 +1,14 @@
 Command‑line interface
 ----------------------
 
-`metadata‑crawler` installs a console entry point named
-``metadata-crawler`` or ``mdc`` that exposes three high‑level subcommands:
+The sotware installs a console entry point named
+``metadata-crawler`` or ``mdc`` that exposes the high‑level subcommands:
 
 * ``crawl``  – Collect metadata into a temporary catalog.
 * ``config`` – Display general configuration
 * ``solr``   - Index and delete metadata to/from Apache solr.
 * ``mongo``  – Index and deleta metadata to/from MongoDB.
+* ``walk-intake`` – Convenience module to traverse and check intake catalogues.
 
 Use ``--help`` on any command to see available options.  Below are
 some examples.
@@ -67,7 +68,7 @@ Deleting
 The ``delete`` command removes documents from the index using one or
 more facet filters.  Facet values may contain shell wildcards
 (``*`` and ``?``) which are translated to MongoDB regular expressions
-(DuckDB deletion uses filters internally).  For example:
+(Apache Solr deletion uses filters internally).  For example:
 
 .. code-block:: bash
 

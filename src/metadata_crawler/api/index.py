@@ -35,7 +35,7 @@ class BaseIndex:
     by this base class.
 
     Parameters
-    ----------
+    ^^^^^^^^^^
     catalogue_file:
         Path to the intake catalogue
     batch_size:
@@ -43,7 +43,7 @@ class BaseIndex:
         it into the catalogue.
 
     Attributes
-    ----------
+    ^^^^^^^^^^
     """
 
     def __init__(
@@ -83,7 +83,7 @@ class BaseIndex:
         """Get the metadata of an index in batches.
 
         Parameters
-        ----------
+        ^^^^^^^^^^
         index_name:
             Name of the index that should be read.
 
@@ -103,7 +103,7 @@ class BaseIndex:
         """Delete data from the cataloguing system.
 
         Parameters
-        ----------
+        ^^^^^^^^^^
         flush:
             Boolean indicating whether or not the data should be flushed after
             amending the catalogue (if implemented).
@@ -122,7 +122,7 @@ class BaseIndex:
         """Add metadata into the cataloguing system.
 
         Parameters
-        ----------
+        ^^^^^^^^^^
         metadata_batch:
             batch of metadata stored in a two valued tuple. The first entry
             of the tuple represents a name of the catalog. This entry

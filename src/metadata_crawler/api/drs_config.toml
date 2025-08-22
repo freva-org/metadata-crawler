@@ -155,7 +155,7 @@ default     = "mean"
 # 3) Global special rules
 [drs_settings.special.time_aggregation]
 type      = "conditional"
-condition = "'pt' in '{{ time_frequency | default('mean') | lower}}'"
+condition = "'pt' in '{{ time_frequency | lower}}'"
 true      = "inst"
 false     = "mean"
 
@@ -260,11 +260,14 @@ file_parts = [
 file_sep = "_"
 
 # override async methods for cmip6
-[drs_settings.dialect.cmip6.special]
-realm.type   = "lookup"
-realm.items   = ["{{ table_id }}", "{{ variable_id }}", "realm"]
-time_frequency.type   = "lookup"
-time_frequency.items   = ["{{ table_id }}","{{ variable_id }}","frequency"]
+[drs_settings.dialect.cmip6.special.realm]
+type   = "lookup"
+tree   = ["{{ table_id }}", "{{ variable_id }}"]
+attribute = "realm"
+[drs_settings.dialect.cmip6.special.time_frequency]
+type   = "lookup"
+tree   = ["{{ table_id }}","{{ variable_id }}"]
+attribute = "frequency"
 
 # -- CMIP5 --------------------------------------------------------
 [drs_settings.dialect.cmip5]

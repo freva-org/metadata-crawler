@@ -66,14 +66,14 @@ ogp_image_alt = "Metadata Crawler – pastel node web logo"
 ogp_type = "website"
 ogp_description_length = 300
 ogp_use_first_image = False  # keep explicit ogp_image
-ogp_custom_meta_tags = [
+ogp_custom_meta_tags = (
     '<meta property="og:site_name" content="metadata-crawler">',
     '<meta property="og:locale" content="en_US">',
     '<meta name="twitter:card" content="summary_large_image">',
     '<meta name="twitter:site" content="@freva_org">',  # adjust or remove
     '<meta name="twitter:creator" content="@freva_org">',  # adjust or remove
     '<meta name="theme-color" content="#5B6C8F">',  # matches logo line colour
-]
+)
 
 html_meta = {
     "description": "Index climate metadata.",
@@ -145,7 +145,7 @@ html_logo = None
 html_favicon = "_static/favicon.png"
 
 html_theme_options = {
-    "github_url": "https://github.com/freva-org/metadata-crawler",
+    # "github_url": "https://github.com/freva-org/metadata-crawler",
     "navbar_end": ["theme-switcher", "navbar-icon-links"],
     "logo": {
         "image_light": "_static/final_logo-light.png",
