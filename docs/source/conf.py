@@ -47,6 +47,7 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
     "sphinx.ext.intersphinx",
+    "sphinxext.opengraph",
     "myst_parser",  # support for Markdown files if desired
 ]
 

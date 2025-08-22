@@ -60,7 +60,7 @@ doc = [
     "sphinx-copybutton",
     "sphinx-sitemap",
     "sphinx-togglebutton",
-    "sphinxext-opengraph",
+    "sphinxext-opengraph[social-cards]",
     "pydata-sphinx-theme",
     "myst-parser",
 ]
