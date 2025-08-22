@@ -633,8 +633,10 @@ class CatalogueWriter:
         self.path = self.fs.unstrip_protocol(yaml_path)
         scheme, _, _ = data_store_prefix.rpartition("://")
         self.backend = backend
-        if not scheme:
-            data_store_prefix = os.path.abspath(data_store_prefix)
+        if not scheme and not os.path.isabs(data_store_prefix):
+            data_store_prefix = os.path.join(
+                os.path.abspath(os.path.dirname(yaml_path)), data_store_prefix
+            )
         self.prefix = data_store_prefix
         self.index_name = index_name
         cls: Type[IndexStore] = CatalogueBackends[backend].value

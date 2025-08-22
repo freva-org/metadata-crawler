@@ -84,7 +84,7 @@ class PosixPath(PathTemplate):
         str: Path of the object store that matches the glob pattern.
         """
         p = Path(path)
-        if await self.is_file(p):
+        if await self.is_file(p) or p.suffix == ".zarr":
             yield Metadata(path=str(p))
         else:
             async for out_f in p.rglob(glob_pattern):

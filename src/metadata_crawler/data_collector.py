@@ -171,18 +171,19 @@ class DataCollector:
         store = self.config.datasets[drs_type].backend
         try:
             is_file = await store.is_file(inp_dir)
-            is_dir = await store.is_dir(inp_dir)
+            iterable = await store.is_dir(inp_dir)
             suffix = await store.suffix(inp_dir)
         except Exception as error:
             logger.error("Error checking file %s", error)
             return
+        iterable = False if suffix == ".zarr" else iterable
         if is_file and suffix in self.config.suffixes:
             op = self._ingest_dir
         elif pos <= 0 or suffix == ".zarr":
             op = self._ingest_dir
         if op:
             try:
-                await op(drs_type, inp_dir, iterable=is_dir)
+                await op(drs_type, inp_dir, iterable=iterable)
             except Exception as error:
                 logger.error(error)
             return

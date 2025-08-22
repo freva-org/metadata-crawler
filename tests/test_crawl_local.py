@@ -45,7 +45,7 @@ def test_crawl_cordex(drs_config_path: Path, cat_file: Path) -> None:
     """Test for domain specs in cordex."""
     add(
         cat_file,
-        drs_config_path,
+        drs_config_path.parent,
         data_set="cordex-fs",
     )
     assert cat_file.exists()
@@ -109,6 +109,8 @@ def test_crawl_single_files(
     add(
         cat_file,
         drs_config_path,
+        data_store_prefix=str(drs_config_path.parent / "foo"),
+        verbosity=5,
         data_object=[
             os.path.join(
                 data_dir,

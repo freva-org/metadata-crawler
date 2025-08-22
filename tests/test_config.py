@@ -96,7 +96,9 @@ def test_read_zarr_data(zarr_data: Path) -> None:
     config = DRSConfig.load(conf)
     assert "path" in config.dialect["bar"].sources
     with pytest.raises(ValueError):
-        data = config.read_metadata("bar", Metadata(path=str(zarr_data)))
+        data = config.dialect["bar"].path_specs.get_metadata_from_path(
+            Path("foo/muh_bar_zup.nc")
+        )
     assert (
         len(
             config.index_schema["time_aggregation"].get_time_range(

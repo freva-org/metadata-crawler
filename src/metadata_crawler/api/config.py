@@ -168,7 +168,7 @@ class ConfigMerger:
                 _config = (
                     Path(user_path).expanduser().absolute() / "drs_config.toml"
                 ).read_text(encoding="utf-8")
-            if isinstance(user_path, (str, Path)) and os.path.isfile(user_path):
+            elif isinstance(user_path, (str, Path)) and os.path.isfile(user_path):
                 _config = (
                     Path(user_path)
                     .expanduser()

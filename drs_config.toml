@@ -1,17 +1,17 @@
-[nextGems_cat]
+[nextgems_cat]
 root_path = "test_intake.json"
 drs_format = "nextgems"
 fs_type = "intake"
 
-[nextGems_cycle3]
+[nextgems_cycle3]
 root_path = "data/intake/work/bm1235"
 drs_format = "nextgems_cycle3"
 fs_type = "posix"
-[nextGems_cycle3.defaults]
+[nextgems_cycle3.defaults]
 project = "nextgems"
 simulation_id = "cycle3"
 
-[drs_settings.dialect.nextGems_cycle3]
+[drs_settings.dialect.nextgems_cycle3]
 inherits_from = "nextgems"
 [drs_settings.dialect.nextgems_cycle3.data_specs.var_attrs]
 variable_id = { var="*", attr="short_name", default="__name__" }
@@ -148,7 +148,7 @@ secret = "minioadmin"
 
 [nextgems-s3]
 root_path = "s3://test/data/model/nextgems"
-drs_format = "nextGems_cycle3"
+drs_format = "nextgems_cycle3"
 fs_type = "s3"
 [nextgems-s3.storage_options]
 endpoint_url = "http://localhost:9000"
@@ -161,7 +161,7 @@ simulation_id = "cycle3"
 
 [nextgems-swift]
 root_path = "/model/nextgems"
-drs_format = "nextGems_cycle3"
+drs_format = "nextgems_cycle3"
 fs_type = "swift"
 [nextgems-swift.storage_options]
 os_storage_url = "http://localhost:8081/v1/AUTH_test/test"

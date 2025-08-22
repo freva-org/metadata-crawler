@@ -138,8 +138,8 @@ def drs_config_path(data_dir: Path) -> Iterator[Path]:
             p = Path(cfg["root_path"])
             if not p.is_absolute():
                 cfg["root_path"] = str((data_dir.parent / p).absolute())
-    with NamedTemporaryFile(suffix=".toml") as temp_file:
-        temp_path = Path(temp_file.name)
+    with TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir) / "drs_config.toml"
         with temp_path.open("w") as stream:
             toml.dump(config, stream)
         yield temp_path
