@@ -5,7 +5,7 @@ build-backend = "flit_core.buildapi"
 [project]
 name = "metadata-crawler"
 authors = [{name = "DKRZ, Clint", email = "freva@dkrz.de"}]
-readme = "README.rst"
+readme = "README.md"
 license = {file = "LICENSE"}
 classifiers = [
                "Development Status :: 4 - Beta",

@@ -1,5 +1,4 @@
-metadata-crawler
-================
+# metadata-crawler
 
 Harvest, normalise, and index climate / earth-system metadata from **POSIX**,
 **S3/MinIO**, and **OpenStack Swift** using configurable **DRS dialects**
@@ -7,16 +6,16 @@ Harvest, normalise, and index climate / earth-system metadata from **POSIX**,
 JSONLines) and then **index** into systems such as **Solr** or **MongoDB**.
 Configuration is **TOML** with inheritance, templating, and computed rules.
 
-.. tip::
-   **TL;DR**
-   - Define datasets + dialects in ``drs_config.toml``
-   - ``mdc crawl`` → write a temporary catalogue (``jsonl.gz`` or **DuckDB**)
-   - ``mdc cnfig`` → inspect a the (merged) crawler config.
-   - ``mdc <backend> index`` → push records from catalogue into your index backend
-   - ``mdc <backend> delete`` → remove records by facet match
+> [!TIP]
+>   **TL;DR**
+>   - Define datasets + dialects in ``drs_config.toml``
+>   - ``mdc crawl`` → write a temporary catalogue (``jsonl.gz`` or **DuckDB**)
+>   - ``mdc config`` → inspect a the (merged) crawler config.
+>   - ``mdc walk-intake`` → inspect the content of an intake catalogue.
+>   - ``mdc <backend> index`` → push records from catalogue into your index backend
+>   - ``mdc <backend> delete`` → remove records by facet match
 
-Features
---------
+## Features
 
 - **Multi-backend discovery**: POSIX, S3/MinIO, Swift (async REST), Intake
 - **Two-stage pipeline**: *crawl → catalogue* then *catalogue → index*
@@ -31,26 +30,17 @@ Features
 - **Sync + Async APIs** and a clean CLI
 - **Docs**: Sphinx with ``pydata_sphinx_theme``
 
-Install
--------
+## Install
 
-.. code-block:: console
+```console
 
    pip install metadata-crawler
    conda install -c conda-forge metadata-crawler
+```
 
-Development install:
+## Quickstart (CLI)
 
-.. code-block:: console
-
-   git clone https://github.com/freva-org/metadata-crawler.git
-   cd metadata-crawler
-   pip install -e .
-
-Quickstart (CLI)
-----------------
-
-.. code-block:: bash
+```console
 
    # 1) Crawl → write catalogue
    mdc crawl \
@@ -68,15 +58,15 @@ Quickstart (CLI)
    mdc delete \
      --server localhost:8983 \
      --facets "file *.nc" --facets "project CMIP6"
+```
 
-.. note::
-   The CLI is a **custom framework** inspired by Typer (not Typer itself).
-   Use ``--help`` on any subcommand to see all options.
+> [!NOTE]
+>   The CLI is a **custom framework** inspired by Typer (not Typer itself).
+>   Use ``--help`` on any subcommand to see all options.
 
-Minimal config (``drs_config.toml``)
------------------------------------
+## Minimal config (``drs_config.toml``)
 
-.. code-block:: toml
+```toml
 
    # === Canonical schema ===
    [drs_settings.schema.file]
@@ -161,12 +151,11 @@ Minimal config (``drs_config.toml``)
    root_path  = "/arch/observations"
    drs_format = "custom"
    # define your specs_dir/specs_file or inherit from another dialect
+```
 
-Concepts
---------
+## Concepts
 
-Schema (facet definitions)
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+### Schema (facet definitions)
 
 Each canonical facet describes:
 
@@ -176,8 +165,7 @@ Each canonical facet describes:
   ``uri``, ``fs_type``, ``dataset``, ``fmt``
 - ``required``, ``default``, ``indexed``, ``unique``, ``multi_valued``
 
-Dialects
-~~~~~~~~
+### Dialects
 
 A dialect tells the crawler how to **interpret paths** and **read data**:
 
@@ -188,8 +176,7 @@ A dialect tells the crawler how to **interpret paths** and **read data**:
 - ``special``: computed fields (``conditional`` | ``method`` | ``function``)
 - Optional lookups (e.g., CORDEX ``domains`` for bbox)
 
-Path specs vs data specs
-~~~~~~~~~~~~~~~~~~~~~~~~
+### Path specs vs data specs
 
 - **Path specs** parse segments from the path, e.g.:
   ``/project/product/institute/model/experiment/.../variable_time.nc``
@@ -197,26 +184,24 @@ Path specs vs data specs
   attributes, per-var stats). Example: gather all variables ``__variable__``, then
   their units with a templated selector.
 
-Inheritance
-~~~~~~~~~~~
+### Inheritance
 
 Create new dialects/datasets by inheriting:
 
-.. code-block:: toml
+```toml
 
    [drs_settings.dialect.reana]
    inherits_from = "cmip5"
    sources       = ["path","data"]
    [drs_settings.dialect.reana.data_specs.read_kws]
    engine = "h5netcdf"
+```
 
-Python API
-----------
+## Python API
 
-Async
-~~~~~
+### Async
 
-.. code-block:: python
+```python
 
    import asyncio
    from metadata_crawler.run import async_add, async_index, async_delete
@@ -245,11 +230,12 @@ Async
        )
 
    asyncio.run(main())
+```
 
-Sync (simple wrapper)
-~~~~~~~~~~~~~~~~~~~~~
 
-.. code-block:: python
+### Sync (simple wrapper)
+
+```python
 
    import asyncio
    from metadata_crawler import add
@@ -259,53 +245,44 @@ Sync (simple wrapper)
        config_file="drs_config.toml",
        dataset_names=["cmip6-fs"],
    )
+```
 
-Index backends
---------------
+## Index backends
 
 - **MongoDB** (Motor): upserts by unique facet (e.g., ``file``), bulk deletes (glob → regex)
 - **Solr**: fields align with managed schema; supports multi-valued facets
 
-Logging & tracebacks
---------------------
 
-.. code-block:: python
+## Contributing
 
-   import logging
-   from rich.logging import RichHandler
-   from rich.traceback import install
+Development install:
 
-   logging.basicConfig(
-       level=logging.WARNING,
-       format="%(message)s",
-       handlers=[RichHandler(rich_tracebacks=True, tracebacks_max_frames=5)],
-       force=True,
-   )
-   install(max_frames=5, show_locals=False)
+```console
 
+   git clone https://github.com/freva-org/metadata-crawler.git
+   cd metadata-crawler
+   pip install -e .
 
-Contributing
-------------
-
+```
 
 PRs and issues welcome. Please add tests and keep examples minimal & reproducible
 (use the MinIO compose stack). Run:
 
-.. code-block:: bash
 
+```console
    python -m pip install tox
    tox -e test lint types
+```
 
 See ``code-of-conduct.rst`` and ``whatsnew.rst`` for guidelines and changelog.
 
 Use MinIO or LocalStack via ``docker-compose`` and seed a bucket (e.g., ``test-bucket``).
 Then point a dataset’s ``fs_type = "s3"`` and set ``storage_options``.
 
-Documentation
-^^^^^^^^^^^^^^
+### Documentation
 
 Built with Sphinx + ``pydata_sphinx_theme``. Build locally:
 
-.. code-block:: bash
-
+```console
    tox -e docs
+```
