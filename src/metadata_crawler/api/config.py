@@ -392,7 +392,6 @@ class Datasets(BaseModel):
     def model_post_init(self, __context: Any = None) -> None:
         storage_plugins = load_plugins("metadata_crawler.storage")
         try:
-            print(self.storage_options)
             self.backend = storage_plugins[self.fs_type](**self.storage_options)
         except KeyError:
             raise NotImplementedError(
