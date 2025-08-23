@@ -11,7 +11,7 @@ layers:
   of metadata to use.
 * :ref:`datasets`: entries that specify where to find data (root paths,
   storage backends, authentication) and how to inherit from a dialect.
-* :ref:`specs`: instrcutions on how to extract metadata.
+* :ref:`specs`: instructions on how to extract metadata.
 * :ref:`special`: instructions on how to apply additional retrieval rules.
 
 .. toctree::

@@ -78,7 +78,7 @@ Internally this call the dataset storage backend’s ``lookup(path, attribute, *
 method to fetch values from a **cached tree** (e.g., mapping CMIP6 ``table_id`` + ``variable_id`` to
 ``realm`` or ``frequency``). Items are first rendered via Jinja.
 
-Below you can find the signature of the method that get's involved when applying
+Below you can find the signature of the method that gets involved when applying
 the lookup rule:
 
 .. automethod:: metadata_crawler.api.storage_backend::PathTemplate.lookup

@@ -24,7 +24,7 @@ The ``metadata_stores.py`` module defines two key abstractions:
 SolrIndex
 ^^^^^^^^^
 
-``SolrIndex`` indexes metadata into a Apach Solr.  When
+``SolrIndex`` indexes metadata into a Apache Solr.  When
 initialised you specify the solr server and the core names to
 create (``latest``, ``files``, etc.).  The schema is
 derived from the configuration.  The store supports two modes:
@@ -63,14 +63,14 @@ Example skeleton
 .. code-block:: python
 
    import os
-   from typing import Any, Dict, Iterator, List, Optrional, Tuple
+   from typing import Any, Dict, Iterator, List, Optional, Tuple
 
    from metadata_crawler.metadata_stores import IndexStore
 
    class MySQLIndex(IndexStore):
 
         def __post_init__(self):
-           """Any additioanl attributes can be set in this method."""
+           """Any additional attributes can be set in this method."""
 
            self.password = os.getenv("MYSQL_PASSWD") or ""
 
@@ -91,7 +91,7 @@ Example skeleton
 
        async def delete(
          self
-         facets, Optinal[List[Tuple[str, str]]] = None,
+         facets, Optional[List[Tuple[str, str]]] = None,
          server: Optional[str] = None,
          user: Optional[str] = None,
          pw: bool = True
@@ -132,7 +132,7 @@ actual CLI commands are defined in your :ref:`add_backends`  via the
 2. **Annotate** the function parameters with ``Annotated`` and
    ``cli_parameter`` to supply CLI options (see ``SolrIndex`` for
    examples).
-3. **Registering** Once decorated the registering will happend automatically.
+3. **Registering** Once decorated the registering will happen automatically.
 
 Example: adding a cli for the ``MySQL`` Index
 **********************************************
@@ -141,7 +141,7 @@ The  MySQL index backend from above can be turned to a CLI as follows:
 
 .. code-block:: python
 
-   from typing import Optinal
+   from typing import Optional
    from typing_extensions import Annotated
    from .metadata_stores import IndexStore
 

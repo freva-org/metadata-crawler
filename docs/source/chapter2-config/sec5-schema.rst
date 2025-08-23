@@ -33,7 +33,7 @@ The following attributes are available:
     * ``path``     - path to the dataset.
     * ``uri``      - uri (``<fs_type>://<path>``) to dataset.
     * ``dataset``  - name of the dataset.
-    * ``fmt``      - datset format.
+    * ``fmt``      - dataset format.
     * ``storage``  - name of the storage backend.
     * ``daterange``- Alias for ``datetime[2]``
 

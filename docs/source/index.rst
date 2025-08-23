@@ -70,7 +70,7 @@ Check the configuration
 
     mdc config --config drs_config.toml --json |jq  .drs_settings
 
-Without the ``--json`` falg the merged toml config (pre defined config + user
+Without the ``--json`` flag the merged toml config (pre defined config + user
 defined config) will be displayed and can be piped into a file for later usage
 and adjusted.
 

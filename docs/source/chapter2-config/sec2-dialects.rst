@@ -42,7 +42,7 @@ The dialect definition typically consists of several components:
   - ``lookup`` rules call a registered lookup method on the config class
      with arguments referencing other facets and data attributes for lookup.
   - ``call`` rules evaluate an arbitrary expression using the
-    ``drs_config`` entries and the alreday retrieved ``metadata``.
+    ``drs_config`` entries and the already retrieved ``metadata``.
 * **domains** – For CORDEX, a table mapping domain codes (e.g.
   ``EUR-11``) to bounding boxes; used by the ``bbox`` special rule.
 * **data_specs** – (see :doc:`sec3-specs`) define rules for reading
@@ -121,6 +121,6 @@ section defines a function rule that concatenates three facets, and
 
 .. tip::
 
-    Check the ``mdc config`` sub comand for full
+    Check the ``mdc config`` sub command for full
     definitions of the built‑in dialects (CMIP6, CMIP5, CORDEX,
     NextGEMS, Observations, etc.).
