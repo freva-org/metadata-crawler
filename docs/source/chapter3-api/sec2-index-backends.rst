@@ -48,9 +48,7 @@ Recipe: Implementing a custom index
 To add a new index backend:
 
 1. **Subclass** ``IndexStore`` and implement the abstract methods
-   ``add(self, metadata_batch)`` (accepts a list of tuples of
-   ``index_name`` and record dicts), ``read`` (yield records in
-   chunks), and ``delete`` (remove matching records).
+   ``index`` to add and ``delete`` records.
 2. **Register** your implementation under the entry point
    ``metadata_crawler.index_backends`` so it can be discovered via
    the ``index_backend`` CLI option.
@@ -64,33 +62,109 @@ Example skeleton
 
 .. code-block:: python
 
+   import os
+   from typing import Any, Dict, Iterator, List, Optrional, Tuple
+
    from metadata_crawler.metadata_stores import IndexStore
-   from typing import List, Tuple, Dict, Any, Iterator
 
-   class MyIndexStore(IndexStore):
-       def __init__(self, path: str, index_names: Tuple[str, ...], schema, **opts):
-           super().__init__(path, index_names, schema)
-           # setup connection...
+   class MySQLIndex(IndexStore):
 
-       async def add(self, metadata_batch: List[Tuple[str, Dict[str, Any]]]) -> None:
-           # insert or upsert records
-           ...
+        def __post_init__(self):
+           """Any additioanl attributes can be set in this method."""
 
-       async def read(self, index_name: str) -> Iterator[List[Dict[str, Any]]]:
-           # yield records in batches
-           ...
+           self.password = os.getenv("MYSQL_PASSWD") or ""
 
-       async def delete(self, index_name: str, facets):
-           # remove matching records
-           ...
+
+       async def index(
+          self,
+          server: Optional[str] = None,
+          user: Optional[str] = None,
+          pw: bool = True
+       ) -> None:
+           """insert or upsert records."""
+           if pw and not self.password
+              self.password = getpass("Give DB password: ")
+           with self.db_connection(server, user, self.password) as con:
+              for table in self.index_names:
+                 async for chnunk in self.get_metadata(index):
+                    con.add(chunk)
+
+       async def delete(
+         self
+         facets, Optinal[List[Tuple[str, str]]] = None,
+         server: Optional[str] = None,
+         user: Optional[str] = None,
+         pw: bool = True
+       ) -> None:
+           """remove matching records."""
+           if pw and not self.password
+              self.password = getpass("Give DB password: ")
+           with self.db_connection(server, user, self.password) as con:
+              for table in self.index_names:
+                 con.delete(**dir(facets))
 
 
 .. code-block:: toml
 
     # register in pyproject.toml
     [project.entry-points."metadata_crawler.index_backends"]
-    mybackend = "my_package.my_index:MyIndexStore"
+    mysql = "my_package.my_index:MySQLIndex"
 
+Extending the CLI
+^^^^^^^^^^^^^^^^^^
+
+The CLI entry point ``metadata-crawler`` registers its commands in ``cli.py``.
+You can extend the CLI by defining new commands or options and registering
+them. This registration is inspired by the `Typer <https://typer.tiangolo.com/>`_
+library.
+
+CLI API
+********
+
+
+``cli.py`` defines decorators ``@cli_function`` and the ``cli_parameter`` method
+to annotate functions with help messages and parameter metadata.  The
+actual CLI commands are defined in your :ref:`add_backends`  via the
+``@cli_function`` decorator.  To add a new command:
+
+1. **Decorate** the ``index`` and ``delete`` functions in our :ref:`add_backends`
+   Use the ``@cli_function`` decorator to register it.
+2. **Annotate** the function parameters with ``Annotated`` and
+   ``cli_parameter`` to supply CLI options (see ``SolrIndex`` for
+   examples).
+3. **Registering** Once decorated the registering will happend automatically.
+
+Example: adding a cli for the ``MySQL`` Index
+**********************************************
+
+The  MySQL index backend from above can be turned to a CLI as follows:
+
+.. code-block:: python
+
+   from typing import Optinal
+   from typing_extensions import Annotated
+   from .metadata_stores import IndexStore
+
+   @cli_function(help="Index data in MySQL")
+   def index(
+       self,
+       server: Annotated[str, cli_parameter("--server", help="Server name")],
+       user: Annotate[Optional[str], cli_parameter("--user", help="User name")] = None,
+       db: Annotated[str, cli_parameter("--database", help="Database name")] = "foo",
+       pw: Annotate[bool, cli_parmeter("--password", "-p", action="store_true", help="Ask for password")] = False,
+   ) -> None:
+       """Your index implementation here."""
+
+.. note::
+
+    The arguments and keyword arguments of th e``cli_parameter`` method
+    follow the logic of `argparse.ArgumentParser.add_argument <https://docs.python.org/3/library/argparse.html#argparse.ArgumentParser.add_argument>`_.
+
+When you run ``metadata-crawler mysql --server localhost -p``
+the function executes your custom logic.
+
+.. automodule:: metadata_crawler.api.cli
+   :exclude-members: Parameter
 
 **API Reference:**
 

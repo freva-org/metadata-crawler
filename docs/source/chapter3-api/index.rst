@@ -31,4 +31,3 @@ in your ``pyproject.toml`` file:
 
    sec1-storage-backends
    sec2-index-backends
-   sec3-cli
