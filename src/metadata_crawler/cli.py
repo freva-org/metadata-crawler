@@ -45,7 +45,17 @@ KwargValue = Union[
 def walk_catalogue(
     path: str, storage_options: Optional[Dict[str, Any]] = None, **kwargs: Any
 ) -> None:
+    """Recursively traverse an intake catalogue.
 
+    Parameters
+    ^^^^^^^^^^
+
+    path:
+        The path to the intake catalogue
+    storage_options:
+        Optional configuration passed to open catalogues residing on non posix
+        storage backends, such as S3/MinIO
+    """
     ip = IntakePath(**(storage_options or {}))
     asyncio.run(ip.walk(path))
 
@@ -69,7 +79,6 @@ def display_config(
     config: Optional[Union[Path, str]], json: bool = False, **kwargs: Any
 ) -> None:
     """Display the config file."""
-
     cfg = get_config(config)
     if json is False:
         print(cfg.dumps())
@@ -459,7 +468,6 @@ def _run(
 
 def cli(sys_args: list[str] | None = None) -> None:
     """Methods that creates the command line argument parser."""
-
     try:
         parser = ArgParse()
         args = parser.parse_args(sys_args or sys.argv[1:])

@@ -1,4 +1,4 @@
-"""Metadata Crawler API high level functions:"""
+"""Metadata Crawler API high level functions"""
 
 import asyncio
 from pathlib import Path

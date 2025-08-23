@@ -77,6 +77,7 @@ doc = [
 ]
 tests = [
     "codespell",
+    "pydocstyle",
     "types-appdirs",
     "black",
     "isort",
@@ -147,6 +148,10 @@ check-filenames = true
 check-hidden = true
 exclude-file = "src/metadata_crawler/backends/lookup_tables.py"
 
+[tool.pydocstyle]
+convention = "numpy"
+add-ignore = "407"
+
 [tool.tox]
 legacy_tox_ini = """
 [tox]
@@ -177,10 +182,12 @@ deps = .
        isort
        flake8
        codespell
+       pydocstyle
 commands =
     python3 -m isort --check --profile black -t py313 -l 79 src
     python3 -m flake8 src --count --max-complexity=10 --ignore=E203,F405,F403,E704,W503,C901 --max-line-length=88 --statistics --show-source
     codespell {posargs: --quiet-level=2} src/metadata_crawler
+    python3 -m pydocstyle src/metadata_crawler
 [testenv:types]
 deps = .
        mypy

@@ -45,7 +45,7 @@ stores it in a JSON lines catalog, and indexes it to Apache Solr:
 
    # 2) index the catalog into a DuckDB index named 'latest'
    index(
-        "solr",
+       "solr",
        "/tmp/catalog-1.yml",
        "/tmp/catalog-2.yml",
        batch_size=50,
@@ -53,7 +53,7 @@ stores it in a JSON lines catalog, and indexes it to Apache Solr:
 
    # 3) optionally delete entries from the index
    delete(
-       "mongo"
+       "mongo",
        url="mongodb://mongo:secret@localhost:27017",
        database="metadata",
        latest_version="latest",
@@ -74,6 +74,7 @@ other tasks:
    import asyncio
    from metadata_crawler import async_add, async_index, async_delete
 
+
    async def main():
        # crawl metadata from one or more data objects or datasets
        await async_add(
@@ -87,8 +88,7 @@ other tasks:
 
        # index into a MongoDB backend named 'latest'
        await async_index(
-           "mongo"
-           "/tmp/catalog-1.yml",
+           "mongo" "/tmp/catalog-1.yml",
            "/tmp/catalog-2.yml",
            config_file="/path/to/drs_config.toml",
            url="mongodb://localhost:27017",
@@ -99,11 +99,12 @@ other tasks:
 
        # delete entries matching a wildcard pattern (glob translated to regex)
        await async_delete(
-           "solr"
+           "solr",
            server="localhost:8983",
            latest_version="latest",
            facets=[("file", "*.nc"), ("project", "OBS")],
        )
+
 
    asyncio.run(main())
 

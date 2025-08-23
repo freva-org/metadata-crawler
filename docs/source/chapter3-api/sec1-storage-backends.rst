@@ -59,6 +59,7 @@ hypothetical ``foo`` protocol:
    from metadata_crawler.storage_backend import PathTemplate, Metadata
    from anyio import Path
 
+
    class FooBackend(PathTemplate):
        _fs_type = "foo"
 

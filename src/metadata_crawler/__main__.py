@@ -1,3 +1,5 @@
+"""Call the Command line interface of the metadata-crawler."""
+
 import sys
 
 from metadata_crawler.cli import cli

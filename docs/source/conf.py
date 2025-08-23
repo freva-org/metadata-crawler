@@ -43,6 +43,7 @@ def get_cli_output(*args: str) -> str:
 # -- General configuration ------------------------------------------------
 extensions = [
     "sphinx.ext.autodoc",
+    "numpydoc",
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
@@ -50,7 +51,7 @@ extensions = [
     "sphinxext.opengraph",
     "myst_parser",  # support for Markdown files if desired
 ]
-
+numpydoc_validation_checks = {"GL08"}
 # Public base URL where the built docs are served.
 # Prefer an ENV var; fall back to GitHub Pages for this repo.
 SITE_BASEURL = os.environ.get(
