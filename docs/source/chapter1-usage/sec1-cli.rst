@@ -1,7 +1,7 @@
 Command‑line interface
 ----------------------
 
-The sotware installs a console entry point named
+The software installs a console entry point named
 ``metadata-crawler`` or ``mdc`` that exposes the high‑level subcommands:
 
 * ``crawl``  – Collect metadata into a temporary catalog.
@@ -29,7 +29,7 @@ To crawl a directory of files into a JSON lines catalog:
        --data-object /path/to/data
 
 Alternatively you can provide one or more dataset names defined in
-your DRS config instead of explicit file paths:
+your DRS configuration instead of explicit file paths:
 
 .. code-block:: bash
 
@@ -44,7 +44,7 @@ Indexing
 ^^^^^^^^
 
 Once a catalog has been generated you can index it into a backend.
-Apach Slor and MongoDB backends are supported out of the box.  The
+Apache Slor and MongoDB backends are supported out of the box.  The
 following example writes to a DuckDB file and index named ``latest``:
 
 .. code-block:: bash
@@ -66,7 +66,7 @@ Deleting
 ^^^^^^^^
 
 The ``delete`` command removes documents from the index using one or
-more facet filters.  Facet values may contain shell wildcards
+more facet filters.  Facet values may contain shell wild cards
 (``*`` and ``?``) which are translated to MongoDB regular expressions
 (Apache Solr deletion uses filters internally).  For example:
 

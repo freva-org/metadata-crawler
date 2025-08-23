@@ -54,9 +54,8 @@ Too long; didn't read (TL;DR)
 - **Special rules**: conditionals and method/function calls (e.g. CMIP6 realm,
   time aggregation)
 - **Index backends**: JSONLines, DuckDB, Apache Solr, MongoDB
-- **Support of dataset versions**: Dataset versions are stored. Two types of
-  datasets are allocated. data containing *all* dataset versions and the *latest*
-  versions only.
+- **Support of dataset versions**: Dataset versions are stored separately.
+  Data containing *all* dataset versions and the *latest* versions only.
 
 The CLI uses a **custom framework** inspired by `Typer <https://typer.tiangolo.com>`_
 but is **not** Typer. The Main commands are grouped under four verbs:
@@ -73,7 +72,7 @@ Check the configuration
 
 Without the ``--json`` falg the merged toml config (pre defined config + user
 defined config) will be displayed and can be piped into a file for later usage
-and adjustmend.
+and adjusted.
 
 .. tip::
 
@@ -113,7 +112,7 @@ Delete entries from an index
    mdc <backend> delete --facets file /path/to/*.nc
 
 Deletes entries matching facet/value pairs.
-Wildcards in the value are supported (e.g., ``"file *.nc"``).
+Wild cards in the value are supported (e.g., ``"file *.nc"``).
 
 For detailed options and examples, see the usage
 chapter and :doc:`chapter3-api/index`.

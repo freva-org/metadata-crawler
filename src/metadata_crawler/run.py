@@ -1,4 +1,4 @@
-"""Apply the metdata collector."""
+"""Apply the metadata collector."""
 
 import asyncio
 import os
@@ -211,7 +211,7 @@ async def async_add(
     threads: Optional[int] = None,
     verbosity: int = 0,
 ) -> None:
-    """Harvest metadata from sotrage systems and add them to an intake catalogue
+    """Harvest metadata from storage systems and add them to an intake catalogue
 
     Parameters
     ^^^^^^^^^^
@@ -233,11 +233,11 @@ async def async_add(
         Absolute path or relative path to intake catalogue source
     batch_size:
         Batch size that is used to collect the meta data. This can affect
-        preformance.
+        performance.
     comp_level:
         Compression level used to write the meta data to csv.gz
     storage_options:
-        Set addtional storage options for adding metadata to the metadta store
+        Set additional storage options for adding metadata to the metadata store
     catalogue_backend:
         Intake catalogue backend
     latest_version:

@@ -75,6 +75,7 @@ doc = [
     "myst-parser",
 ]
 tests = [
+    "codespell",
     "types-appdirs",
     "black",
     "isort",
@@ -137,7 +138,13 @@ warn_redundant_casts = true
 ignore_missing_imports = true
 allow_untyped_calls = true
 
-
+[tool.codespell]
+skip = ".git,.tox,build,dist,*.svg,*.min.js,*.lock,*.ico,.mypy_cache,.ruff_cache,.venv"
+ignore-words-list = "te,nd,fo,ist"
+ignore-words = ".codespellignorewords.txt"
+check-filenames = true
+check-hidden = true
+exclude-file = "src/metadata_crawler/backends/lookup_tables.py"
 
 [tool.tox]
 legacy_tox_ini = """
@@ -166,9 +173,11 @@ deps = .
        black
        isort
        flake8
+       codespell
 commands =
     python3 -m isort --check --profile black -t py313 -l 79 src
     python3 -m flake8 src --count --max-complexity=10 --ignore=E203,F405,F403,E704,W503,C901 --max-line-length=88 --statistics --show-source
+    codespell {posargs: --quiet-level=2}
 [testenv:types]
 deps = .
        mypy

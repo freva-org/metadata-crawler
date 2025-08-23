@@ -124,7 +124,7 @@ def delete(
 
         delete(
             "solr",
-            server="loaclhost:8983",
+            server="localhost:8983",
             facets=[("project", "CMIP6"), ("institute", "MPI-M")],
         )
 
@@ -150,7 +150,7 @@ def add(
     verbosity: int = 0,
     password: bool = False,
 ) -> None:
-    """Harvest metadata from sotrage systems and add them to an intake catalogue
+    """Harvest metadata from storage systems and add them to an intake catalogue
 
     Parameters
     ^^^^^^^^^^
@@ -174,11 +174,11 @@ def add(
         given in the drs-config file. By default all root dirs are crawled.
     bach_size:
         Batch size that is used to collect the meta data. This can affect
-        preformance.
+        performance.
     comp_level:
         Compression level used to write the meta data to csv.gz
     storage_options:
-        Set addtional storage options for adding metadata to the metadta store
+        Set additional storage options for adding metadata to the metadata store
     catalogue_backend:
         Intake catalogue backend
     latest_version:

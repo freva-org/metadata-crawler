@@ -230,7 +230,7 @@ class PathTemplate(abc.ABC, PathMixin, TemplateMixin, metaclass=BasePath):
     """
 
     _fs_type: ClassVar[Optional[str]]
-    """Defination of the file system time for each implementation."""
+    """Definition of the file system time for each implementation."""
 
     _lock = threading.RLock()
 
@@ -248,7 +248,7 @@ class PathTemplate(abc.ABC, PathMixin, TemplateMixin, metaclass=BasePath):
 
     def __post_init__(self) -> None:
         """This method is called after the __init__ method. If you need to
-        assign any attributes redifine this method in your class.
+        assign any attributes redefine this method in your class.
         """
 
     async def close(self) -> None:
@@ -297,11 +297,11 @@ class PathTemplate(abc.ABC, PathMixin, TemplateMixin, metaclass=BasePath):
     def lookup(
         self, path: str, attribute: str, *tree: str, **read_kws: Any
     ) -> Any:
-        """Get metdata from a lookup table.
+        """Get metadata from a lookup table.
 
         This function will read metadata from a pre-defined cache table and if
         the metadata is not present in the cache table it'll read the
-        the object store and add the metdata to the cache table.
+        the object store and add the metadata to the cache table.
 
         Parameters
         ^^^^^^^^^^
@@ -310,12 +310,12 @@ class PathTemplate(abc.ABC, PathMixin, TemplateMixin, metaclass=BasePath):
             Path to the object store / file name
         attribute:
             The attribute that is retrieved from the data.
-            variable attributes can be definde by a ``.``.
+            variable attributes can be defined by a ``.``.
             For example: ``tas.long_name`` would get attribute ``long_name``
             from variable ``tas``.
         *tree:
             A tuple representing nested attributes. Attributes are nested for
-            more efficent lookup. ('atmos', '1hr', 'tas') will translate into
+            more efficient lookup. ('atmos', '1hr', 'tas') will translate into
             a tree of ['atmos']['1hr']['tas']
         **read_kws:
             Keyword arguments passed to open the datasets.
@@ -341,10 +341,10 @@ class PathTemplate(abc.ABC, PathMixin, TemplateMixin, metaclass=BasePath):
         attr: The attribute that is queried can be of the form of
               <attribute>, <variable>.<attribute>, <attribute>,
               <variable>.<attribute>
-        path: Path to the object strore / file path
+        path: Path to the object store / file path
         read_kws: Keyword arguments for opening the datasets.
 
-        Retruns
+        Returns
         ^^^^^^^
         str: Metadata from the data.
         """

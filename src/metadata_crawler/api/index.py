@@ -72,7 +72,7 @@ class BaseIndex:
 
     @property
     def index_names(self) -> Tuple[str, str]:
-        """Get the names of the indexs for latests and all data."""
+        """Get the names of the indexes for latests and all data."""
         return cast(
             Tuple[str, str], getattr(self._store, "index_names", ("", ""))
         )

@@ -545,7 +545,7 @@ class JSONLines(IndexStore):
 
 
 class CatalogueBackends(Enum):
-    """Define the implmented catalogu backends."""
+    """Define the implemented catalogue backends."""
 
     duckdb = DuckDB
     jsonlines = JSONLines

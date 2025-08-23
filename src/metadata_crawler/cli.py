@@ -242,8 +242,8 @@ class ArgParse:
             "--storage_option",
             "-s",
             help=(
-                "Set addtional storage options for adding metadata to the"
-                "metadta store"
+                "Set additional storage options for adding metadata to the"
+                "metadata store"
             ),
             action="append",
             nargs=2,
@@ -288,8 +288,8 @@ class ArgParse:
             "--storage_option",
             "-s",
             help=(
-                "Set addtional storage options for adding metadata to the"
-                "metadta store"
+                "Set additional storage options for adding metadata to the"
+                "metadata store"
             ),
             action="append",
             nargs=2,
@@ -333,8 +333,8 @@ class ArgParse:
                     "--storage_option",
                     "-s",
                     help=(
-                        "Set addtional storage options for adding metadata to "
-                        " the metadta store"
+                        "Set additional storage options for adding metadata to "
+                        " the metadata store"
                     ),
                     action="append",
                     nargs=2,
