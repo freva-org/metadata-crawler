@@ -227,7 +227,6 @@ class SwiftPath(PathTemplate):
         fsspec.AbstractFileSystem, str:
             The AbstractFileSystem class and the corresponding path to the
             data store.
-
         """
         url_split = urlsplit(uri)
         url_path = (
@@ -264,7 +263,6 @@ class SwiftPath(PathTemplate):
         -------
         str:
             URI of the object store
-
         """
         url_split = urlsplit(str(path))
         if not url_split.netloc:

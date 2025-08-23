@@ -147,10 +147,8 @@ class StatRule(BaseModel):
 
 
 class ConfigMerger:
-    """
-    Loads a system and user TOML, merges user -> system under 'drs_settings',
-    preserves comments/formatting, and lets you inspect or write the result.
-    """
+    """Loads a system and user TOML, merges user -> system under 'drs_settings',
+    preserves comments/formatting, and lets you inspect or write the result."""
 
     def __init__(
         self,
@@ -495,10 +493,8 @@ class DRSConfig(BaseModel):
 
     @model_validator(mode="before")
     def _resolve_inheritance(cls, values: Any) -> Any:
-        """
-        After loading raw TOML into dicts, but before model instantiation,
-        merge any dialects that declare `inherits_from`.
-        """
+        """After loading raw TOML into dicts, but before model instantiation, merge
+        any dialects that declare `inherits_from`."""
         if not isinstance(values, dict):
             return values  # pragma: no cover
 
@@ -620,10 +616,10 @@ class DRSConfig(BaseModel):
     ) -> int:
         """Get the maximum level for descending into directories.
 
-        When searching for files in a directory we can only traverse
-        the directory search tree until the version level is reached.
-        This level is set as a hard threshold. If the drs type has no version
-        we can indeed go all the way down to the file level.
+        When searching for files in a directory we can only traverse the directory
+        search tree until the version level is reached. This level is set as a hard
+        threshold. If the drs type has no version we can indeed go all the way down
+        to the file level.
         """
         root_path = strip_protocol(
             self.datasets[drs_type].backend.path(

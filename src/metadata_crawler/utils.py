@@ -35,7 +35,7 @@ async def create_async_iterator(itt: Iterable[Any]) -> AsyncIterator[Any]:
 def convert_str_to_timestamp(
     time_str: str, alternative: str = "0001-01-01"
 ) -> datetime:
-    """Convert a string representation of a time step to an iso timestamp
+    """Convert a string representation of a time step to an iso timestamp.
 
     Parameters
     ----------
@@ -154,7 +154,7 @@ def exception_handler(exception: BaseException) -> None:
 def daemon(
     func: Callable[..., Any],
 ) -> Callable[..., Optional[threading.Thread]]:
-    """Threading decorator
+    """Threading decorator.
 
     use @daemon above the function you want to run in the background
     """

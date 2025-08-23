@@ -138,7 +138,6 @@ async def async_index(
             server="localhost:8983",
             batch_size=1000,
         )
-
     """
     kwargs.setdefault("catalogue_files", catalogue_files)
     await async_call(
@@ -180,7 +179,6 @@ async def async_delete(
             latest_version="latest",
             facets=[("file", "*.nc"), ("project", "OBS")],
         )
-
     """
     await async_call(
         index_system,
@@ -211,7 +209,7 @@ async def async_add(
     threads: Optional[int] = None,
     verbosity: int = 0,
 ) -> None:
-    """Harvest metadata from storage systems and add them to an intake catalogue
+    """Harvest metadata from storage systems and add them to an intake catalogue.
 
     Parameters
     ^^^^^^^^^^
@@ -262,7 +260,6 @@ async def async_add(
              config_file="~/data/drs-config.toml",
              data_set=["cmip6", "cordex"],
          )
-
     """
     env = cast(os._Environ[str], os.environ.copy())
     old_level = apply_verbosity(verbosity)

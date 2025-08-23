@@ -39,7 +39,6 @@ class S3Path(PathTemplate):
         fsspec.AbstractFileSystem, str:
             The AbstractFileSystem class and the corresponding path to the
             data store.
-
         """
 
         return fsspec.filesystem("s3", **self.storage_options), path
@@ -81,7 +80,8 @@ class S3Path(PathTemplate):
     async def rglob(
         self, path: str | Path | pathlib.Path, glob_pattern: str = "*"
     ) -> AsyncIterator[Metadata]:
-        """Search recursively for files matching the extensions given by 'glob_pattern'.
+        """Search recursively for files matching the extensions given by
+        'glob_pattern'.
 
         Parameters
         ----------
@@ -116,7 +116,6 @@ class S3Path(PathTemplate):
         -------
         str:
             URI of the object store
-
         """
         return cast(
             str, fsspec.filesystem("s3", **self.storage_options).url(str(path))

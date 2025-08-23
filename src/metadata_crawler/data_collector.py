@@ -25,7 +25,6 @@ from .utils import Console, PrintLock, create_async_iterator, daemon
 class DataCollector:
     """Collect file objects from a given directory object and search for files.
 
-
     Parameters
     ----------
     config_file:
@@ -163,9 +162,7 @@ class DataCollector:
     async def _iter_content(
         self, drs_type: str, inp_dir: str, pos: int = 0
     ) -> None:
-        """
-        walk recursively content until files are found or until the version.
-        """
+        """Walk recursively content until files are found or until the version."""
 
         op: Optional[Callable[..., Awaitable[None]]] = None
         store = self.config.datasets[drs_type].backend
@@ -195,9 +192,7 @@ class DataCollector:
             logger.error(error)
 
     async def ingest_data(self) -> None:
-        """
-        Walk sub directories until files are found or until the version.
-        """
+        """Walk sub directories until files are found or until the version."""
         futures = []
         async for drs_type, path in self.search_objects:
             pos = self.config.max_directory_tree_level(path, drs_type=drs_type)

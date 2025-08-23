@@ -181,7 +181,6 @@ class IntakePath(PathTemplate):
         -------
         str:
             URI of the object store
-
         """
         return str(path)
 

@@ -55,14 +55,15 @@ def _run_async(
     *args: Any,
     **kwargs: Any,
 ) -> Any:
-    """Run a async method in a sync. environment."""
+    """Run a async method in a sync.
+
+    environment.
+    """
     return asyncio.run(method(*args, **kwargs))
 
 
 class DateTimeEncoder(json.JSONEncoder):
-    """
-    JSON‐Encoder that emits datetimes as ISO‐8601 strings.
-    """
+    """JSON‐Encoder that emits datetimes as ISO‐8601 strings."""
 
     def default(self, obj: Any) -> Any:
         if isinstance(obj, datetime):
@@ -71,9 +72,7 @@ class DateTimeEncoder(json.JSONEncoder):
 
 
 class DateTimeDecoder(json.JSONDecoder):
-    """
-    JSON Decoder that converts ISO‐8601 strings to datetime objects.
-    """
+    """JSON Decoder that converts ISO‐8601 strings to datetime objects."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(object_hook=self._decode_objects, *args, **kwargs)
@@ -215,8 +214,8 @@ class IndexStore:
 
 
 class DuckDB(IndexStore):
-    """
-    IndexStore implementation using native DuckDB.
+    """IndexStore implementation using native DuckDB.
+
     Can write to disk, memory, or remote S3 via httpfs.
     """
 
@@ -302,9 +301,7 @@ class DuckDB(IndexStore):
         return settings
 
     def prepare_duckdb_connection(self, con: duckdb.DuckDBPyConnection) -> None:
-        """
-        Install/load httpfs and apply settings if needed.
-        """
+        """Install/load httpfs and apply settings if needed."""
         con.execute("INSTALL httpfs;")
         con.execute("LOAD httpfs;")
         for k, v in self.duckdb_httpfs_settings.items():
@@ -416,8 +413,8 @@ class DuckDB(IndexStore):
             self._flush_locked()
 
     async def read(self, index_name: str) -> AsyncIterator[List[Dict[str, Any]]]:
-        """
-        Stream rows from DuckDB using a DBAPI cursor.
+        """Stream rows from DuckDB using a DBAPI cursor.
+
         Yields batches of dicts of size self.batch_size.
         """
         escaped_file = self.get_path(index_name).replace("'", "''")
@@ -561,7 +558,6 @@ class CatalogueReader:
         Path to the intake catalogue
     batch_size:
         Size of the metadata chunks that should be read.
-
     """
 
     def __init__(
@@ -594,8 +590,8 @@ class CatalogueReader:
 
 
 class CatalogueWriter:
-    """Create intake catalogues that store metadata entries for versioned
-    datasets (all versions and leatest versions).
+    """Create intake catalogues that store metadata entries for versioned datasets
+    (all versions and leatest versions).
 
     Parameters
     ^^^^^^^^^^
@@ -609,7 +605,6 @@ class CatalogueWriter:
         Size of the metadata chunks that should be added to the data store.
     index_schema:
         Schema of the metadata
-
     """
 
     def __init__(

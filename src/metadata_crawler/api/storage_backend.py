@@ -49,8 +49,8 @@ class TemplateMixin:
         *,
         max_passes: int = 2,
     ) -> Any:
-        """
-        Recursively render Jinja2 templates found in strings within arbitrary data.
+        """Recursively render Jinja2 templates found in strings within arbitrary
+        data.
 
         This function traverses common container types (``dict``, ``list``,
         ``tuple``, ``set``), dataclasses, namedtuples, and ``pathlib.Path`` objects.
@@ -191,7 +191,6 @@ class PathMixin:
         fsspec.AbstractFileSystem, str:
             The AbstractFileSystem class and the corresponding path to the
             data store.
-
         """
         protocol, path = fsspec.core.split_protocol(uri)
         protocol = protocol or "file"
@@ -247,8 +246,9 @@ class PathTemplate(abc.ABC, PathMixin, TemplateMixin, metaclass=BasePath):
         self.__post_init__()
 
     def __post_init__(self) -> None:
-        """This method is called after the __init__ method. If you need to
-        assign any attributes redefine this method in your class.
+        """This method is called after the __init__ method.
+
+        If you need to assign any attributes redefine this method in your class.
         """
 
     async def close(self) -> None:
@@ -319,7 +319,6 @@ class PathTemplate(abc.ABC, PathMixin, TemplateMixin, metaclass=BasePath):
             a tree of ['atmos']['1hr']['tas']
         **read_kws:
             Keyword arguments passed to open the datasets.
-
         """
         keys = tuple(tree) + (attribute,)
         d: Dict[str, Any] = cmor_lookup
@@ -383,7 +382,6 @@ class PathTemplate(abc.ABC, PathMixin, TemplateMixin, metaclass=BasePath):
         ^^^^^^^
         bool:
             True if path is file object, False if otherwise or doesn't exist
-
         """
         ...  # pragma: no cover
 
@@ -442,7 +440,6 @@ class PathTemplate(abc.ABC, PathMixin, TemplateMixin, metaclass=BasePath):
         ^^^^^^^
         str:
             URI of the object store
-
         """
         ...  # pragma: no cover
 

@@ -86,7 +86,6 @@ class BaseIndex:
         ^^^^^^^^^^
         index_name:
             Name of the index that should be read.
-
         """
 
         if self._store:
@@ -109,7 +108,6 @@ class BaseIndex:
             amending the catalogue (if implemented).
         search_keys:
             key-value based query for data that should be deleted.
-
         """
 
     @abc.abstractmethod

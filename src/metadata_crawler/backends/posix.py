@@ -41,7 +41,6 @@ class PosixPath(PathTemplate):
         Returns
         -------
         bool: True if path is file object, False if otherwise or doesn't exist
-
         """
         return await Path(path).is_file()
 
@@ -103,7 +102,6 @@ class PosixPath(PathTemplate):
         -------
         str:
             URI of the object store
-
         """
         return str(pathlib.Path(path).absolute())
 

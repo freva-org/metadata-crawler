@@ -1,4 +1,4 @@
-"""Metadata Crawler API high level functions"""
+"""Metadata Crawler API high level functions."""
 
 import asyncio
 from pathlib import Path
@@ -81,8 +81,6 @@ def index(
             batch_size=50,
             server="localhost:8983",
         )
-
-
     """
 
     uvloop.run(
@@ -127,7 +125,6 @@ def delete(
             server="localhost:8983",
             facets=[("project", "CMIP6"), ("institute", "MPI-M")],
         )
-
     """
     uvloop.run(async_delete(index_system, batch_size=batch_size, **kwargs))
 
@@ -150,7 +147,7 @@ def add(
     verbosity: int = 0,
     password: bool = False,
 ) -> None:
-    """Harvest metadata from storage systems and add them to an intake catalogue
+    """Harvest metadata from storage systems and add them to an intake catalogue.
 
     Parameters
     ^^^^^^^^^^
@@ -203,7 +200,6 @@ def add(
             "~/data/drs-config.toml",
             data_set=["cmip6", "cordex"],
         )
-
     """
     uvloop.run(
         async_add(

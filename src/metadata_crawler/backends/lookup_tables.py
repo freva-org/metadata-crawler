@@ -1,4 +1,4 @@
-"""Lookup table for drs attributes"""
+"""Lookup table for drs attributes."""
 
 cmor_lookup = {
     "cmip6": {

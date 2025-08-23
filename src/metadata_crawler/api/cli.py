@@ -10,7 +10,7 @@ class Parameter(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     args: Union[str, Tuple[str, ...]]
-    """Names for the arpargse.Namespace"""
+    """Names for the arpargse.Namespace."""
     help: str
     """Help string that is going to be displayed."""
 
@@ -44,7 +44,6 @@ def cli_function(
     ^^^^^^^^^^
     help:
         Help string for this sub command.
-
     """
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
