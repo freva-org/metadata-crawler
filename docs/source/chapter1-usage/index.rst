@@ -10,9 +10,8 @@ supports both synchronous and asynchronous workflows.
 The general workflow of collecting metadata is seperated into *two* steps:
 
 1. Harvesting metadata and storing the crawled data to a **temporary intake**
-   catalogue. Generally this step was introduced to de-couple the crawling from
-   the indexing procedure - but if feasible it can also be used to only create
-   **intake** catalogues.
+   catalogue. This step should de-couples the crawling from the indexing procedure -
+   but if feasible it can also be used to only create **intake** catalogues.
 2. Indexing the metadata to the index backend.
 
 

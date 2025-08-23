@@ -60,15 +60,15 @@ class TemplateMixin:
 
         Parameters
         ^^^^^^^^^^
-        data : Any
+        data:
             Arbitrary Python data structure. Supported containers are ``dict``
             (keys and values), ``list``, ``tuple`` (including namedtuples),
             ``set``, dataclasses (fields), and ``pathlib.Path``.
             Scalars (e.g., ``int``, ``float``, ``bool``, ``None``) are returned
             unchanged. Strings are rendered as Jinja2 templates.
-        context : Mapping[str, Any]
+        context:
             Mapping of template variables available to Jinja2 during rendering.
-        max_passes : int, optional
+        max_passes:
             Maximum number of rendering passes to perform on each string,
             by default ``2``. Increase this if templates generate further
             templates that need resolution.
@@ -82,15 +82,12 @@ class TemplateMixin:
             same dataclass type).
 
         Raises
-        ------
-        jinja2.exceptions.UndefinedError
-            If a template references a variable not present in ``context`` and
-            the environment uses ``StrictUndefined`` (default).
+        ^^^^^^^
         jinja2.TemplateError
             For other Jinja2 template errors encountered during rendering.
 
         Notes
-        -----
+        ^^^^^^
         * Dictionary keys are also rendered if they are strings (or nested
           containers with strings). If rendering causes key collisions, the
           **last** rendered key wins.
@@ -100,7 +97,7 @@ class TemplateMixin:
           reconstructed with the same type.
 
         Examples
-        --------
+        ^^^^^^^^^
 
         .. code-block::python
 
@@ -377,13 +374,13 @@ class PathTemplate(abc.ABC, PathMixin, TemplateMixin, metaclass=BasePath):
     async def is_file(self, path: Union[str, Path, pathlib.Path]) -> bool:
         """Check if a given path is a file object on the storage system.
 
-        Parameter
-        ^^^^^^^^-
-        path : str, asyncio.Path, pathlib.Path
+        Parameters
+        ^^^^^^^^^^
+        path:
             Path of the object store
 
         Returns
-        ^^^^^^-
+        ^^^^^^^
         bool:
             True if path is file object, False if otherwise or doesn't exist
 
@@ -397,9 +394,9 @@ class PathTemplate(abc.ABC, PathMixin, TemplateMixin, metaclass=BasePath):
     ) -> AsyncIterator[str]:
         """Get all sub directories from a given path.
 
-        Parameter
-        ^^^^^^^^-
-        path : str, asyncio.Path, pathlib.Path
+        Parameters
+        ^^^^^^^^^^
+        path:
             Path of the object store
 
         Yields
@@ -417,7 +414,7 @@ class PathTemplate(abc.ABC, PathMixin, TemplateMixin, metaclass=BasePath):
 
         Parameters
         ^^^^^^^^^^
-        path : str, asyncio.Path, pathlib.Path
+        path:
             Path of the object store
         glob_pattern: str
             Pattern that the target files must match
@@ -438,11 +435,11 @@ class PathTemplate(abc.ABC, PathMixin, TemplateMixin, metaclass=BasePath):
 
         Parameters
         ^^^^^^^^^^
-        path: str, asyncio.Path, pathlib.Path
+        path:
             Path of the object store
 
         Returns
-        ^^^^^^-
+        ^^^^^^^
         str:
             URI of the object store
 
@@ -455,7 +452,7 @@ class PathTemplate(abc.ABC, PathMixin, TemplateMixin, metaclass=BasePath):
 
         Parameters
         ^^^^^^^^^^
-        path: str, asyncio.Path, pathlib.Path
+        path:
             Path of the object store
 
         Returns

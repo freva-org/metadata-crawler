@@ -58,11 +58,14 @@ Too long; didn't read (TL;DR)
   datasets are allocated. data containing *all* dataset versions and the *latest*
   versions only.
 
-The CLI uses a **custom framework** inspired by Typer but is **not** Typer.
-Main commands are grouped under three verbs: ``config``, ``crawl``,
-``index`` and ``delete``.
+The CLI uses a **custom framework** inspired by `Typer <https://typer.tiangolo.com>`_
+but is **not** Typer. The Main commands are grouped under four verbs:
+``config``, ``crawl``, ``index`` and ``delete``.
 
-*Check the configuration*
+Check also ``mdc --help``
+
+Check the configuration
+^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: console
 
@@ -78,7 +81,8 @@ and adjustmend.
     the configuration by ``<key>-<value>`` pair queries.
 
 
-*Harvest metadata into a catalogue*:
+Harvest metadata into a catalogue
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: console
 
@@ -90,7 +94,8 @@ metadata into a temporary **catalogue** file. You can specify one or
 more dataset names via ``--dataset`` or explicit paths via ``--data-object``.
 Catalogue formats include JSONLines (gzipped) or DuckDB.
 
-*Index catalogue entries*:
+Index catalogue entries
+^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: console
 
@@ -100,7 +105,8 @@ This reads entries from a catalogue and inserts/updates them in the chosen
 index backend. Supported backends include **Solr**
 and **MongoDB** (see :doc:`chapter3-api/index`).
 
-*Delete entries from an index*:
+Delete entries from an index
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: console
 
