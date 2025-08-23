@@ -66,6 +66,7 @@ mkdoc = [
 doc = [
     "codespell",
     "blacken-docs",
+    "numpydoc",
     "sphinx",
     "sphinxcontrib_github_alt",
     "sphinx-execute-code-python3",

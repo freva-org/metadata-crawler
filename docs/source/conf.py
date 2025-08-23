@@ -43,7 +43,6 @@ def get_cli_output(*args: str) -> str:
 # -- General configuration ------------------------------------------------
 extensions = [
     "sphinx.ext.autodoc",
-    "numpydoc",
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
@@ -51,7 +50,6 @@ extensions = [
     "sphinxext.opengraph",
     "myst_parser",  # support for Markdown files if desired
 ]
-numpydoc_validation_checks = {"GL08"}
 # Public base URL where the built docs are served.
 # Prefer an ENV var; fall back to GitHub Pages for this repo.
 SITE_BASEURL = os.environ.get(
@@ -138,8 +136,7 @@ autodoc_default_options = {
 
 templates_path = ["_templates"]
 
-exclude_patterns: list[str] = []
-
+exclude_patterns = ["_build", "build", ".DS_Store", "Thumbs.db"]
 # -- Options for HTML output ----------------------------------------------
 html_theme = "pydata_sphinx_theme"
 html_logo = None
