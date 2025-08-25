@@ -99,7 +99,7 @@ class ArgParse:
     verbose: int = 0
     epilog: str = (
         "See also "
-        "https://freva.gitlab-pages.dkrz.de/metadata-crawler-source/docs/"
+        "https://metadata-crawler.readthedocs.io"
         " for a detailed documentation."
     )
 
