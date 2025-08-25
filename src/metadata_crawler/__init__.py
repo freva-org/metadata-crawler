@@ -39,6 +39,7 @@ def get_config(config: Optional[Union[Path, str]] = None) -> ConfigMerger:
 
     Parameters
     ^^^^^^^^^^
+
     config:
         Path to a user defined config file that is going to be merged with
         the default config.
@@ -66,11 +67,15 @@ def index(
         If the index system supports batch-sizes, the size of the batches.
     verbosity:
         Set the verbosity level.
+
+    Other Parameters
+    ^^^^^^^^^^^^^^^^
+
     **kwargs:
         Keyword arguments used to delete data from the index.
 
-    Example
-    ^^^^^^^
+    Examples
+    ^^^^^^^^
 
     .. code-block:: python
 
@@ -110,12 +115,16 @@ def delete(
         If the index system supports batch-sizes, the size of the batches.
     verbosity:
         Set the verbosity of the system.
+
+    Other Parameters
+    ^^^^^^^^^^^^^^^^
+
     **kwargs:
         Keyword arguments used to delete data from the index.
 
 
-    Example
-    ^^^^^^^
+    Examples
+    ^^^^^^^^
 
     .. code-block:: python
 
@@ -189,7 +198,7 @@ def add(
         Set the verbosity of the system.
 
 
-    Example
+    Examples
     ^^^^^^^^
 
     .. code-block:: python

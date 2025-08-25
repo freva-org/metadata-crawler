@@ -42,6 +42,8 @@ To implement a new backend:
     * ``metadata_crawler.storage_backends`` in your ``setup.cfg`` or
     * ``pyproject.toml``.  This allows the ``fs_type`` string in the configuration to resolve to your backend class.
 
+    .. admonition:: pyproject.toml
+
         .. code-block:: toml
 
             [project.entry-points."metadata_crawler.storage_backends"]

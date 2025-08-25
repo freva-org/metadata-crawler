@@ -44,8 +44,7 @@ def get_cli_output(*args: str) -> str:
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
-    "numpydoc",
-    # "sphinx.ext.napoleon",
+    "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
     "sphinx.ext.intersphinx",
     "sphinxext.opengraph",
@@ -56,6 +55,11 @@ extensions = [
 SITE_BASEURL = os.environ.get(
     "SITE_BASEURL", "https://freva-org.github.io/metadata-crawler/"
 )
+
+# Auto docs
+napoleon_use_admonition_for_examples = True
+napoleon_use_admonition_for_notes = True
+napoleon_use_admonition_for_references = True
 
 # Paths to your social preview image (ideal size: 1200x630).
 # Put a copy in docs/_static/social_card.png (wide) for best results.

@@ -123,6 +123,10 @@ async def async_index(
         If the index system supports batch-sizes, the size of the batches.
     verbosity:
         Set the verbosity of the system.
+
+    Other Parameters
+    ^^^^^^^^^^^^^^^^
+
     **kwargs:
         Keyword arguments used to delete data from the index.
 
@@ -165,10 +169,14 @@ async def async_delete(
         If the index system supports batch-sizes, the size of the batches.
     verbosity:
         Set the verbosity of the system.
+
+    Other Parameters
+    ^^^^^^^^^^^^^^^^^
+
     **kwargs:
         Keyword arguments used to delete data from the index.
 
-    Example
+    Examples
     ^^^^^^^^
 
     .. code-block:: python
@@ -250,8 +258,8 @@ async def async_add(
         Set the verbosity of the system.
 
 
-    Example
-    ^^^^^^^
+    Examples
+    ^^^^^^^^
 
      .. code-block:: python
 
@@ -260,6 +268,7 @@ async def async_add(
              config_file="~/data/drs-config.toml",
              data_set=["cmip6", "cordex"],
         )
+
     """
     env = cast(os._Environ[str], os.environ.copy())
     old_level = apply_verbosity(verbosity)

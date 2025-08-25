@@ -113,3 +113,4 @@ Library Reference
 
 .. automodule:: metadata_crawler
    :exclude-members: DataCollector
+   :member-order: bysource

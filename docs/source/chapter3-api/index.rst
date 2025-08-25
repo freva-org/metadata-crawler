@@ -12,15 +12,17 @@ To make any custom implementations available inside ``metadata-crawler`` you
 need to `create entry points <https://packaging.python.org/en/latest/guides/creating-and-discovering-plugins/#using-package-metadata>`_
 in your ``pyproject.toml`` file:
 
-.. code-block:: toml
+.. admonition:: pyproject.toml
 
-    # register a new index system
-    [project.entry-points."metadata_crawler.index_backends"]
-    mybackend = "my_package.my_index:MyIndexStore"
+    .. code-block:: toml
 
-    # register in your storage backend
-    [project.entry-points."metadata_crawler.storage_backends"]
-    foo = "my_package.foo_backend:FooBackend"
+        # register a new index system
+        [project.entry-points."metadata_crawler.index_backends"]
+        mybackend = "my_package.my_index:MyIndexStore"
+
+        # register in your storage backend
+        [project.entry-points."metadata_crawler.storage_backends"]
+        foo = "my_package.foo_backend:FooBackend"
 
 
 

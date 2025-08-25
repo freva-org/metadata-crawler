@@ -105,9 +105,10 @@ class TemplateMixin:
             }
             ctx = {"name": "Ada", "count": 3, "user": "ada", "root": "/opt/app"}
             render_templates(data, ctx)
-        {'greeting': 'Hello, Ada!',
-         'items': ['3 item(s)', 42],
-         'path': {'root': '/home/ada', 'cfg': '/opt/app/cfg'}}
+            # {'greeting': 'Hello, Ada!',
+            #   'items': ['3 item(s)', 42],
+            #    'path': {'root': '/home/ada', 'cfg': '/opt/app/cfg'}}
+
         """
         env = Environment(undefined=Undefined, autoescape=False)
 
@@ -210,7 +211,9 @@ class PathTemplate(abc.ABC, PathMixin, TemplateMixin, metaclass=BasePath):
     suffixes: List[str], default:  [".nc", ".girb", ".zarr", ".tar", ".hdf5"]
         A list of available file suffixes.
 
-    **storage_options: Any
+    Other Parameters
+    ^^^^^^^^^^^^^^^^
+    storage_options: Any
         Information needed to interact with the storage system.
 
     Attributes

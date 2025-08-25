@@ -99,12 +99,13 @@ Example skeleton
                 for table in self.index_names:
                     con.delete(**dir(facets))
 
+.. admonition:: pyproject.toml
 
-.. code-block:: toml
+    .. code-block:: toml
 
-    # register in pyproject.toml
-    [project.entry-points."metadata_crawler.index_backends"]
-    mysql = "my_package.my_index:MySQLIndex"
+        # register in pyproject.toml
+        [project.entry-points."metadata_crawler.index_backends"]
+        mysql = "my_package.my_index:MySQLIndex"
 
 Extending the CLI
 ^^^^^^^^^^^^^^^^^^

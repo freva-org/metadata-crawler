@@ -49,7 +49,7 @@ contains three subsections:
   variables, or a format string like ``{{variable}}`` that refers to
   the parsed ``variable`` facet), the attribute name
 
-  Example:
+.. admonition:: TOML CONFIG
 
   .. code-block:: toml
 
@@ -64,7 +64,7 @@ contains three subsections:
   values (useful for time coordinates); ``bbox`` computes the
   bounding box from latitude and longitude variables.
 
-  Example:
+.. admonition:: TOML CONFIG
 
   .. code-block:: toml
 

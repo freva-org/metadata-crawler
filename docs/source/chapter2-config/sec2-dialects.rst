@@ -59,30 +59,32 @@ and ``activity_id``; the file name encodes the variable, table, model
 and time period.  Special rules call helper methods to look up the
 realm and time aggregation.
 
-.. code-block:: toml
+.. admonition:: TOML CONFIG
 
-   [drs_settings.dialect.cmip6]
-   sources = ["path", "data"]
-   specs_dir = [
-     "mip_era", "activity_id", "institution_id", "source_id",
-     "experiment_id", "member_id", "table_id", "variable_id",
-     "grid_label", "version",
-   ]
-   specs_file = [
-     "variable_id", "table_id", "source_id", "experiment_id",
-     "member_id", "grid_label", "time",
-   ]
-   # map canonical facet names to raw keys
-   facets = { model = "source_id", ensemble = "member_id" }
-   defaults = { grid_label = "gn", version = -1 }
-   [drs_settings.dialect.cmip6.special.realm]
-   type = "lookup"
-   items = ["{{ table_id }}", "{{ variable_id }}", "realm"]
-   [drs_settings.dialect.cmip6.special.time_aggregation]
-   type = "conditional"
-   condition = "'pt' in '{{ time_frequency | lower}}'"
-   true = "inst"
-   false = "mean"
+    .. code-block:: toml
+
+       [drs_settings.dialect.cmip6]
+       sources = ["path", "data"]
+       specs_dir = [
+         "mip_era", "activity_id", "institution_id", "source_id",
+         "experiment_id", "member_id", "table_id", "variable_id",
+         "grid_label", "version",
+       ]
+       specs_file = [
+         "variable_id", "table_id", "source_id", "experiment_id",
+         "member_id", "grid_label", "time",
+       ]
+       # map canonical facet names to raw keys
+       facets = { model = "source_id", ensemble = "member_id" }
+       defaults = { grid_label = "gn", version = -1 }
+       [drs_settings.dialect.cmip6.special.realm]
+       type = "lookup"
+       items = ["{{ table_id }}", "{{ variable_id }}", "realm"]
+       [drs_settings.dialect.cmip6.special.time_aggregation]
+       type = "conditional"
+       condition = "'pt' in '{{ time_frequency | lower}}'"
+       true = "inst"
+       false = "mean"
 
 Example: CORDEX dialect with domain lookup
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -92,31 +94,33 @@ uses a domain table to derive bounding boxes.  The ``special``
 section defines a function rule that concatenates three facets, and
 ``bbox`` looks up the domain in the ``domains`` table.
 
-.. code-block:: toml
+.. admonition:: TOML CONFIG
 
-   [drs_settings.dialect.cordex]
-   sources = ["path"]
-   specs_dir = [
-     "project", "product", "domain", "institution", "driving_model",
-     "experiment", "ensemble", "rcm_name", "rcm_version",
-     "time_frequency", "variable", "version",
-   ]
-   specs_file = [
-     "variable", "domain", "driving_model", "experiment",
-     "ensemble", "rcm_name", "rcm_version", "time_frequency",
-     "time",
-   ]
-   defaults = { realm = "atmos" }
-   [drs_settings.dialect.cordex.special.model]
-   type = "function"
-   call = "'{{driving_model}}-{{rcm_name}}-{rcm_version}}'"
-   [drs_settings.dialect.cordex.special.bbox]
-   type = "function"
-   call = "dialect['cordex']['domains'].get('{{domain | upper}}', [0,360,-90,90])"
-   [drs_settings.dialect.cordex.domains]
-   EUR-11 = [-44.14, 64.40, 22.20, 72.42]
-   AFR-44 = [-24.64, 60.28, -45.76, 42.24]
-   # ... further domain definitions ...
+    .. code-block:: toml
+
+       [drs_settings.dialect.cordex]
+       sources = ["path"]
+       specs_dir = [
+         "project", "product", "domain", "institution", "driving_model",
+         "experiment", "ensemble", "rcm_name", "rcm_version",
+         "time_frequency", "variable", "version",
+       ]
+       specs_file = [
+         "variable", "domain", "driving_model", "experiment",
+         "ensemble", "rcm_name", "rcm_version", "time_frequency",
+         "time",
+       ]
+       defaults = { realm = "atmos" }
+       [drs_settings.dialect.cordex.special.model]
+       type = "function"
+       call = "'{{driving_model}}-{{rcm_name}}-{rcm_version}}'"
+       [drs_settings.dialect.cordex.special.bbox]
+       type = "function"
+       call = "dialect['cordex']['domains'].get('{{domain | upper}}', [0,360,-90,90])"
+       [drs_settings.dialect.cordex.domains]
+       EUR-11 = [-44.14, 64.40, 22.20, 72.42]
+       AFR-44 = [-24.64, 60.28, -45.76, 42.24]
+       # ... further domain definitions ...
 
 
 .. tip::

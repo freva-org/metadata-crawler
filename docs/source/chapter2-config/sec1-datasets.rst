@@ -19,55 +19,56 @@ CMIP6 dataset stored on a POSIX filesystem; ``obs-s3`` lives in a
 MinIO/S3 bucket; and ``ngm-swift`` is hosted on a Swift object
 store.  Defaults override or add facet values when records are
 constructed.
+.. admonition:: TOML CONFIG
 
-.. code-block:: toml
+    .. code-block:: toml
 
-   # CMIP6 data on a local filesystem
-   [cmip6-fs]
-   root_path = "/data/model/global/cmip6"
-   drs_format = "cmip6"
-   # optional: defaults
-   [cmip6-fs.defaults]
-   project = "CMIP6"
+       # CMIP6 data on a local filesystem
+       [cmip6-fs]
+       root_path = "/data/model/global/cmip6"
+       drs_format = "cmip6"
+       # optional: defaults
+       [cmip6-fs.defaults]
+       project = "CMIP6"
 
-   # NextGems stored on s3
-   [ngm-s3]
-   root_path = "/freva/nexgems"
-   inherits_from = "obs-s3" # (anything else like for obs-s3)
-   glob_pattern = "*.zarr" # (get only zarr stores)
+       # NextGems stored on s3
+       [ngm-s3]
+       root_path = "/freva/nexgems"
+       inherits_from = "obs-s3" # (anything else like for obs-s3)
+       glob_pattern = "*.zarr" # (get only zarr stores)
 
 
-   # Observational data on S3/MinIO
-   [obs-s3]
-   root_path = "s3://freva/observations"
-   drs_format = "obs"
-   fs_type = "s3"
-   [obs-s3.storage_options]
-   endpoint_url = "https://play.min.io"
-   aws_access_key_id = "<ACCESS_KEY>"
-   aws_secret_access_key = "<SECRET_KEY>"
-   region = "us-east-1"
-   [obs-s3.defaults]
-   project = "observations"
+       # Observational data on S3/MinIO
+       [obs-s3]
+       root_path = "s3://freva/observations"
+       drs_format = "obs"
+       fs_type = "s3"
+       [obs-s3.storage_options]
+       endpoint_url = "https://play.min.io"
+       aws_access_key_id = "<ACCESS_KEY>"
+       aws_secret_access_key = "<SECRET_KEY>"
+       region = "us-east-1"
+       [obs-s3.defaults]
+       project = "observations"
 
-   # NextGEMS data on Swift
-   [ngm-swift]
-   root_path = "nextgems/era5"
-   drs_format = "nextgems"
-   fs_type = "swift"
-   [ngm-swift.storage_options]
-   os_auth_url = "https://swift.example.com/auth/v3"
-   os_storage_url = "https://swift.example.com/v1"
-   os_username = "{{ env['USER'] | default('myuser') }}"
-   os_password = "{{ env['PASS'] }}"
-   os_project_name = "<PROJECT>"
-   os_user_domain_name = "Default"
-   os_project_domain_name = "Default"
-   [ngm-swift.defaults]
-   project = "nextgems"
+       # NextGEMS data on Swift
+       [ngm-swift]
+       root_path = "nextgems/era5"
+       drs_format = "nextgems"
+       fs_type = "swift"
+       [ngm-swift.storage_options]
+       os_auth_url = "https://swift.example.com/auth/v3"
+       os_storage_url = "https://swift.example.com/v1"
+       os_username = "{{ env['USER'] | default('myuser') }}"
+       os_password = "{{ env['PASS'] }}"
+       os_project_name = "<PROJECT>"
+       os_user_domain_name = "Default"
+       os_project_domain_name = "Default"
+       [ngm-swift.defaults]
+       project = "nextgems"
 
 Keys
-^^^^^
+^^^^
 
 * **root_path** – Path or prefix to search for files.  For S3 and
   Swift backends it is the prefix inside the bucket/container.  For

@@ -13,12 +13,14 @@ create a new dialect inheriting from it.  For instance, suppose
 ``nextgems`` is derived from ``cmip6`` but uses a different
 ``specs_file`` and some overrides:
 
-.. code-block:: toml
+.. admonition:: TOML CONFIG
 
-   [drs_settings.dialect.nextgems]
-   inherits_from = "cmip6"
-   specs_file = ["variable", "time", "level"]
-   defaults = { project = "NEXTGEMS" }
+    .. code-block:: toml
+
+       [drs_settings.dialect.nextgems]
+       inherits_from = "cmip6"
+       specs_file = ["variable", "time", "level"]
+       defaults = { project = "NEXTGEMS" }
 
 When the config is loaded, the parent dialect (``cmip6``) is copied
 and then the child’s fields are merged on top.  Empty tables in the
@@ -32,12 +34,14 @@ Datasets can also inherit from other datasets.  Use this when two
 datasets share the same root or storage options but differ in
 defaults or dialect choice.  For example:
 
-.. code-block:: toml
+.. admonition:: TOML CONFIG
 
-   [cmip6-cycle3]
-   inherits_from = "cmip6-fs"
-   root_path = "/data/cmip6/cycle3"
-   defaults = { version = -2 }
+    .. code-block:: toml
+
+       [cmip6-cycle3]
+       inherits_from = "cmip6-fs"
+       root_path = "/data/cmip6/cycle3"
+       defaults = { version = -2 }
 
 In this case all fields from ``cmip6-fs`` (root_path, fs_type,
 storage_options, defaults, etc.) are copied; only ``root_path`` and

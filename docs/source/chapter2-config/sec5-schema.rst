@@ -8,7 +8,9 @@ The metadata crawler uses a **schema** to define how raw metadata keys are mappe
 Field attributes
 ----------------
 
-Every schema entry is a table keyed by the facet name. For example::
+Every schema entry is a table keyed by the facet name. For example:
+
+.. code-block:: toml
 
    [drs_settings.schema.product]
    key         = "domain"
@@ -76,39 +78,41 @@ Examples
 
 The following TOML snippet defines several facets with various options:
 
-.. code-block:: toml
+.. admonition:: TOML CONFIG
 
-    [drs_settings.schema.file]
-    key       = "file"
-    type      = "path"
-    required  = true
-    indexed   = true
-    unique    = true
+    .. code-block:: toml
 
-    [drs_settings.schema.time]
-    key         = "time"
-    type        = "datetime[2]"
-    indexed     = true
-    multi_valued= false
-    default     = []
+        [drs_settings.schema.file]
+        key       = "file"
+        type      = "path"
+        required  = true
+        indexed   = true
+        unique    = true
 
-    [drs_settings.schema.bbox]
-    key       = "bbox"
-    type      = "float[4]"  # west, east, south, north
-    default   = [0.0, 360.0, -90.0, 90.0]
-    indexed   = false
+        [drs_settings.schema.time]
+        key         = "time"
+        type        = "datetime[2]"
+        indexed     = true
+        multi_valued= false
+        default     = []
 
-    [drs_settings.schema.ensemble]
-    key         = "member"
-    type        = "string[]"
-    indexed     = true
-    multi_valued= true
+        [drs_settings.schema.bbox]
+        key       = "bbox"
+        type      = "float[4]"  # west, east, south, north
+        default   = [0.0, 360.0, -90.0, 90.0]
+        indexed   = false
 
-    [drs_settings.schema.level_type]
-    key     = "level_type"
-    type    = "string"
-    default = "2d"
-    indexed = true
+        [drs_settings.schema.ensemble]
+        key         = "member"
+        type        = "string[]"
+        indexed     = true
+        multi_valued= true
+
+        [drs_settings.schema.level_type]
+        key     = "level_type"
+        type    = "string"
+        default = "2d"
+        indexed = true
 
 In this example:
 

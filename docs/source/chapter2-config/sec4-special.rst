@@ -54,13 +54,15 @@ Conditional
 Evaluate a boolean **Python** expression (after Jinja rendering) and choose
 between two literal values.
 
-.. code-block:: toml
+.. admonition:: TOML CONFIG
 
-   [drs_settings.special.time_aggregation]
-   type      = "conditional"
-   condition = "'pt' in '{{ time_frequency | default(\"day\") | lower }}'"
-   true      = "inst"
-   false     = "mean"
+    .. code-block:: toml
+
+       [drs_settings.special.time_aggregation]
+       type      = "conditional"
+       condition = "'pt' in '{{ time_frequency | default(\"day\") | lower }}'"
+       true      = "inst"
+       false     = "mean"
 
 Flow:
 
@@ -84,24 +86,26 @@ the lookup rule:
 .. automethod:: metadata_crawler.api.storage_backend::PathTemplate.lookup
    :no-index:
 
-.. code-block:: toml
+.. admonition:: TOML CONFIG
 
-   [drs_settings.dialect.cmip6.special.realm]
-   type            = "lookup"
-   attribute       = "realm"
-   tree           = ["{{ table_id }}", "{{ variable_id }}"]
+    .. code-block:: toml
 
-   [drs_settings.dialect.cmip6.special.time_frequency]
-   type   = "lookup"
-   attribute = "frequency"
-   tree  = ["{{ table_id }}", "{{ variable_id }}"]
+       [drs_settings.dialect.cmip6.special.realm]
+       type            = "lookup"
+       attribute       = "realm"
+       tree           = ["{{ table_id }}", "{{ variable_id }}"]
+
+       [drs_settings.dialect.cmip6.special.time_frequency]
+       type   = "lookup"
+       attribute = "frequency"
+       tree  = ["{{ table_id }}", "{{ variable_id }}"]
 
 
-Notes:
+.. note::
 
-- The backend should **memoize** lookups in a tree cache
-  so repeated calls across millions of files are O(1) hits after the first read.
-- ``read_kws`` come from ``dialect[standard].data_specs.read_kws`` (e.g., xarray engine).
+    - The backend should **memoize** lookups in a tree cache
+      so repeated calls across millions of files are O(1) hits after the first read.
+    - ``read_kws`` come from ``dialect[standard].data_specs.read_kws`` (e.g., xarray engine).
 
 
 
@@ -113,20 +117,24 @@ Call
 Render a string with Jinja and **eval** it as a Python expression within the model
 dict scope. Useful for string composition or referencing config data structures.
 
-.. code-block:: toml
+.. admonition:: TOML CONFIG
 
-   [drs_settings.dialect.cordex.special.model]
-   type = "call"
-   call = "'{{ driving_model }}-{{ rcm_name }}-{{ rcm_version }}'"
+    .. code-block:: toml
+
+       [drs_settings.dialect.cordex.special.model]
+       type = "call"
+       call = "'{{ driving_model }}-{{ rcm_name }}-{{ rcm_version }}'"
 
 You may also reference config structures as nested dicts in the expression,
 for example:
 
-.. code-block:: toml
+.. admonition:: TOML CONFIG
 
-   [drs_settings.dialect.cordex.special.default_bbox]
-   type = "call"
-   call = "dialect['cordex']['domains'].get('{{ domain | upper }}', [0,360,-90,90])"
+    .. code-block:: toml
+
+       [drs_settings.dialect.cordex.special.default_bbox]
+       type = "call"
+       call = "dialect['cordex']['domains'].get('{{ domain | upper }}', [0,360,-90,90])"
 
 Order and scoping
 ^^^^^^^^^^^^^^^^^^
@@ -149,37 +157,40 @@ Examples recap
 
 Global conditional (time aggregation)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.. admonition:: TOML CONFIG
 
-.. code-block:: toml
+    .. code-block:: toml
 
-   [drs_settings.special.time_aggregation]
-   type      = "conditional"
-   condition = "'pt' in '{{ time_frequency | default(\"mean\") | lower }}'"
-   true      = "inst"
-   false     = "mean"
+       [drs_settings.special.time_aggregation]
+       type      = "conditional"
+       condition = "'pt' in '{{ time_frequency | default(\"mean\") | lower }}'"
+       true      = "inst"
+       false     = "mean"
 
 CORDEX composite model (call)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.. admonition:: TOML CONFIG
 
-.. code-block:: toml
+    .. code-block:: toml
 
-   [drs_settings.dialect.cordex.special.model]
-   type = "call"
-   call = "'{{ driving_model }}-{{ rcm_name }}-{{ rcm_version }}'"
+       [drs_settings.dialect.cordex.special.model]
+       type = "call"
+       call = "'{{ driving_model }}-{{ rcm_name }}-{{ rcm_version }}'"
 
 CMIP6 lookups (realm / frequency)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.. admonition:: TOML CONFIG
 
-.. code-block:: toml
+    .. code-block:: toml
 
-   [drs_settings.dialect.cmip6.special]
-   realm.type            = "lookup"
-   realm.tree            = ["{{ table_id }}", "{{ variable_id }}"]
-   realm.attribute       = "realm"
+       [drs_settings.dialect.cmip6.special]
+       realm.type            = "lookup"
+       realm.tree            = ["{{ table_id }}", "{{ variable_id }}"]
+       realm.attribute       = "realm"
 
-   time_frequency.type   = "lookup"
-   time_frequency.tree   = ["{{ table_id }}", "{{ variable_id }}"]
-   realm.attribute       = "frequency"
+       time_frequency.type   = "lookup"
+       time_frequency.tree   = ["{{ table_id }}", "{{ variable_id }}"]
+       realm.attribute       = "frequency"
 
 Performance notes
 ^^^^^^^^^^^^^^^^^^
