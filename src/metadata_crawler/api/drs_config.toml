@@ -1,0 +1,437 @@
+# common_drs.toml
+# ----------------
+# Default DRS settings
+
+[drs_settings]
+
+# 1) Allowed file extensions
+suffixes = [".zarr", ".zar", ".nc4", ".nc", ".tar", ".hdf5", ".h5", ".grib", ".grb"]
+
+# 2) Canonical index facets → raw keys in `data`
+[drs_settings.index_schema]
+# facet -> raw-key map
+
+[drs_settings.index_schema.file]
+key          = "file"
+type         = "path"
+multi_valued = false
+required     = true
+unique       = true
+
+[drs_settings.index_schema.uri]
+key         = "uri"
+type        = "uri"
+multi_valued = false
+required    = true
+
+[drs_settings.index_schema.project]
+key         = "project"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.product]
+key         = "product"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.institute]
+key         = "institute"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.model]
+key         = "model"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.experiment]
+key         = "experiment"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.time_frequency]
+key         = "time_frequency"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.realm]
+key         = "realm"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.cmor_table]
+key         = "cmor_table"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.ensemble]
+key         = "ensemble"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.variable]
+key         = "variable"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.time]
+key         = "time"
+type        = "daterange"
+multi_valued = false
+
+[drs_settings.index_schema.grid_label]
+key         = "grid_label"
+type        = "string"
+multi_valued = true
+default     = "gn"
+
+[drs_settings.index_schema.version]
+key         = "version"
+type        = "string"
+multi_valued = false
+default     = "-1"
+
+[drs_settings.index_schema.driving_model]
+key         = "driving_model"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.rcm_name]
+key         = "rcm_name"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.rcm_version]
+key         = "rcm_version"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.dataset]
+key         = "dataset"
+type        = "dataset"
+multi_valued = false
+default     = ""
+
+[drs_settings.index_schema.format]
+key         = "format"
+type        = "fmt"
+multi_valued = false
+
+[drs_settings.index_schema.grid_id]
+key         = "grid_id"
+type        = "string"
+multi_valued = true
+
+[drs_settings.index_schema.level_type]
+key         = "level_type"
+type        = "string"
+multi_valued = true
+default     = "2d"
+
+[drs_settings.index_schema.user]
+key         = "user"
+type        = "string"
+multi_valued = false
+
+[drs_settings.index_schema.fs_type]
+key         = "fs_type"
+type        = "storage"
+multi_valued = false
+default     = "posix"
+
+[drs_settings.index_schema.bbox]
+key         = "bbox"
+type        = "bbox"
+multi_valued = true
+default     = [0,360,-90,90]
+
+[drs_settings.index_schema.time_aggregation]
+key         = "time_aggregation"
+type        = "string"
+multi_valued = true
+default     = "mean"
+
+
+# 3) Global special rules
+[drs_settings.special.time_aggregation]
+type      = "conditional"
+condition = "'pt' in '{{ time_frequency | lower}}'"
+true      = "inst"
+false     = "mean"
+
+# 4) Global storage options
+[drs_settings.storage_options]
+# 5) Common dialect specs + per-dialect overrides
+
+# -- FREVA -------------------------------------------------------
+[drs_settings.dialect.freva]
+defaults = { level_type = "2d", bbox = [0, 360, -90, 90]}
+sources = ["path"]
+
+[drs_settings.dialect.freva.facets]
+project           = "project"
+product           = "product"
+institute         = "institute"
+model             = "model"
+experiment        = "experiment"
+time_frequency    = "time_frequency"
+realm             = "realm"
+cmor_table        = "cmor_table"
+ensemble          = "member"
+variable          = "variable"
+time              = "time"
+grid_label        = "grid_label"
+version           = "version"
+dataset           = "dataset"
+format            = "format"
+grid_id           = "grid_id"
+level_type        = "level_type"
+user              = "user"
+fs_type           = "__fstype__"
+bbox              = "bbox"
+time_aggregation  = "time_aggregation"
+
+[drs_settings.dialect.freva.path_specs]
+dir_parts  = [
+    "project",
+    "product",
+    "institution",
+    "model",
+    "experiment",
+    "time_frequency",
+    "realm",
+    "cmor_table",
+    "ensemble",
+    "version",
+    "variable"
+]
+file_parts = [
+    "variable",
+    "cmor_table",
+    "model",
+    "experiment",
+    "ensemble",
+    "time"
+]
+file_sep = "_"
+
+# -- CMIP6 --------------------------------------------------------
+[drs_settings.dialect.cmip6]
+defaults = { level_type = "2d", bbox = [0, 360, -90, 90]}
+sources = ["path"]
+[drs_settings.dialect.cmip6.facets]
+project = "mip_era"
+product = "activity_id"
+model = "source_id"
+experiment = "experiment_id"
+cmor_table = "table_id"
+ensemble = "member_id"
+variable = "variable_id"
+grid_label = "grid_label"
+version = "version"
+member = "member"
+time_frequency = "time_frequency"
+realm = "realm"
+time_aggregation = "time_aggregation"
+time = "time"
+bbox = "bbox"
+[drs_settings.dialect.cmip6.path_specs]
+dir_parts  = [
+    "mip_era",
+    "activity_id",
+    "institution",
+    "source_id",
+    "experiment_id",
+    "member_id",
+    "table_id",
+    "variable_id",
+    "grid_label",
+    "version"
+]
+file_parts = [
+    "variable_id",
+    "table_id",
+    "source_id",
+    "experiment_id",
+    "member_id",
+    "grid_label",
+    "time"
+]
+file_sep = "_"
+
+# override async methods for cmip6
+[drs_settings.dialect.cmip6.special.realm]
+type   = "lookup"
+tree   = ["{{ table_id }}", "{{ variable_id }}"]
+attribute = "realm"
+[drs_settings.dialect.cmip6.special.time_frequency]
+type   = "lookup"
+tree   = ["{{ table_id }}","{{ variable_id }}"]
+attribute = "frequency"
+
+# -- CMIP5 --------------------------------------------------------
+[drs_settings.dialect.cmip5]
+defaults = { level_type = "2d", bbox = [0, 360, -90, 90]}
+sources = ["path"]
+[drs_settings.dialect.cmip5.facets]
+project = "project"
+product = "product"
+institute = "institution_id"
+model = "model_id"
+experiment = "experiment_id"
+time_frequency = "time_frequency"
+realm = "realm"
+cmor_table = "cmor_table"
+ensemble = "member_id"
+variable = "variable_id"
+time_aggregation = "time_aggregation"
+bbox = "bbox"
+
+[drs_settings.dialect.cmip5.path_specs]
+dir_parts  = [
+    "project",
+    "product",
+    "institution_id",
+    "model_id",
+    "experiment_id",
+    "time_frequency",
+    "realm",
+    "cmor_table",
+    "member_id",
+    "version",
+    "variable_id"
+]
+file_parts = [
+    "variable_id",
+    "cmor_table",
+    "model_id",
+    "experiment_id",
+    "member_id",
+    "time"
+]
+file_sep = "_"
+
+# -- CORDEX --------------------------------------------------------
+[drs_settings.dialect.cordex]
+sources = ["path"]
+defaults = { realm = "atmos" , level_type = "2d" }
+
+[drs_settings.dialect.cordex.facets]
+project = "project"
+product = "domain"
+institute = "institution"
+model = "model"
+driving_model = "driving_model"
+rcm_name = "rcm_name"
+rcm_version = "rcm_version"
+time_aggregation = "time_aggregation"
+bbox = "bbox"
+time = "time"
+variable = "variable"
+ensemble = "ensemble"
+realm = "realm"
+time_frequency = "time_frequency"
+experiment = "experiment"
+
+[drs_settings.dialect.cordex.path_specs]
+dir_parts  = [
+    "project",
+    "product",
+    "domain",
+    "institution",
+    "driving_model",
+    "experiment",
+    "ensemble",
+    "rcm_name",
+    "rcm_version",
+    "time_frequency",
+    "variable",
+    "version"
+]
+file_parts = [
+    "variable",
+    "domain",
+    "driving_model",
+    "experiment",
+    "ensemble",
+    "rcm_name",
+    "rcm_version",
+    "time_frequency",
+    "time"
+]
+file_sep = "_"
+
+# CORDEX‐specific domain‐to‐bbox map
+[drs_settings.dialect.cordex.domains]
+EAS-44   = [63.3574, 175.132, -18.22689, 58.59]
+WAS-22   = [19.83779, 115.2829, -14.89043, 44.70015]
+WAS-44   = [19.86429, 115.5316, -15.23168, 45.25018]
+MED-11   = [-46.80627, 76.06158, 19.63504, 73.41]
+EUR-11I  = [-44.8125, 65.1875, 21.8125, 72.6875]
+EUR-11   = [-44.594, 64.9646, 21.98791, 72.58528]
+AFR-44I  = [-25.25, 60.75, -46.25, 42.75]
+CAS-22   = [10.7899, 140.1774, 18.00188, 69.51006]
+NAM-22   = [-169.51, -24.72, 12.96031, 75.31002]
+ARC-44I  = [-179.75, 179.75, 48.75, 89.75]
+SAM-44   = [-105.7188, -18.71515, -57.68022, 18.49518]
+EUR-44I  = [-44.75, 65.25, 21.75, 72.75]
+AFR-22   = [-24.53, 59.9502, -47.63018, 43.89017]
+EUR-44   = [-44.14069, 64.40398, 22.19937, 72.41994]
+AFR-44   = [-24.64001, 60.27998, -45.76, 42.24]
+SEA-22   = [88.16034, 148.0006, -16.06006, 27.94011]
+ARC-44   = [-180.0, 179.17, 48.56, 90.0]
+WAS-44I  = [19.25, 116.25, -15.75, 45.75]
+AUS-22   = [86.9056, -151.57, -52.46012, 12.51982]
+AUS-44   = [89.24, -157.593, -52.57, 12.2103]
+EAS-22   = [48.54336, -175.70, -1.345726, 62.34015]
+EUR-22   = [-45.38, 66.1712, 21.88545, 71.8702]
+SAM-22   = [-105.55, -17.32, -59.11018, 19.58714]
+CAM-22   = [-124.12, -22.60, -19.54996, 34.8301]
+CEU-3    = [1.62, 18.28, 44.85, 56.24]
+
+# override bbox logic for CORDEX
+[drs_settings.dialect.cordex.special.bbox]
+type = "call"
+call = 'dialect["cordex"]["domains"].get("{{ domain | upper }}", [0, 360, -90, 90])'
+
+[drs_settings.dialect.cordex.special.model]
+type = "call"
+call = "'{{ driving_model }}-{{ rcm_name }}-{{ rcm_version }}'"
+
+# -- NextGems -------------------------------------------------------
+[drs_settings.dialect.nextgems]
+sources = ["data"]
+defaults = { level_type = "2d", bbox = [0, 360, -90, 90]}
+
+[drs_settings.dialect.nextgems.facets]
+project = "project"
+porduct = "experiment_id"
+institute = "institution_id"
+model = "source_id"
+experiment = "simulation_id"
+time_frequency = "frequency"
+time_aggregation = "time_reduction"
+variable = "variable_id"
+realm = "realm"
+cmor_table = "realm"
+level_type = "level_type"
+format = "format"
+gird_id = "grid_id"
+bbox = "bbox"
+
+[drs_settings.dialect.nextgems.data_specs.globals]
+experiment_id = "experiment_id"
+source_id = "source_id"
+institution_id = "institution_id"
+simulation_id = "simulation_id"
+frequency = "frequency"
+time_reduction = "time_reduction"
+variable_id = "__variables__"
+
+[drs_settings.dialect.nextgems.data_specs.stats.time]
+stat = "range"
+coord = "time"
+
+[drs_settings.dialect.nextgems.special.grid_label]
+type = "call"
+call = "'{{ file }}'.rpartition('.')[0].split('_')[-1]"

@@ -1,0 +1,174 @@
+[nextgems_cat]
+root_path = "test_intake.json"
+drs_format = "nextgems"
+fs_type = "intake"
+
+[nextgems_cycle3]
+root_path = "data/intake/work/bm1235"
+drs_format = "nextgems_cycle3"
+fs_type = "posix"
+[nextgems_cycle3.defaults]
+project = "nextgems"
+simulation_id = "cycle3"
+
+[drs_settings.dialect.nextgems_cycle3]
+inherits_from = "nextgems"
+[drs_settings.dialect.nextgems_cycle3.data_specs.var_attrs]
+variable_id = { var="*", attr="short_name", default="__name__" }
+
+
+[fool]
+# Definition of some not working datasets.
+root_path = "/foo/bar"
+inherits_from = "nextgems-s3"
+
+[catalogue_intake_local]
+root_path = "./data/intake/catalog/catalog.yaml"
+drs_format = "nextgems"
+fs_type = "intake"
+[catalogue_intake_local.defaults]
+time_min = "1970-01-01T00:00:00"
+time_max = "2024-01-01T00:00:00"
+project = "nextgems"
+experiment_id = "historical"
+institution_id = "MPI-M"
+source_id = "no_source_id"
+simulation_id = "no_simulation_id"
+frequency = "mon"
+realm = "atmos"
+grid_id = "gn"
+grid_label = "gn"
+bbox = [-10,30,30,60]
+
+[drs_settings.dialect.obs-fs.path_specs]
+dir_parts = [
+    "product", "institute", "instrument", "experiment", "time_frequency",
+    "realm", "cmor_table", "ensemble", "version", "variable",
+]
+file_parts = [
+    "variable", "time_frequency", "instrument", "experiment", "ensemble", "time"
+]
+[obs-fs]
+root_path = "./data/observations"
+drs_format = "obs-fs"
+[obs-fs.defaults]
+project = "observations"
+bbox = [0, 360, -60, 60]
+level_type = "2d"
+model = "sat"
+
+
+#[foo]
+#root_path = "./data/observations"
+#drs_format = "foo"
+#[foo.defaults]
+#project = "observations"
+#[drs_settings.dialect.foo]
+#sources    = ["data"]
+#[drs_settings.dialect.foo.data_specs.read_kws]
+#engine = "h5netcdf"
+#[drs_settings.dialect.foo.data_specs.globals]
+#institute = "institution_id"
+#experiment = "experiment_id"
+#ensemble = "ensemble"
+#project = "project_id"
+#resolution = "nominal_resolution"
+#grid_label = "grid_label"
+#vars = "__variable__"
+#[drs_settings.dialect.foo.data_specs.var_attrs]
+#variable = { var="{vars}", attr="long_name", default="__name__" }
+
+[cmip6-fs]
+root_path = "./data/model/global/cmip6"
+drs_format = "cmip6"
+
+[cordex-fs]
+root_path = "./data/model/regional"
+drs_format = "cordex"
+[cordex-fs.defaults]
+domain = "EUR-11"
+time_frequency = "mon"
+
+[obs-swift]
+root_path = "/observations"
+fs_type = "swift"
+drs_format = "obs-swift"
+[obs-swift.defaults]
+project = "observations"
+[obs-swift.storage_options]
+os_storage_url = "http://localhost:8081/v1/AUTH_test/test-obs"
+[drs_settings.dialect.obs-swift]
+inherits_from = "cmip5"
+
+[drs_settings.dialect.obs-swift.path_specs]
+dir_parts = [
+    "grid_label", "institute", "model", "experiment", "time_frequency",
+    "realm", "cmor_table", "ensemble", "version", "variable",
+]
+file_parts = ["variable", "time_frequency", "model", "experiment", "ensemble", "time"]
+
+[cmip6-swift]
+root_path = "http://localhost:8081/v1/AUTH_test/test/model/global/cmip6"
+drs_format = "cmip6"
+fs_type = "swift"
+[cmip6-swift.storage_options]
+os_storage_url = "http://localhost:8081/v1/AUTH_test/test"
+os_auth_url = "http://localhost:8081/auth/v1.0"
+os_password = "testing"
+os_project_id = "test"
+os_user_id = "tester"
+
+
+[obs-s3]
+root_path = "s3://test/data/obs"
+fs_type = "s3"
+[obs-s3.defaults]
+project = "observations"
+product = "grid"
+[obs-s3.storage_options]
+endpoint_url = "http://localhost:9000"
+anon = true
+
+[drs_settings.dialect.obs-s3]
+specs_dir = [
+    "product", "institute", "model", "experiment", "time_frequency",
+    "realm", "cmor_table", "ensemble", "version", "variable",
+]
+specs_file = ["variable", "time_frequency", "model", "experiment", "ensemble", "time"]
+
+[cmip6-s3]
+root_path = "s3://test/data/model/global/cmip6"
+drs_format = "cmip6"
+fs_type = "s3"
+[cmip6-s3.storage_options]
+endpoint_url = "http://localhost:9000"
+key = "minioadmin"
+secret = "minioadmin"
+
+
+[nextgems-s3]
+root_path = "s3://test/data/model/nextgems"
+drs_format = "nextgems_cycle3"
+fs_type = "s3"
+[nextgems-s3.storage_options]
+endpoint_url = "http://localhost:9000"
+key = "minioadmin"
+secret = "minioadmin"
+[nextgems-s3.defaults]
+project = "nextgems"
+simulation_id = "cycle3"
+
+
+[nextgems-swift]
+root_path = "/model/nextgems"
+drs_format = "nextgems_cycle3"
+fs_type = "swift"
+[nextgems-swift.storage_options]
+os_storage_url = "http://localhost:8081/v1/AUTH_test/test"
+os_auth_url = "http://localhost:8081/auth/v1.0"
+os_password = "testing"
+os_project_id = "test"
+os_user_id = "tester"
+[nextgems-swift.defaults]
+project = "nextgems"
+simulation_id = "cycle3"

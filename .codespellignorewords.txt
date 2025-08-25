@@ -1,0 +1,12 @@
+Freva
+DKRZ
+WarmWorld
+NextGEMS
+Zarr
+Zar
+zar
+StrongLink
+backend
+xarray
+Typer
+FastAPI
