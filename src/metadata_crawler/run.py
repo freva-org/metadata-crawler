@@ -255,11 +255,11 @@ async def async_add(
 
      .. code-block:: python
 
-         await async_add(
+        await async_add(
             store="my-data.yaml",
              config_file="~/data/drs-config.toml",
              data_set=["cmip6", "cordex"],
-         )
+        )
     """
     env = cast(os._Environ[str], os.environ.copy())
     old_level = apply_verbosity(verbosity)

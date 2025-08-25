@@ -111,6 +111,7 @@ class MongoIndex(BaseIndex):
             ),
         ] = "metadata",
     ) -> None:
+        """Add metadata to the mongoDB metadata server."""
         db = await self._prep_db_connection(database, url or "")
         for collection in self.index_names:
             await db[collection].create_index(self.unique_index, unique=True)
@@ -159,6 +160,7 @@ class MongoIndex(BaseIndex):
             ),
         ] = None,
     ) -> None:
+        """Remove metadata from the mongoDB metadata server."""
         db = await self._prep_db_connection(database, url or "")
         if not facets:
             logger.info("Nothing to delete")

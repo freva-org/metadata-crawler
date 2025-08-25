@@ -22,6 +22,7 @@ class S3Path(PathTemplate):
         self.storage_options = self.storage_options or {"anon": True}
 
     async def close(self) -> None:
+        """Close the connection."""
         client = await self._get_client()
         await client.s3.close()
 
@@ -29,18 +30,16 @@ class S3Path(PathTemplate):
         """S3 implementation for returning (fs, path) suitable for xarray.
 
         Parameters
-        ----------
+        ^^^^^^^^^^
         path:
             Path to the object store / file name
 
-
         Returns
-        -------
+        ^^^^^^^
         fsspec.AbstractFileSystem, str:
             The AbstractFileSystem class and the corresponding path to the
             data store.
         """
-
         return fsspec.filesystem("s3", **self.storage_options), path
 
     async def _get_client(self) -> S3FileSystem:
@@ -71,6 +70,7 @@ class S3Path(PathTemplate):
     async def iterdir(
         self, path: Union[str, Path, pathlib.Path]
     ) -> AsyncIterator[str]:
+        """Retrieve sub directories of directory."""
         path = str(path)
         client = await self._get_client()
         for _content in await client._lsdir(path):
@@ -80,11 +80,10 @@ class S3Path(PathTemplate):
     async def rglob(
         self, path: str | Path | pathlib.Path, glob_pattern: str = "*"
     ) -> AsyncIterator[Metadata]:
-        """Search recursively for files matching the extensions given by
-        'glob_pattern'.
+        """Search recursively for files matching a ``glob_pattern``.
 
         Parameters
-        ----------
+        ^^^^^^^^^^
         path: str
             A resource composed by:
                 - bucket, 'bucketname'
@@ -108,12 +107,12 @@ class S3Path(PathTemplate):
         """Get the full path (including any schemas/netlocs).
 
         Parameters
-        ----------
+        ^^^^^^^^^^
         path: str, asyncio.Path, pathlib.Path
             Path of the object store
 
         Returns
-        -------
+        ^^^^^^^
         str:
             URI of the object store
         """
@@ -125,12 +124,12 @@ class S3Path(PathTemplate):
         """Get the uri of the object store.
 
         Parameters
-        ----------
+        ^^^^^^^^^^
         path: str, asyncio.Path, pathlib.Path
             Path of the object store
 
         Returns
-        -------
+        ^^^^^^^
         str:
             URI of the object store
         """

@@ -43,7 +43,8 @@ class SwiftPath(PathTemplate):
 
     @staticmethod
     def _guess_tempauth_url(storage_url: str) -> str:
-        """
+        """Construct the swift url.
+
         Heuristic: For TempAuth, switch '/v1/...' to '/auth/v1.0' on same host:port.
         Returns None if storage_url doesn't look like a Swift v1 endpoint.
         """
@@ -62,7 +63,7 @@ class SwiftPath(PathTemplate):
 
     @property
     def url_split(self) -> SplitResult:
-        """SplitResult of the storage_url."""
+        """Retrieve the split parts of the storage url."""
         if self._url_split is not None:
             return self._url_split
         if not self._os_storage_url:
@@ -173,6 +174,7 @@ class SwiftPath(PathTemplate):
     async def iterdir(
         self, path: Union[str, Path, pathlib.Path]
     ) -> AsyncIterator[str]:
+        """Get all sub directories of a directory."""
         try:
             for data in await self._read_json(str(path)):
                 new_path = self._get_dir_from_path(data)

@@ -112,11 +112,10 @@ def convert_str_to_timestamp(
 
 
 def find_closest(msg: str, target: str, options: Iterable[str]) -> str:
-    """String for raising an Error with a text matching the closest options.
+    """Find the closest match for a target within a collection of items.
 
     Parameters
     ----------
-
     target:   The string to match.
     options:  A list of candidate strings.
 

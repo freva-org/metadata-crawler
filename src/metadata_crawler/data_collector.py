@@ -1,3 +1,5 @@
+"""Gather metadata and for adding them to a temporary metadata store."""
+
 from __future__ import annotations
 
 import asyncio
@@ -163,7 +165,6 @@ class DataCollector:
         self, drs_type: str, inp_dir: str, pos: int = 0
     ) -> None:
         """Walk recursively content until files are found or until the version."""
-
         op: Optional[Callable[..., Awaitable[None]]] = None
         store = self.config.datasets[drs_type].backend
         try:

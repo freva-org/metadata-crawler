@@ -75,6 +75,7 @@ class SolrIndex(BaseIndex):
             ),
         ] = IndexName().all,
     ) -> None:
+        """Remove metadata from the apache solr server."""
         query = []
         for key, value in facets or []:
             if key.lower() == "file":
@@ -125,6 +126,7 @@ class SolrIndex(BaseIndex):
             ),
         ] = None,
     ) -> None:
+        """Add metadata to the apache solr metadata server."""
         server = server or ""
         async with aiohttp.ClientSession(timeout=self.timeout) as session:
             for core in self.index_names:

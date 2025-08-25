@@ -66,6 +66,7 @@ class DateTimeEncoder(json.JSONEncoder):
     """JSON‐Encoder that emits datetimes as ISO‐8601 strings."""
 
     def default(self, obj: Any) -> Any:
+        """Set default time encoding."""
         if isinstance(obj, datetime):
             return obj.isoformat()
         return super().default(obj)
@@ -113,7 +114,7 @@ class DuckDBTypeMap(str, Enum):
 
 
 class IndexName(NamedTuple):
-    """A paired set of metadata indexes representing:
+    """A paired set of metadata indexes representations.
 
         - `latest`: Metadata for the latest version of each dataset.
         - `files`: Metadata for all available versions of datasets.
@@ -181,9 +182,10 @@ class IndexStore:
         index_name:
             The name of the index_name.
 
-        Yields:
-            List[Dict[str, Any]]:
-                Deserialised metadata records.
+        Yields
+        ^^^^^^
+        List[Dict[str, Any]]:
+            Deserialised metadata records.
         """
         yield [{}]  # pragma: no cover
 
@@ -217,6 +219,22 @@ class DuckDB(IndexStore):
     """IndexStore implementation using native DuckDB.
 
     Can write to disk, memory, or remote S3 via httpfs.
+
+    Parameters
+    ^^^^^^^^^^
+    path
+        file:// path, local filepath, ':memory:', or 's3://bucket/path.duckdb'
+    index_names
+        tuple of table names to create
+    schema
+        list of SchemaField defining column names/types
+    mode
+        'w' = recreate tables, 'a' = append
+    duckdb_config
+        dict of PRAGMA settings (e.g. S3 credentials, region, endpoint)
+    lock
+        optional threading.Lock for thread safety
+
     """
 
     driver = "parquet"
@@ -233,22 +251,6 @@ class DuckDB(IndexStore):
         storage_options: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ):
-        """
-        Parameters
-        ^^^^^^^^^^
-        path
-            file:// path, local filepath, ':memory:', or 's3://bucket/path.duckdb'
-        index_names
-            tuple of table names to create
-        schema
-            list of SchemaField defining column names/types
-        mode
-            'w' = recreate tables, 'a' = append
-        duckdb_config
-            dict of PRAGMA settings (e.g. S3 credentials, region, endpoint)
-        lock
-            optional threading.Lock for thread safety
-        """
         super().__init__(
             path, index_names, schema, lock=lock, storage_options=storage_options
         )
@@ -258,10 +260,9 @@ class DuckDB(IndexStore):
 
     @property
     def duckdb_httpfs_settings(self) -> Dict[str, Any]:
-        """
-        Return DuckDB httpfs S3 settings derived from
-        storage_options when path is s3://...
-        Empty dict for local paths.
+        """Return DuckDB httpfs S3 settings derived from storage options.
+
+        When path is s3://... empty dict for local paths.
         """
         if self._is_local_path:
             # You can extend this for gs://, abfs://, etc. For now only s3.
@@ -319,6 +320,7 @@ class DuckDB(IndexStore):
         return con
 
     def get_cursor(self) -> duckdb.DuckDBPyConnection:
+        """Create a new DB cursor for reading."""
         con = duckdb.connect(read_only=False)
         cursor = con.cursor()
         self.prepare_duckdb_connection(cursor)
@@ -431,15 +433,13 @@ class DuckDB(IndexStore):
             await asyncio.to_thread(cur.close)
 
     def close(self) -> None:
+        """Close the file."""
         if self.mode == "w":
             self.flush()
         self.con.close()
 
     def get_args(self, index_name: str) -> Dict[str, Any]:
-        """
-        For intake or downstream tools:
-        returns URI and a simple SQL expression.
-        """
+        """Return args for intake downstream tools."""
         return {
             "urlpath": self.get_path(index_name),
             "engine": "pyarrow",
@@ -526,9 +526,10 @@ class JSONLines(IndexStore):
         index_name:
             The name of the index_name.
 
-        Yields:
-            List[Dict[str, Any]]:
-                Deserialised metadata records.
+        Yields
+        ^^^^^^^
+        List[Dict[str, Any]]:
+            Deserialised metadata records.
         """
         chunk: List[Dict[str, Any]] = []
 
@@ -553,7 +554,6 @@ class CatalogueReader:
 
     Parameters
     ^^^^^^^^^^
-
     catalogue_file:
         Path to the intake catalogue
     batch_size:
@@ -590,8 +590,7 @@ class CatalogueReader:
 
 
 class CatalogueWriter:
-    """Create intake catalogues that store metadata entries for versioned datasets
-    (all versions and leatest versions).
+    """Create intake catalogues that store metadata entries.
 
     Parameters
     ^^^^^^^^^^
@@ -706,12 +705,12 @@ class CatalogueWriter:
             task.join()
 
     async def close(self) -> None:
-        """Base method for closing any connections."""
+        """Close any connections."""
         self.store.close()
         self._create_catalogue_file()
 
     def run_consumer(self) -> None:
-        """Setup all the consumers."""
+        """Set up all the consumers."""
         for task in self._tasks.values():
             task.start()
 
@@ -758,7 +757,7 @@ class CatalogueWriter:
             )
 
     async def _run_consumer_task(self, batch_size: int, this_worker: int) -> None:
-        """Setup a consumer task waiting for incoming data to be ingested."""
+        """Set up a consumer task waiting for incoming data to be ingested."""
         logger.info("Adding %i consumer to consumers.", this_worker)
         batch: list[tuple[str, dict[str, str | list[str] | list[float]]]] = []
         nbatch = 0

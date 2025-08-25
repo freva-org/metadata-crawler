@@ -44,7 +44,8 @@ def get_cli_output(*args: str) -> str:
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
-    "sphinx.ext.napoleon",
+    "numpydoc",
+    # "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
     "sphinx.ext.intersphinx",
     "sphinxext.opengraph",

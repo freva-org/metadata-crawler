@@ -152,7 +152,7 @@ exclude-file = "src/metadata_crawler/backends/lookup_tables.py"
 
 [tool.pydocstyle]
 convention = "numpy"
-add-ignore = "407"
+add-ignore = "D407, D105"
 
 [tool.tox]
 legacy_tox_ini = """

@@ -82,7 +82,6 @@ def index(
             server="localhost:8983",
         )
     """
-
     uvloop.run(
         async_index(
             index_system,

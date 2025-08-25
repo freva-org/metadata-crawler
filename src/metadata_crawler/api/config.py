@@ -1,3 +1,5 @@
+"""API for loading crawler configuration."""
+
 from __future__ import annotations
 
 import os
@@ -40,6 +42,8 @@ from .storage_backend import Metadata, TemplateMixin
 
 
 class BaseType(str, Enum):
+    """Basic types."""
+
     string = "string"
     integer = "integer"
     float = "float"
@@ -47,6 +51,8 @@ class BaseType(str, Enum):
 
 
 class Types(str, Enum):
+    """Types supported by the config."""
+
     string = "string"
     integer = "integer"
     float = "float"
@@ -61,6 +67,8 @@ class Types(str, Enum):
 
 
 class SchemaField(BaseModel):
+    """BaseModel defining the metadata schema."""
+
     key: str
     type: str
     required: bool = False
@@ -75,7 +83,8 @@ class SchemaField(BaseModel):
     @field_validator("type")
     @classmethod
     def parse_type(cls, v: str) -> str:
-        """
+        """Parse the data types.
+
         Accepts
         ^^^^^^^
           - 'string', 'integer', 'float', 'timestamp' -> length=None
@@ -96,7 +105,7 @@ class SchemaField(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def set_parsed(self) -> "SchemaField":
+    def _set_parsed(self) -> "SchemaField":
         parsed = getattr(self, "__parsed_type")
         self.base_type = BaseType(parsed["base"])
         self.length = parsed["length"]
@@ -132,12 +141,16 @@ class MetadataSource(StrEnum):
 
 
 class VarAttrRule(BaseModel):
+    """How to read attributes from variables."""
+
     var: str
     attr: str  # attribute name on DataArray.attrs
     default: Any = None
 
 
 class StatRule(BaseModel):
+    """How to apply statistics."""
+
     stat: Literal["min", "max", "minmax", "range", "bbox"]
     var: Optional[str] = None  # for numeric stats on a single var
     coords: Optional[Union[List[str], str]] = None  # for time range, etc.
@@ -147,8 +160,11 @@ class StatRule(BaseModel):
 
 
 class ConfigMerger:
-    """Loads a system and user TOML, merges user -> system under 'drs_settings',
-    preserves comments/formatting, and lets you inspect or write the result."""
+    """Load the system and user TOML, merges user -> system under.
+
+    Merging the config preserves comments/formatting, and lets you inspect or
+    write the result.
+    """
 
     def __init__(
         self,
@@ -221,6 +237,7 @@ class CrawlerSettings(BaseModel):
     search_path: Union[str, Path]
 
     def model_post_init(self, __context: Any = None) -> None:
+        """Apply rules after init."""
         self.search_path = str(self.search_path)
 
 
@@ -264,6 +281,8 @@ class PathSpecs(BaseModel):
 
 
 class DataSpecs(BaseModel):
+    """BaseModel for the configuration."""
+
     globals: Dict[str, str] = Field(default_factory=dict)
     var_attrs: Dict[str, VarAttrRule] = Field(default_factory=dict)
     stats: Dict[str, StatRule] = Field(default_factory=dict)
@@ -389,6 +408,7 @@ class Datasets(BaseModel):
         )
 
     def model_post_init(self, __context: Any = None) -> None:
+        """Apply rules after init."""
         storage_plugins = load_plugins("metadata_crawler.storage")
         try:
             self.backend = storage_plugins[self.fs_type](**self.storage_options)
@@ -399,6 +419,8 @@ class Datasets(BaseModel):
 
 
 class ConditionalRule(BaseModel):
+    """Define conditional rules."""
+
     type: Literal["conditional"] = "conditional"
     condition: str
     true: Any
@@ -406,11 +428,15 @@ class ConditionalRule(BaseModel):
 
 
 class CallRule(BaseModel):
+    """Define caller rules."""
+
     type: Literal["call"] = "call"
     call: str
 
 
 class LookupRule(BaseModel):
+    """Define lookup table rules."""
+
     type: Literal["lookup"] = "lookup"
     tree: List[str] = Field(default_factory=list)
     attribute: str
@@ -422,6 +448,8 @@ SpecialRule = Annotated[
 
 
 class Dialect(BaseModel):
+    """Settings for a DRS Format."""
+
     facets: Dict[str, str | list[str]] = Field(default_factory=dict)
     defaults: Dict[str, Any] = Field(default_factory=dict)
     path_specs: PathSpecs = Field(default_factory=PathSpecs)
@@ -438,7 +466,7 @@ class Dialect(BaseModel):
 
     @field_validator("sources", mode="after")
     @classmethod
-    def validate_sources(cls, srcs: List[str]) -> List[str]:
+    def _validate_sources(cls, srcs: List[str]) -> List[str]:
         # ensure only allowed sources are present
         names = {name.upper() for name in MetadataSource.__members__.keys()}
         values = {m.value for m in MetadataSource}
@@ -452,6 +480,8 @@ class Dialect(BaseModel):
 
 
 class DRSConfig(BaseModel):
+    """BaseModel model for the entire user config."""
+
     datasets: Dict[str, Datasets]
     index_schema: Dict[str, SchemaField] = Field(...)
     suffixes: List[str] = Field(default_factory=list)
@@ -461,6 +491,7 @@ class DRSConfig(BaseModel):
     dialect: Dict[str, Dialect]
 
     def model_post_init(self, __context: Any = None) -> None:
+        """Apply special rules after init."""
         self._defaults: Dict[str, Any] = {}
         self.suffixes = self.suffixes or [
             ".zarr",
@@ -493,8 +524,11 @@ class DRSConfig(BaseModel):
 
     @model_validator(mode="before")
     def _resolve_inheritance(cls, values: Any) -> Any:
-        """After loading raw TOML into dicts, but before model instantiation, merge
-        any dialects that declare `inherits_from`."""
+        """Apply inheritance.
+
+        After loading raw TOML into dicts, but before model instantiation, merge
+        any dialects that declare `inherits_from`.
+        """
         if not isinstance(values, dict):
             return values  # pragma: no cover
 
@@ -598,6 +632,7 @@ class DRSConfig(BaseModel):
             Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument]
         ] = None,
     ) -> DRSConfig:
+        """Load a drs config from file."""
         cfg = tomli.loads(ConfigMerger(config_path).dumps())
         settings = cfg.pop("drs_settings")
         try:

@@ -1,6 +1,4 @@
-"""API for adding new storage backends via :py:class:`BasePath`
-==============================================================
-"""
+"""API for adding new storage backends via :py:class:`BasePath`."""
 
 import abc
 import os
@@ -49,8 +47,7 @@ class TemplateMixin:
         *,
         max_passes: int = 2,
     ) -> Any:
-        """Recursively render Jinja2 templates found in strings within arbitrary
-        data.
+        """Recursively render Jinja2 templates found in strings within data.
 
         This function traverses common container types (``dict``, ``list``,
         ``tuple``, ``set``), dataclasses, namedtuples, and ``pathlib.Path`` objects.
@@ -246,7 +243,7 @@ class PathTemplate(abc.ABC, PathMixin, TemplateMixin, metaclass=BasePath):
         self.__post_init__()
 
     def __post_init__(self) -> None:
-        """This method is called after the __init__ method.
+        """Call this method after the __init__ get called.
 
         If you need to assign any attributes redefine this method in your class.
         """
@@ -347,7 +344,6 @@ class PathTemplate(abc.ABC, PathMixin, TemplateMixin, metaclass=BasePath):
         ^^^^^^^
         str: Metadata from the data.
         """
-
         with self.open_dataset(str(path), **read_kws) as dset:
             attrs = dset.attrs
             for var in dset.variables:

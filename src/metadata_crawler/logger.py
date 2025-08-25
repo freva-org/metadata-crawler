@@ -1,3 +1,5 @@
+"""Logging utilities."""
+
 import logging
 import logging.config
 from logging.handlers import RotatingFileHandler
@@ -94,6 +96,7 @@ class Logger(logging.Logger):
         *args: Any,
         **kwargs: Any,
     ) -> None:
+        """Log an error. When log level is smaller than INFO, log exceptions."""
         if self.level < logging.INFO:
             kwargs.setdefault("exc_info", True)
         self._log(logging.ERROR, msg, args, **kwargs)
@@ -104,7 +107,6 @@ logger = Logger()
 
 def add_file_handle(suffix: Optional[str], log_level: int = logging.INFO) -> None:
     """Add a file log handle to the logger."""
-
     base_name = f"{THIS_NAME}-{suffix}" if suffix else THIS_NAME
     log_dir = Path(appdirs.user_log_dir(THIS_NAME))
     log_dir.mkdir(exist_ok=True, parents=True)

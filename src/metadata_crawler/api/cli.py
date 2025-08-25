@@ -7,6 +7,8 @@ from pydantic import BaseModel, ConfigDict
 
 
 class Parameter(BaseModel):
+    """CLI Parameter model."""
+
     model_config = ConfigDict(extra="allow")
 
     args: Union[str, Tuple[str, ...]]
@@ -16,8 +18,7 @@ class Parameter(BaseModel):
 
 
 def cli_parameter(*args: str, **kwargs: Any) -> Dict[str, Any]:
-    """Parameters used to construct a
-    `argparse.Namespace <https://docs.python.org/3/library/argparse.html>`_.
+    """Construct a ``argparse.Namespace``.
 
     Parameters
     ^^^^^^^^^^
@@ -26,9 +27,7 @@ def cli_parameter(*args: str, **kwargs: Any) -> Dict[str, Any]:
     **kwargs:
         Any keyword arguments passed to ``argparse.ArgumentParser().add_arguent``
 
-
     """
-
     return Parameter(args=args, **kwargs).model_dump()
 
 

@@ -38,7 +38,7 @@ class IntakePath(PathTemplate):
 
     @staticmethod
     def _normalize_path(path: str) -> str:
-        """Turn file:// URLs into OS paths; leave others as-is"""
+        """Turn file:// URLs into OS paths; leave others as-is."""
         if isinstance(path, str) and path.startswith("file://"):
             return unquote(urlparse(path).path)
         return path
@@ -150,7 +150,6 @@ class IntakePath(PathTemplate):
         self, path: str | Path | pathlib.Path, glob_pattern: str = "*"
     ) -> AsyncIterator[Metadata]:
         """Go through catalogue path."""
-        """Check if the catalogue is a esm datastore."""
         path = str(path)
         if self._is_esm_catalogue(path):
             cat: intake.catalog.Catalog = intake.open_esm_datastore(
@@ -197,7 +196,6 @@ class IntakePath(PathTemplate):
         str:
             URI of the object store
         """
-
         fs_type, path = fsspec.core.split_protocol(str(path))
         fs_type = fs_type or "file"
         return f"{fs_type}://{path}"

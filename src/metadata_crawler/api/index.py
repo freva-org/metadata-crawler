@@ -1,6 +1,4 @@
-"""API for adding new cataloging systems via :py:class:`BaseIngest`
-==================================================================
-"""
+"""API for adding new cataloging systems."""
 
 from __future__ import annotations
 
@@ -87,7 +85,6 @@ class BaseIndex:
         index_name:
             Name of the index that should be read.
         """
-
         if self._store:
             batch = []
             num_items = 0
