@@ -20,23 +20,31 @@ import pstats
 import sys
 import time
 from pathlib import Path
+from typing import Any, Optional
 
 from metadata_crawler import add
 
 # --- your workload ---------------------------------------------------------
 
 
-def run_workload(num_files: int) -> None:
+def run_workload(
+    num_files: int,
+    data_set: str = "cordex-benchmark",
+    config_file: Optional[str] = None,
+) -> None:
     # Keep the same arguments you currently use:
 
     env = os.environ.copy()
+    config_file = Path(
+        config_file or Path(__file__).parent.parent / "drs_config.toml"
+    )
     try:
         os.environ["MDC_MAX_FILES"] = str(num_files)
         add(
             "data.yml",
-            config_file=Path(__file__).parent.parent / "drs_config.toml",
+            config_file=config_file,
             batch_size=2_000,
-            data_set=["cordex-benchmark"],
+            data_set=[data_set],
             verbosity=0,
             catalogue_backend="jsonlines",
             data_store_prefix="benchmark",
@@ -48,7 +56,7 @@ def run_workload(num_files: int) -> None:
 # --- profiling harness -----------------------------------------------------
 
 
-def run_with_cprofile(top: int, num_files: int) -> None:
+def run_with_cprofile(top: int, num_files: int, **kwargs: Any) -> None:
     """
     Run workload once, collect cProfile simultaneously.
     cProfile gives cumtime;
@@ -58,7 +66,7 @@ def run_with_cprofile(top: int, num_files: int) -> None:
     t0 = time.perf_counter()
     prof.enable()
     try:
-        run_workload(num_files)
+        run_workload(num_files, **kwargs)
     finally:
         prof.disable()
         t1 = time.perf_counter()
@@ -94,6 +102,18 @@ def main(argv=None):
         default=10_000,
         help="Number of max files to ingest.",
     )
+    parser.add_argument(
+        "--config-file",
+        type=Path,
+        default=None,
+        help="Config file.",
+    )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default="cordex-benchmark",
+        help="The dataset that is tests.",
+    )
     args = parser.parse_args(argv)
 
     # Make sure we flush all reports even on unexpected exit
@@ -102,7 +122,12 @@ def main(argv=None):
         sys.stdout.flush()
         sys.stderr.flush()
 
-    run_with_cprofile(top=args.top, num_files=args.num_files)
+    run_with_cprofile(
+        top=args.top,
+        num_files=args.num_files,
+        data_set=args.dataset,
+        config_file=args.config_file,
+    )
 
 
 if __name__ == "__main__":
