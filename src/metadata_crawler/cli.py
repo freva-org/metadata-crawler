@@ -197,6 +197,13 @@ class ArgParse:
             help="Set the batch size for ingestion.",
         )
         parser.add_argument(
+            "--scan-concurrency",
+            "--concurrency",
+            type=int,
+            default=64,
+            help="Level of aync concurrency for data discovery.",
+        )
+        parser.add_argument(
             "-d",
             "--data-object",
             "--data-obj",

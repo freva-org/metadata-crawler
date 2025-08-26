@@ -218,6 +218,7 @@ async def async_add(
     password: bool = False,
     threads: Optional[int] = None,
     verbosity: int = 0,
+    **kwargs: Any,
 ) -> None:
     """Harvest metadata from storage systems and add them to an intake catalogue.
 
@@ -258,6 +259,12 @@ async def async_add(
         Set the number of threads for collecting.
     verbosity:
         Set the verbosity of the system.
+
+    Other Parameters
+    ^^^^^^^^^^^^^^^^
+
+    **kwargs:
+        Additional keyword arguments.
 
 
     Examples
@@ -310,6 +317,7 @@ async def async_add(
             data_store_prefix=data_store_prefix,
             threads=threads,
             storage_options=storage_options or {},
+            **kwargs,
         ) as data_col:
             await data_col.ingest_data()
             num_files = data_col.ingested_objects

@@ -154,6 +154,7 @@ def add(
     threads: Optional[int] = None,
     verbosity: int = 0,
     password: bool = False,
+    **kwargs: Any,
 ) -> None:
     """Harvest metadata from storage systems and add them to an intake catalogue.
 
@@ -197,6 +198,12 @@ def add(
     verbosity:
         Set the verbosity of the system.
 
+    Other Parameters
+    ^^^^^^^^^^^^^^^^
+
+    **kwargs:
+        Additional keyword arguments.
+
 
     Examples
     ^^^^^^^^
@@ -225,5 +232,6 @@ def add(
             threads=threads,
             storage_options=storage_options,
             verbosity=verbosity,
+            **kwargs,
         )
     )

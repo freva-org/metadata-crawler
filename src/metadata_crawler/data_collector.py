@@ -28,6 +28,8 @@ from .api.storage_backend import PathTemplate
 from .logger import logger
 from .utils import Console, PrintLock, create_async_iterator, daemon
 
+ScanItem = tuple[str, str, bool]
+
 
 class DataCollector:
     """Collect file objects from a given directory object and search for files.
@@ -62,6 +64,11 @@ class DataCollector:
         self._num_files = 0
         self.index_name = index_name
         self.config = DRSConfig.load(config_file)
+        kwargs.setdefault("scan_concurrency", os.getenv("SCAN_CONCURRENCY", "64"))
+        self._scan_concurrency: int = int(kwargs.pop("scan_concurrency", 64))
+        self._scan_queue: asyncio.Queue[Optional[ScanItem]] = asyncio.Queue(
+            maxsize=int(kwargs.pop("scan_queue_size", 10_000))
+        )
         self.ingest_queue = CatalogueWriter(
             str(metadata_store or "metadata.yaml"),
             index_name=index_name,
@@ -113,7 +120,7 @@ class DataCollector:
     def _print_performance(self) -> None:
 
         spinner = rich.spinner.Spinner(
-            os.getenv("SPINNER", "earth"), text="[b]Perparing crawler ...[/]"
+            os.getenv("SPINNER", "earth"), text="[b]Preparing crawler ...[/]"
         )
         with Live(spinner, console=Console, refresh_per_second=1, transient=True):
             while self._print_status is True:
@@ -188,11 +195,25 @@ class DataCollector:
             rank += 1
         return None
 
+    async def _scan_worker(self) -> None:
+        """Drain _scan_queue and run _ingest_dir concurrently (bounded pool)."""
+        while True:
+            item = await self._scan_queue.get()  # blocks
+            if item is None:  # sentinel -> exit
+                # do not task_done() for sentinel
+                break
+            drs_type, path, iterable = item
+            try:
+                await self._ingest_dir(drs_type, path, iterable=iterable)
+            except Exception as error:
+                logger.error(error)
+            finally:
+                self._scan_queue.task_done()
+
     async def _iter_content(
         self, drs_type: str, inp_dir: str, pos: int = 0
     ) -> None:
-        """Walk recursively content until files are found or until the version."""
-        op: Optional[Callable[..., Coroutine[Any, Any, None]]] = None
+        """Walk recursively until files or the version level is reached."""
         store = self.config.datasets[drs_type].backend
         if self._test_env():
             return
@@ -205,18 +226,21 @@ class DataCollector:
         except Exception as error:
             logger.error("Error checking file %s", error)
             return
+
         iterable = False if suffix == ".zarr" else iterable
+        op: Optional[Callable[..., Coroutine[Any, Any, None]]] = None
+
         if is_file and suffix in self.config.suffixes:
             op = self._ingest_dir
         elif pos <= 0 or suffix == ".zarr":
             op = self._ingest_dir
-        if op:
-            try:
-                await self._ingest_dir(drs_type, inp_dir, iterable=iterable)
-            except Exception as error:
-                logger.error(error)
+
+        if op is not None:
+            # enqueue the heavy scan; workers will run _ingest_dir concurrently
+            await self._scan_queue.put((drs_type, inp_dir, iterable))
             return
-        # fallback to recursing into sub-dirs
+
+        # otherwise, recurse sequentially (cheap) — no task per directory
         try:
             async for sub in store.iterdir(inp_dir):
                 await self._iter_content(drs_type, sub, pos - 1)
@@ -224,15 +248,29 @@ class DataCollector:
             logger.error(error)
 
     async def ingest_data(self) -> None:
-        """Walk sub directories until files are found or until the version."""
+        """Produce scan tasks and process them with a bounded worker pool."""
         self._print_status = True
         self._print_performance()
+
         async with asyncio.TaskGroup() as tg:
-            for drs_type, path in self.search_objects:
+            # start scan workers
+            for _ in range(self._scan_concurrency):
+                tg.create_task(self._scan_worker())
+
+            # produce scan items by walking roots sequentially
+            for drs_type, path in self.search_objects:  # <- property is sync
                 pos = self.config.max_directory_tree_level(
                     path, drs_type=drs_type
                 )
-                tg.create_task(self._iter_content(drs_type, path, pos))
+                await self._iter_content(drs_type, path, pos)
+
+            # wait until all queued scan items are processed
+            await self._scan_queue.join()
+
+            # stop workers (one sentinel per worker)
+            for _ in range(self._scan_concurrency):
+                await self._scan_queue.put(None)
+
         logger.info(
             "%i ingestion tasks have been completed", len(self._search_objects)
         )

@@ -166,7 +166,7 @@ deps = -e .[tests]
 
 commands =
     pytest -vv --cov=metadata_crawler --cov-report=html:coverage_report --junitxml report.xml --cov-report xml tests/
-    python3 -m coverage report --fail-under=5 --precision=2
+    python3 -m coverage report --fail-under=98 --precision=2
 
 [testenv:docs]
 deps = -e .[doc]
