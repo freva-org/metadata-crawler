@@ -4,6 +4,7 @@ import abc
 import os
 import pathlib
 import threading
+from functools import lru_cache
 from getpass import getuser
 from typing import (
     Any,
@@ -22,10 +23,12 @@ from urllib.parse import urlsplit
 import fsspec
 import xarray as xr
 from anyio import Path
-from jinja2 import Environment, Undefined
+from jinja2 import Environment, Template, Undefined
 from pydantic import BaseModel, Field
 
 from ..backends.lookup_tables import cmor_lookup
+
+ENV = Environment(undefined=Undefined, autoescape=False)
 
 
 class Metadata(BaseModel):
@@ -35,13 +38,35 @@ class Metadata(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
+@lru_cache(maxsize=1024)
+def _compile_jinja_template(s: str) -> Template:
+    return ENV.from_string(s)
+
+
 class TemplateMixin:
     """Apply templating egine jinja2."""
 
-    storage_options: Optional[Dict[str, Any]] = None
+    env_map: Optional[Dict[str, str]] = None
+    _rendered = False
 
-    @staticmethod
+    def prep_template_env(self) -> None:
+        """Prepare the jinja2 env."""
+
+        def _env_get(name: str, default: Optional[str] = None) -> Optional[str]:
+            return os.getenv(name, default)
+
+        def _getenv_filter(
+            varname: str, default: Optional[str] = None
+        ) -> Optional[str]:
+            return os.getenv(varname, default)
+
+        ENV.globals.setdefault("env", _env_get)
+        ENV.globals.setdefault("ENV", dict(os.environ))
+        ENV.filters.setdefault("getenv", _getenv_filter)
+        self._rendered = True
+
     def render_templates(
+        self,
         data: Any,
         context: Mapping[str, Any],
         *,
@@ -104,30 +129,21 @@ class TemplateMixin:
                 "path": {"root": "/home/{{ user }}", "cfg": "{{ root }}/cfg"},
             }
             ctx = {"name": "Ada", "count": 3, "user": "ada", "root": "/opt/app"}
-            render_templates(data, ctx)
+            TemplateMixin().render_templates(data, ctx)
             # {'greeting': 'Hello, Ada!',
             #   'items': ['3 item(s)', 42],
             #    'path': {'root': '/home/ada', 'cfg': '/opt/app/cfg'}}
 
         """
-        env = Environment(undefined=Undefined, autoescape=False)
-
-        env_map = dict(os.environ)
-
-        def _env_get(name: str, default: Any = None) -> Any:
-            return env_map.get(name, default)
-
-        def _getenv_filter(varname: str, default: Any = None) -> Any:
-            return env_map.get(varname, default)
-
-        env.globals.setdefault("env", _env_get)
-        env.globals.setdefault("ENV", env_map)
-        env.filters.setdefault("getenv", _getenv_filter)
+        if not self._rendered:
+            self.prep_template_env()
 
         def _render_str(s: str) -> str:
             out = s
+            if ("{{" not in s) and ("{%" not in s):
+                return out
             for _ in range(max_passes):
-                new = env.from_string(out).render(context)
+                new = _compile_jinja_template(out).render(context)
                 if new == out:
                     break
                 out = new

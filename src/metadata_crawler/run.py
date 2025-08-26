@@ -8,14 +8,14 @@ from types import NoneType
 from typing import Any, Dict, List, Optional, Sequence, Union, cast
 
 import tomlkit
-from rich import print as pprint
 from rich.prompt import Prompt
 
 from .api.config import CrawlerSettings, DRSConfig, strip_protocol
-from .api.metadata_stores import IndexName
+from .api.metadata_stores import CatalogueBackendType, IndexName
 from .data_collector import DataCollector
 from .logger import apply_verbosity, logger
 from .utils import (
+    Console,
     find_closest,
     load_plugins,
     timedelta_to_str,
@@ -27,9 +27,11 @@ FilesArg = Optional[Union[str, Path, Sequence[Union[str, Path]]]]
 def _norm_files(catalogue_files: FilesArg) -> List[str]:
     if catalogue_files is None:
         return [""]
-    if isinstance(catalogue_files, (str, Path)):
-        return [str(catalogue_files)]
-    return [str(p) for p in catalogue_files]
+    return (
+        [str(catalogue_files)]
+        if isinstance(catalogue_files, (str, Path))
+        else [str(p) for p in catalogue_files]
+    )
 
 
 def _get_search(
@@ -207,10 +209,10 @@ async def async_add(
     data_object: Optional[Union[str, List[str]]] = None,
     data_set: Optional[Union[List[str], str]] = None,
     data_store_prefix: str = "metadata",
-    batch_size: int = 2500,
+    batch_size: int = 25_000,
     comp_level: int = 4,
     storage_options: Optional[Dict[str, Any]] = None,
-    catalogue_backend: str = "duckdb",
+    catalogue_backend: CatalogueBackendType = "jsonlines",
     latest_version: str = IndexName().latest,
     all_versions: str = IndexName().all,
     password: bool = False,
@@ -316,7 +318,7 @@ async def async_add(
         logger.info("Discovered: %s files", f"{files_discovered:10,.0f}")
         logger.info("Ingested: %s files", f"{num_files:10,.0f}")
         logger.info("Spend: %s", dt)
-        pprint(
+        Console.print(
             (
                 f"[bold]Ingested [green]{num_files:10,.0f}[/green] "
                 f"within [green]{dt}[/green][/bold]"

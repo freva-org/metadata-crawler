@@ -193,7 +193,7 @@ class ArgParse:
             "-b",
             "--batch-size",
             type=int,
-            default=2500,
+            default=25_000,
             help="Set the batch size for ingestion.",
         )
         parser.add_argument(

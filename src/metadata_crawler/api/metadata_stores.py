@@ -2,6 +2,7 @@
 
 import abc
 import asyncio
+import gzip
 import json
 import multiprocessing as mp
 import os
@@ -9,11 +10,10 @@ import re
 import time
 from datetime import datetime
 from enum import Enum
-from functools import cached_property
-from io import TextIOWrapper
+from io import BytesIO
 from pathlib import Path
 from queue import Empty, Queue
-from threading import Lock, Thread
+from threading import Event, Lock, Thread
 from typing import (
     Any,
     AsyncIterator,
@@ -27,13 +27,13 @@ from typing import (
     Optional,
     Tuple,
     Type,
+    TypeAlias,
     Union,
+    cast,
 )
-from urllib.parse import urlsplit
 
-import duckdb
 import fsspec
-import pyarrow as pa
+import orjson
 import yaml
 
 import metadata_crawler
@@ -48,6 +48,7 @@ ISO_FORMAT_REGEX = re.compile(
 )
 
 BATCH_SECS_THRESHOLD = 20
+BATCH_ITEM = List[Tuple[str, Dict[str, Any]]]
 
 
 def _run_async(
@@ -97,22 +98,6 @@ class DateTimeDecoder(json.JSONDecoder):
         return obj
 
 
-class DuckDBTypeMap(str, Enum):
-    """Mapping from logical BaseType values to SQLAlchemy types."""
-
-    string = "VARCHAR"
-    integer = "BIGINT"
-    float = "DOUBLE"
-    timestamp = "TIMESTAMP"
-
-    @classmethod
-    def get_type(cls, _type: str, multi_valued: bool = False) -> str:
-        """Get the type duckdb."""
-        if not multi_valued:
-            return cls[_type].value
-        return f"{cls[_type].value}[]"
-
-
 class IndexName(NamedTuple):
     """A paired set of metadata indexes representations.
 
@@ -142,22 +127,26 @@ class IndexStore:
         path: str,
         index_name: IndexName,
         schema: Dict[str, SchemaField],
-        lock: Optional[Lock] = None,
-        batch_size: int = 2500,
+        batch_size: int = 25_000,
         mode: Literal["r", "w"] = "r",
         storage_options: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> None:
-        self._lock = lock or Lock()
+        self._queue: Queue[Union[object, BATCH_ITEM]] = Queue()
+        self._SENTINEL = object()
         self.storage_options = storage_options or {}
         self._fs, self._is_local_path = self.get_fs(path, **self.storage_options)
         self._path = self._fs.unstrip_protocol(path)
         self.schema = schema
-        self.batch_size = min(1000, batch_size)
+        self.batch_size = batch_size
         self.index_names: Tuple[str, str] = (index_name.latest, index_name.all)
         self.mode = mode
         self._rows_since_flush = 0
         self._last_flush = time.time()
+        self._writer_thread: Optional[Thread] = Thread(
+            target=self.batch_writer, daemon=True
+        )
+        self._writer_thread.start()
 
     @staticmethod
     def get_fs(
@@ -199,8 +188,32 @@ class IndexStore:
         )
         return new_path
 
+    def add(self, metadata_batch: List[Tuple[str, Dict[str, Any]]]) -> None:
+        """Add a chunk metadata to the store."""
+        self._queue.put(metadata_batch)
+
+    def join(self) -> None:
+        """Shutdown the writer task."""
+        self._queue.put(self._SENTINEL)
+        if self._writer_thread is not None:
+            self._writer_thread.join()
+            self._writer_thread = None
+
+    def batch_writer(self) -> None:
+        """Start the batch writer daemon."""
+        get = self._queue.get
+        add = self._add
+        while True:
+            item = get()
+            if item is self._SENTINEL:
+                break
+            try:
+                add(cast(BATCH_ITEM, item))
+            except Exception as error:
+                logger.error(error)
+
     @abc.abstractmethod
-    async def add(self, metadata_batch: List[Tuple[str, Dict[str, Any]]]) -> None:
+    def _add(self, metadata_batch: List[Tuple[str, Dict[str, Any]]]) -> None:
         """Add a chunk metadata to the store."""
         ...  # pragma: no cover
 
@@ -215,238 +228,6 @@ class IndexStore:
         ...  # pragma: no cover
 
 
-class DuckDB(IndexStore):
-    """IndexStore implementation using native DuckDB.
-
-    Can write to disk, memory, or remote S3 via httpfs.
-
-    Parameters
-    ^^^^^^^^^^
-    path
-        file:// path, local filepath, ':memory:', or 's3://bucket/path.duckdb'
-    index_names
-        tuple of table names to create
-    schema
-        list of SchemaField defining column names/types
-    mode
-        'w' = recreate tables, 'a' = append
-    duckdb_config
-        dict of PRAGMA settings (e.g. S3 credentials, region, endpoint)
-    lock
-        optional threading.Lock for thread safety
-
-    """
-
-    driver = "parquet"
-    suffix = ".parquet"
-
-    def __init__(
-        self,
-        path: str,
-        index_names: IndexName,
-        schema: Dict[str, SchemaField],
-        mode: Literal["r", "w"] = "r",
-        lock: Optional[Lock] = None,
-        duckdb_config: Optional[Dict[str, Any]] = None,
-        storage_options: Optional[Dict[str, Any]] = None,
-        **kwargs: Any,
-    ):
-        super().__init__(
-            path, index_names, schema, lock=lock, storage_options=storage_options
-        )
-        self.mode = mode
-        if mode == "w":
-            self._create_tables()
-
-    @property
-    def duckdb_httpfs_settings(self) -> Dict[str, Any]:
-        """Return DuckDB httpfs S3 settings derived from storage options.
-
-        When path is s3://... empty dict for local paths.
-        """
-        if self._is_local_path:
-            # You can extend this for gs://, abfs://, etc. For now only s3.
-            return {}
-
-        so = self.storage_options
-        key = so.get("key") or so.get("username")  # s3fs accepts "key"
-        secret = so.get("secret") or so.get("password")
-        token = so.get("token")  # optional session token
-
-        endpoint_url = so.get("endpoint_url")
-        region = so.get("region") or so.get("region_name") or "eu-dkrz-1"
-
-        endpoint_hostport = None
-        use_ssl = None
-
-        use_ssl = True
-        url_style = "auto"
-        url_style = "auto"
-        if endpoint_url:
-            url_style = so.get("addressing_style") or "path"
-            ep = urlsplit(endpoint_url)
-            endpoint_hostport = ep.netloc or ep.path
-            use_ssl = ep.scheme == "https"
-
-        settings: Dict[str, Any] = {
-            "s3_access_key_id": key or "",
-            "s3_secret_access_key": secret or "",
-            "s3_region": region,
-            "s3_url_style": url_style,
-            "s3_use_ssl": bool(use_ssl),
-        }
-        if endpoint_hostport:
-            settings["s3_endpoint"] = endpoint_hostport
-        if token:
-            settings["s3_session_token"] = token
-        return settings
-
-    def prepare_duckdb_connection(self, con: duckdb.DuckDBPyConnection) -> None:
-        """Install/load httpfs and apply settings if needed."""
-        con.execute("INSTALL httpfs;")
-        con.execute("LOAD httpfs;")
-        for k, v in self.duckdb_httpfs_settings.items():
-            if isinstance(v, bool):
-                con.execute(f"SET {k} = {'true' if v else 'false'};")
-            else:
-                # Use parameter binding to be safe with strings
-                con.execute(f"SET {k} = ?", [v])
-
-    @cached_property
-    def con(self) -> duckdb.DuckDBPyConnection:
-        """Make a db connection."""
-        con = duckdb.connect(read_only=False)
-        self.prepare_duckdb_connection(con)
-        return con
-
-    def get_cursor(self) -> duckdb.DuckDBPyConnection:
-        """Create a new DB cursor for reading."""
-        con = duckdb.connect(read_only=False)
-        cursor = con.cursor()
-        self.prepare_duckdb_connection(cursor)
-        return cursor
-
-    def _duck_type(self, fld: SchemaField) -> str:
-        """Translate SchemaField to DuckDB column type."""
-        base = fld.base_type.value
-        return DuckDBTypeMap.get_type(
-            base, multi_valued=fld.length is not None or fld.multi_valued
-        )
-
-    def _create_tables(self) -> None:
-        for table in self.index_names:
-            cols = []
-            self.con.execute(f"DROP TABLE IF EXISTS {table};")
-            for name, fld in self.schema.items():
-                coldef = f"{name} {self._duck_type(fld)}"
-                if fld.required:
-                    coldef += " NOT NULL"
-                cols.append(coldef)
-            col_expr = ", ".join(cols)
-            self.con.execute(
-                f'CREATE TABLE IF NOT EXISTS "{table}"  ({col_expr});'
-            )
-            self.con.execute(
-                (
-                    f'CREATE TABLE IF NOT EXISTS "staging_{table}" '
-                    f'AS SELECT * FROM "{table}" WHERE 0=1;'
-                )
-            )
-
-    def _flush_locked(self) -> None:
-        """Export only staging rows to Parquet, then clear staging."""
-        any_export = False
-        for table in self.index_names:
-            res = self.con.execute(
-                f'SELECT COUNT(*) FROM "staging_{table}"'
-            ).fetchone()
-            n = res[0] if res else 0
-            if n == 0:
-                continue
-            any_export = True
-            escaped_path = self.get_path(table).replace("'", "''")
-            self.con.execute("BEGIN;")
-            escaped_table = f"staging_{table}".replace('"', '""')
-            sql = (
-                f'COPY (SELECT * FROM "{escaped_table}") TO '
-                f"'{escaped_path}' (FORMAT PARQUET, COMPRESSION ZSTD);"
-            )
-            logger.debug("Executing COPY:\n%s", sql)
-            try:
-                # Write only staging rows to new parquet files
-                self.con.execute(sql)
-                logger.debug("Truncating table staging_%s", table)
-                self.con.execute(f'TRUNCATE TABLE "staging_{table}";')
-                self.con.execute("COMMIT;")
-            except Exception as error:
-                self.con.execute("ROLLBACK;")
-                logger.error(error)
-
-        if any_export:
-            self._rows_since_flush = 0
-            self._last_flush = time.time()
-
-    async def add(self, metadata_batch: List[Tuple[str, Dict[str, Any]]]) -> None:
-        """Batch‐insert metadata dicts."""
-        by_table: Dict[str, List[List[Any]]] = {t: [] for t in self.index_names}
-        for table, meta in metadata_batch:
-            row = [meta[name] for name in self.schema]
-            by_table[table].append(row)
-
-        with self._lock:
-
-            for table, rows in by_table.items():
-                if not rows:
-                    continue
-                placeholders = ", ".join("?" for _ in self.schema)
-                sql = f'INSERT INTO "staging_{table}" VALUES ({placeholders});'
-
-                await asyncio.to_thread(self.con.executemany, sql, rows)
-                self._rows_since_flush += len(rows)
-            if (
-                self._rows_since_flush >= self.batch_size
-                or (time.time() - self._last_flush) >= BATCH_SECS_THRESHOLD
-            ):
-                await asyncio.to_thread(self._flush_locked)
-
-    def flush(self) -> None:
-        """Public flush (threads safe)."""
-        with self._lock:
-            self._flush_locked()
-
-    async def read(self, index_name: str) -> AsyncIterator[List[Dict[str, Any]]]:
-        """Stream rows from DuckDB using a DBAPI cursor.
-
-        Yields batches of dicts of size self.batch_size.
-        """
-        escaped_file = self.get_path(index_name).replace("'", "''")
-        sql = f"SELECT * FROM read_parquet('{escaped_file}')"
-        logger.debug("Reading from file: %s", sql)
-        cur = await asyncio.to_thread(self.get_cursor)
-        try:
-            await asyncio.to_thread(cur.execute, sql)
-            for table in await asyncio.to_thread(
-                cur.fetch_record_batch, self.batch_size
-            ):
-                yield pa.Table.from_batches([table]).to_pylist()
-        finally:
-            await asyncio.to_thread(cur.close)
-
-    def close(self) -> None:
-        """Close the file."""
-        if self.mode == "w":
-            self.flush()
-        self.con.close()
-
-    def get_args(self, index_name: str) -> Dict[str, Any]:
-        """Return args for intake downstream tools."""
-        return {
-            "urlpath": self.get_path(index_name),
-            "engine": "pyarrow",
-            "storage_options": self.storage_options,
-        }
-
-
 class JSONLines(IndexStore):
     """Write metadata to gzipped JSONLines files."""
 
@@ -458,22 +239,19 @@ class JSONLines(IndexStore):
         path: str,
         index_name: IndexName,
         schema: Dict[str, SchemaField],
-        lock: Optional[Lock] = None,
         mode: Literal["w", "r"] = "r",
         storage_options: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ):
-        self._lock = lock or Lock()
-        self._streams: Dict[str, TextIOWrapper] = {}
+        self._streams: Dict[str, BytesIO] = {}
         super().__init__(
             path,
             index_name,
             schema,
-            lock=lock,
             mode=mode,
             storage_options=storage_options,
         )
-        comp_level = int(kwargs.get("comp_level", "4"))
+        self._comp_level = int(kwargs.get("comp_level", "4"))
         for name in self.index_names:
             out_path = self.get_path(name)
             if mode == "w":
@@ -482,28 +260,39 @@ class JSONLines(IndexStore):
                     self._fs.makedirs(parent, exist_ok=True)
                 except Exception:  # pragma: no cover
                     pass  # pragma: no cover
-            self._streams[name] = self._fs.open(
-                out_path,
-                mode=f"{mode}t",
-                compression="gzip",
-                compression_level=comp_level,
-                encoding="utf-8",
-                newline="\n",
-            )
+                self._streams[name] = self._fs.open(out_path, mode=f"{mode}b")
 
-    async def add(self, metadata_batch: List[Tuple[str, Dict[str, Any]]]) -> None:
+    @staticmethod
+    def _encode_records(records: List[Dict[str, Any]]) -> bytes:
+        """Serialize a list of dicts into one JSONL bytes blob."""
+        parts = [orjson.dumps(rec) for rec in records]
+        return b"".join(p + b"\n" for p in parts)
+
+    def _gzip_once(self, payload: bytes) -> bytes:
+        """Compress a whole JSONL blob into a single gz member (fast)."""
+        return gzip.compress(payload, compresslevel=self._comp_level)
+
+    def _add(self, metadata_batch: List[Tuple[str, Dict[str, Any]]]) -> None:
         """Add a batch of metadata to the gzip store."""
+        by_index: Dict[str, List[Dict[str, Any]]] = {
+            name: [] for name in self.index_names
+        }
         for index_name, metadata in metadata_batch:
-            await asyncio.to_thread(
-                self._streams[index_name].write,
-                json.dumps(metadata, ensure_ascii=False, cls=DateTimeEncoder)
-                + "\n",
-            )
+            by_index[index_name].append(metadata)
+        for index_name, records in by_index.items():
+            if not records:
+                continue
+            payload = self._encode_records(records)
+            gz = self._gzip_once(payload)
+            self._streams[index_name].write(gz)
 
     def close(self) -> None:
         """Close the files."""
         for stream in self._streams.values():
-            stream.flush()
+            try:
+                stream.flush()
+            except Exception:
+                pass
             stream.close()
 
     def get_args(self, index_name: str) -> Dict[str, Any]:
@@ -531,22 +320,29 @@ class JSONLines(IndexStore):
         List[Dict[str, Any]]:
             Deserialised metadata records.
         """
-        chunk: List[Dict[str, Any]] = []
-
-        async for line in create_async_iterator(self._streams[index_name]):
-            chunk.append(json.loads(line, cls=DateTimeDecoder))
-            if len(chunk) >= self.batch_size:
+        with self._fs.open(
+            self.get_path(index_name),
+            mode="rt",
+            compression="gzip",
+            encoding="utf-8",
+        ) as stream:
+            chunk: List[Dict[str, Any]] = []
+            async for line in create_async_iterator(stream):
+                chunk.append(json.loads(line, cls=DateTimeDecoder))
+                if len(chunk) >= self.batch_size:
+                    yield chunk
+                    chunk = []
+            if chunk:
                 yield chunk
-                chunk = []
-        if chunk:
-            yield chunk
 
 
 class CatalogueBackends(Enum):
     """Define the implemented catalogue backends."""
 
-    duckdb = DuckDB
     jsonlines = JSONLines
+
+
+CatalogueBackendType: TypeAlias = Literal["jsonlines"]
 
 
 class CatalogueReader:
@@ -619,7 +415,7 @@ class CatalogueWriter:
         **kwargs: Any,
     ) -> None:
         self.config = config or DRSConfig.load()
-        self._done = 0
+        self._done = Event()
         self._num_objects = 0
         self.lock = Lock()
         storage_options = storage_options or {}
@@ -638,7 +434,6 @@ class CatalogueWriter:
             data_store_prefix,
             index_name,
             self.config.index_schema,
-            lock=self.lock,
             mode="w",
             storage_options=storage_options,
             **kwargs,
@@ -646,12 +441,8 @@ class CatalogueWriter:
         threads = threads or (min(mp.cpu_count(), 15))
         self._tasks = {
             i: Thread(
-                target=_run_async,
-                args=(
-                    self._run_consumer_task,
-                    batch_size,
-                    i,
-                ),
+                target=self._run_consumer_task,
+                args=(max(int(batch_size / threads), 1), i),
             )
             for i in range(threads)
         }
@@ -700,12 +491,14 @@ class CatalogueWriter:
         """Block the execution until all tasks are marked as done."""
         logger.debug("Releasing consumers from their duty.")
         with self.lock:
-            self._done = 1
+            self._done.set()
         for task in self._tasks.values():
             task.join()
+        self.store.join()
 
     async def close(self) -> None:
         """Close any connections."""
+        self.store.join()
         self.store.close()
         self._create_catalogue_file()
 
@@ -756,54 +549,54 @@ class CatalogueWriter:
                 default_flow_style=False,
             )
 
-    async def _run_consumer_task(self, batch_size: int, this_worker: int) -> None:
+    def _flush_batch(
+        self,
+        batch: List[Tuple[str, Dict[str, Any]]],
+    ) -> None:
+        logger.info("Ingesting %i items", len(batch))
+        try:
+            self.store.add(batch.copy())
+            with self.lock:
+                self._num_objects += len(batch)
+        except Exception as error:  # pragma: no cover
+            logger.error(error)  # pragma: no cover
+        batch.clear()
+
+    def _run_consumer_task(self, batch_size: int, this_worker: int) -> None:
         """Set up a consumer task waiting for incoming data to be ingested."""
         logger.info("Adding %i consumer to consumers.", this_worker)
-        batch: list[tuple[str, dict[str, str | list[str] | list[float]]]] = []
-        nbatch = 0
-        while self._done == 0:
+        batch: List[Tuple[str, Dict[str, Any]]] = []
+        append = batch.append
+        read_metadata = self.config.read_metadata
+        flush = self._flush_batch
+        get = self._queue.get
+        while not self._done.is_set():
             try:
-                name, drs_type, inp = self._queue.get(timeout=1)
-                metadata = self.config.read_metadata(drs_type, inp)
+                name, drs_type, inp = get(timeout=1)
+                metadata = read_metadata(drs_type, inp)
             except Empty:
                 continue
             except Exception as error:
                 logger.error(error)
                 continue
-            nbatch += 1
-            batch.append((name, metadata))
-            if nbatch >= batch_size:
-                logger.info("Ingesting %i items", batch_size)
-                try:
-                    await self.store.add(batch)
-                    with self.lock:
-                        self._num_objects += len(batch)
-                except Exception as error:  # pragma: no cover
-                    logger.error(error)  # pragma: no cover
-                del batch
-                nbatch = 0
-                batch = []
+            append((name, metadata))
+            if len(batch) >= batch_size:
+                flush(batch)
         # If in the meanwhile new data has arrive, take it.
         # TODO: Find out an approach to put this under a test.
         while not self._queue.empty():
             try:
-                name, drs_type, inp = self._queue.get(timeout=1)
-                metadata = self.config.read_metadata(drs_type, inp)
+                name, drs_type, inp = get(timeout=1)
+                metadata = read_metadata(drs_type, inp)
             except Empty:
                 break
             except Exception as error:
                 logger.error(error)
                 continue
-            batch.append((name, metadata))
-            del metadata
+            append((name, metadata))
+            if len(batch) >= batch_size:
+                flush(batch)
+
         if batch:
-            logger.info("Ingesting last %i items", len(batch))
-            try:
-                await self.store.add(batch)
-                with self.lock:
-                    self._num_objects += len(batch)
-            except Exception as error:  # pragma: no cover
-                logger.error(error)
-                raise
+            flush(batch)
         logger.info("Closing consumer %i", this_worker)
-        del batch

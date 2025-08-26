@@ -9,7 +9,7 @@ import uvloop
 
 from ._version import __version__
 from .api.config import ConfigMerger
-from .api.metadata_stores import IndexName
+from .api.metadata_stores import CatalogueBackendType, IndexName
 from .data_collector import DataCollector
 from .logger import logger
 from .run import async_add, async_delete, async_index
@@ -145,8 +145,8 @@ def add(
     data_object: Optional[List[str]] = None,
     data_set: Optional[List[str]] = None,
     data_store_prefix: str = "metadata",
-    catalogue_backend: str = "duckdb",
-    batch_size: int = 2500,
+    catalogue_backend: CatalogueBackendType = "jsonlines",
+    batch_size: int = 25_000,
     comp_level: int = 4,
     storage_options: Optional[Dict[str, Any]] = None,
     latest_version: str = IndexName().latest,

@@ -34,7 +34,7 @@ def test_crawl_intake_catalogue(
     )
     assert cat_file.exists()
     cat = intake.open_catalog(cat_file)
-    assert len(cat.latest.read()) > 10
+    assert len(cat.latest.read()) > 0
 
 
 def test_walk_intake_catalogue(

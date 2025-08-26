@@ -21,7 +21,6 @@ def test_crawl_s3_obs(
         batch_size=3,
         threads=1,
         data_set=["obs-s3"],
-        catalogue_backend="duckdb",
         storage_options=storage_options,
     )
     cat = intake.open_catalog(cat_file, storage_options=storage_options)
@@ -41,7 +40,6 @@ def test_crawl_s3_cmip6(
         threads=1,
         data_set=["cmip6-s3"],
         verbosity=5,
-        catalogue_backend="duckdb",
         storage_options=storage_options,
     )
     cat = intake.open_catalog(cat_file, storage_options=storage_options)

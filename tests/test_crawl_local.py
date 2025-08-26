@@ -50,12 +50,12 @@ def test_crawl_cordex(drs_config_path: Path, cat_file: Path) -> None:
     )
     assert cat_file.exists()
     cfg = DRSConfig.load(drs_config_path)
-    cat = intake.open_catalog(cat_file).latest.read().iloc[0]
+    cat = intake.open_catalog(cat_file).latest.read()[0]
     assert "product" in cat
-    assert cat["product"] == "EUR-11"
+    assert "EUR-11" in cat["product"]
     assert "bbox" in cat
     np.testing.assert_allclose(
-        cat["bbox"], np.array(cfg.dialect["cordex"].domains["EUR-11"])
+        np.array(cat["bbox"]), np.array(cfg.dialect["cordex"].domains["EUR-11"])
     )
 
 

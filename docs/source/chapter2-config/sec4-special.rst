@@ -108,9 +108,6 @@ the lookup rule:
     - ``read_kws`` come from ``dialect[standard].data_specs.read_kws`` (e.g., xarray engine).
 
 
-
-
-
 Call
 ~~~~
 
@@ -197,7 +194,11 @@ Performance notes
 
 - The **lookup** rule is designed for high repetition: even if filenames are unique,
   the ``(table_id, variable_id)`` pairs repeat, so cached results eliminate costly I/O.
+- Use **lookup** instead of **call** or conditional.
 - Keep **conditional** and **call** expressions simple; they run per file.
+- Avoid using complex *jinja2* templates. Although the templates are pre-compiled
+  and cache. Evaluating them on a per file basis is costly.
+- Changing the **batch-size** can influence the overall performance of the process.
 
 .. warning::
 

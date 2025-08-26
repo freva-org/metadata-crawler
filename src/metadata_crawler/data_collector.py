@@ -3,23 +3,28 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from pathlib import Path
 from typing import (
     Any,
     AsyncIterator,
-    Awaitable,
     Callable,
+    Coroutine,
     Dict,
+    Iterator,
     Optional,
     Union,
     cast,
 )
 
+import rich.spinner
 import tomlkit
+from rich.live import Live
 
 from .api.config import CrawlerSettings, DRSConfig
 from .api.metadata_stores import CatalogueWriter, IndexName
+from .api.storage_backend import PathTemplate
 from .logger import logger
 from .utils import Console, PrintLock, create_async_iterator, daemon
 
@@ -65,7 +70,7 @@ class DataCollector:
         )
         self.ingest_queue.run_consumer()
         self._print_status = False
-        self._event_loop = asyncio.get_event_loop()
+        self._max_files = int(cast(str, os.getenv("MDC_MAX_FILES", "-1")))
 
     @property
     def crawled_files(
@@ -80,7 +85,7 @@ class DataCollector:
         return self.ingest_queue.ingested_objects
 
     @property
-    async def search_objects(self) -> AsyncIterator[tuple[str, str]]:
+    def search_objects(self) -> Iterator[tuple[str, str]]:
         """Async iterator for the search directories."""
         for cfg in self._search_objects:
             yield cfg.name, str(cfg.search_path)
@@ -92,40 +97,60 @@ class DataCollector:
         self._print_status = False
         self.ingest_queue.join_all_tasks()
         await self.ingest_queue.close()
-        for dset in self.config.datasets.values():
-            await dset.backend.close()
+
+        async def _safe_close(b: PathTemplate) -> None:
+            try:
+                await asyncio.wait_for(b.close(), timeout=3)
+            except Exception:
+                pass
+
+        await asyncio.gather(
+            *[_safe_close(ds.backend) for ds in self.config.datasets.values()],
+            return_exceptions=True,
+        )
 
     @daemon
     def _print_performance(self) -> None:
-        while self._print_status is True:
-            start = time.time()
-            num = self._num_files
-            time.sleep(0.1)
-            d_num = self._num_files - num
-            dt = time.time() - start
-            perf_file = d_num / dt
-            queue_size = self.ingest_queue.size
-            f_col = p_col = q_col = "blue"
-            if perf_file > 500:
-                f_col = "green"
-            if perf_file < 100:
-                f_col = "red"
-            if queue_size > 100_000:
-                q_col = "red"
-            if queue_size < 10_000:
-                q_col = "green"
-            msg = (
-                f"[bold]Discovering: [{f_col}]{perf_file:>6,.1f}[/{f_col}] "
-                "files / sec. #files discovered: "
-                f"[blue]{self.crawled_files:>10,.0f}[/blue]"
-                f" in queue: [{q_col}]{queue_size:>6,.0f}[/{q_col}] "
-                f"#indexed files: "
-                f"[{p_col}]{self.ingested_objects:>10,.0f}[/{p_col}][/bold] "
-                f"{20 * ' '}"
-            )
-            if not PrintLock.locked():  # pragma: no cover
-                Console.print(msg, end="\r")
-        Console.print()
+
+        spinner = rich.spinner.Spinner(
+            os.getenv("SPINNER", "earth"), text="[b]Perparing crawler ...[/]"
+        )
+        with Live(spinner, console=Console, refresh_per_second=1, transient=True):
+            while self._print_status is True:
+                start = time.time()
+                num = self._num_files
+                time.sleep(1)
+                d_num = self._num_files - num
+                dt = time.time() - start
+                perf_file = d_num / dt
+                queue_size = self.ingest_queue.size
+                f_col = p_col = q_col = "blue"
+                if perf_file > 500:
+                    f_col = "green"
+                if perf_file < 100:
+                    f_col = "red"
+                if queue_size > 100_000:
+                    q_col = "red"
+                if queue_size < 10_000:
+                    q_col = "green"
+                msg = (
+                    f"[bold]Discovering: [{f_col}]{perf_file:>6,.1f}[/{f_col}] "
+                    "files / sec. #files discovered: "
+                    f"[blue]{self.crawled_files:>10,.0f}[/blue]"
+                    f" in queue: [{q_col}]{queue_size:>6,.0f}[/{q_col}] "
+                    f"#indexed files: "
+                    f"[{p_col}]{self.ingested_objects:>10,.0f}[/{p_col}][/bold] "
+                    f"{20 * ' '}"
+                )
+                if not PrintLock.locked():  # pragma: no cover
+                    spinner.update(text=msg)
+
+    def _test_env(self) -> bool:
+        return (
+            True
+            if self._max_files > 0 and self._max_files < self.crawled_files
+            else False
+        )
 
     async def _ingest_dir(
         self,
@@ -150,6 +175,8 @@ class DataCollector:
             async for _inp in self.config.datasets[drs_type].backend.rglob(
                 _dir, self.config.datasets[drs_type].glob_pattern
             ):
+                if self._test_env():
+                    return
                 await self.ingest_queue.put(
                     _inp, drs_type, name=self.index_name.all
                 )
@@ -165,12 +192,16 @@ class DataCollector:
         self, drs_type: str, inp_dir: str, pos: int = 0
     ) -> None:
         """Walk recursively content until files are found or until the version."""
-        op: Optional[Callable[..., Awaitable[None]]] = None
+        op: Optional[Callable[..., Coroutine[Any, Any, None]]] = None
         store = self.config.datasets[drs_type].backend
+        if self._test_env():
+            return
         try:
-            is_file = await store.is_file(inp_dir)
-            iterable = await store.is_dir(inp_dir)
-            suffix = await store.suffix(inp_dir)
+            is_file, iterable, suffix = await asyncio.gather(
+                store.is_file(inp_dir),
+                store.is_dir(inp_dir),
+                store.suffix(inp_dir),
+            )
         except Exception as error:
             logger.error("Error checking file %s", error)
             return
@@ -181,7 +212,7 @@ class DataCollector:
             op = self._ingest_dir
         if op:
             try:
-                await op(drs_type, inp_dir, iterable=iterable)
+                await self._ingest_dir(drs_type, inp_dir, iterable=iterable)
             except Exception as error:
                 logger.error(error)
             return
@@ -194,16 +225,16 @@ class DataCollector:
 
     async def ingest_data(self) -> None:
         """Walk sub directories until files are found or until the version."""
-        futures = []
-        async for drs_type, path in self.search_objects:
-            pos = self.config.max_directory_tree_level(path, drs_type=drs_type)
-            future = self._event_loop.create_task(
-                self._iter_content(drs_type, path, pos)
-            )
-            futures.append(future)
         self._print_status = True
         self._print_performance()
-        await asyncio.gather(*futures)
-        logger.info("%i ingestion tasks have been completed", len(futures))
-        self._print_status = False
+        async with asyncio.TaskGroup() as tg:
+            for drs_type, path in self.search_objects:
+                pos = self.config.max_directory_tree_level(
+                    path, drs_type=drs_type
+                )
+                tg.create_task(self._iter_content(drs_type, path, pos))
+        logger.info(
+            "%i ingestion tasks have been completed", len(self._search_objects)
+        )
         self.ingest_queue.join_all_tasks()
+        self._print_status = False

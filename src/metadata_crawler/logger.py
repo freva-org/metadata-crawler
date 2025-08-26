@@ -86,7 +86,7 @@ class Logger(logging.Logger):
         for handler in self.handlers:
             log_level = level
             if isinstance(handler, RotatingFileHandler):
-                log_level = min(level, logging.INFO)
+                log_level = min(level, logging.ERROR)
             handler.setLevel(log_level)
         self.setLevel(level)
 
@@ -105,7 +105,9 @@ class Logger(logging.Logger):
 logger = Logger()
 
 
-def add_file_handle(suffix: Optional[str], log_level: int = logging.INFO) -> None:
+def add_file_handle(
+    suffix: Optional[str], log_level: int = logging.ERROR
+) -> None:
     """Add a file log handle to the logger."""
     base_name = f"{THIS_NAME}-{suffix}" if suffix else THIS_NAME
     log_dir = Path(appdirs.user_log_dir(THIS_NAME))
@@ -119,7 +121,7 @@ def add_file_handle(suffix: Optional[str], log_level: int = logging.INFO) -> Non
         delay=False,
     )
     logger_file_handle.setFormatter(logger.file_format)
-    logger_file_handle.setLevel(min(log_level, logging.INFO))
+    logger_file_handle.setLevel(min(log_level, logging.ERROR))
     logger.addHandler(logger_file_handle)
 
 

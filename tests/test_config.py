@@ -1,14 +1,19 @@
 """Testing the config module."""
 
+import os
 from datetime import datetime
 from pathlib import Path
 
+import intake
+import mock
 import pytest
 import toml
 from jinja2 import Template
 
+from metadata_crawler import add, index
 from metadata_crawler.api.config import DRSConfig
 from metadata_crawler.api.storage_backend import Metadata
+from metadata_crawler.backends.posix import PosixPath
 
 CONFIG = """[bar]
 root_path = "{{path | default('/foo')}}"
@@ -107,3 +112,40 @@ def test_read_zarr_data(zarr_data: Path) -> None:
         )
         == 2
     )
+
+
+def test_get_search():
+    """Test getting the right settings."""
+    conf = Template(CONFIG).render(
+        vars="{var = '{vars}', attr = 'short_name', default = '__name__' }",
+    )
+    from metadata_crawler.run import _get_search
+
+    assert len(_get_search(conf)) == 1
+    with pytest.raises(ValueError):
+        index("foo", conf)
+
+
+@mock.patch.dict(os.environ, {"MDC_MAX_FILES": "5"}, clear=True)
+def test_benchmark_settings(drs_config_path: Path, cat_file: Path) -> None:
+    """Test some benchmark settings."""
+    add(
+        cat_file,
+        drs_config_path,
+        threads=1,
+        batch_size=3,
+        catalogue_backend="jsonlines",
+        data_set=["obs-fs"],
+    )
+    assert cat_file.exists()
+    len(intake.open_catalog(cat_file).latest.read()) < 10
+
+
+@pytest.mark.asyncio
+async def test_posix() -> None:
+    """Test posix behaviour."""
+    p = PosixPath()
+    _dirs = [f async for f in p.iterdir(".")]
+    assert len(_dirs)
+    _dirs = [f async for f in p.iterdir("/foo/bar")]
+    assert not (len(_dirs))

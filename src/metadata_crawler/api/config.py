@@ -403,9 +403,8 @@ class Datasets(BaseModel):
     def _render_storage_options(
         cls, storage_options: Dict[str, Any]
     ) -> Dict[str, Any]:
-        return cast(
-            Dict[str, Any], TemplateMixin.render_templates(storage_options, {})
-        )
+        tmpl = TemplateMixin()
+        return cast(Dict[str, Any], tmpl.render_templates(storage_options, {}))
 
     def model_post_init(self, __context: Any = None) -> None:
         """Apply rules after init."""
@@ -479,7 +478,7 @@ class Dialect(BaseModel):
         return srcs
 
 
-class DRSConfig(BaseModel):
+class DRSConfig(BaseModel, TemplateMixin):
     """BaseModel model for the entire user config."""
 
     datasets: Dict[str, Datasets]
@@ -515,6 +514,10 @@ class DRSConfig(BaseModel):
                 self._defaults[key].setdefault(k, _def)
             for k, _def in self.defaults.items():
                 self._defaults[key].setdefault(k, _def)
+        self.prep_template_env()
+        for standard in self.dialect:
+            for key in self.special:
+                self.dialect[standard].special.setdefault(key, self.special[key])
 
     @model_validator(mode="before")
     @classmethod
@@ -589,16 +592,14 @@ class DRSConfig(BaseModel):
             match rule.type:
                 case "conditional":
                     _rule = textwrap.dedent(rule.condition or "").strip()
-                    s_cond = TemplateMixin.render_templates(_rule, data)
+                    s_cond = self.render_templates(_rule, data)
                     cond = eval(s_cond, {}, getattr(self, "_model_dict", {}))
                     result = rule.true if cond else rule.false
                 case "lookup":
-                    args = cast(
-                        List[str], TemplateMixin.render_templates(rule.tree, data)
-                    )
+                    args = cast(List[str], self.render_templates(rule.tree, data))
                     result = self.datasets[standard].backend.lookup(
                         inp.path,
-                        TemplateMixin.render_templates(rule.attribute, data),
+                        self.render_templates(rule.attribute, data),
                         standard,
                         *args,
                         **self.dialect[standard].data_specs.read_kws,
@@ -606,7 +607,7 @@ class DRSConfig(BaseModel):
                 case "call":
                     _call = textwrap.dedent(rule.call or "").strip()
                     result = eval(
-                        TemplateMixin.render_templates(_call, data),
+                        self.render_templates(_call, data),
                         {},
                         getattr(self, "_model_dict", {}),
                     )
@@ -716,8 +717,6 @@ class DRSConfig(BaseModel):
                                     standard
                                 ].data_specs.extract_from_data(ds)
                             )
-        for key, default in self._defaults[standard].items():
-            inp.metadata.setdefault(key, default)
         self._apply_special_rules(standard, inp, self.dialect[standard].special)
         return self._translate(standard, inp)
 
@@ -732,39 +731,54 @@ class DRSConfig(BaseModel):
 
     def _translate(self, standard: str, inp: Metadata) -> Dict[str, Any]:
         out: Dict[str, Any] = {}
+        # locals to cut attribute lookups
         defs = self._defaults[standard]
         dia = self.dialect[standard]
-        self._apply_special_rules(
-            standard,
-            inp,
-            self.special,
-        )
+        facets_get = dia.facets.get
+        backend = self.datasets[standard].backend
+        mget = inp.metadata.get
+        defs_get = defs.get
+        path = inp.path
+        fmt = path.rsplit(".", 1)[1] if "." in path else ""
+
+        precomputed: Dict[str, Any] = {
+            "path": backend.path(path),
+            "uri": backend.uri(path),
+            "storage": backend.fs_type(path),
+            "dataset": standard,
+            "fmt": fmt,
+        }
+        val: Any = ""
+        out_set = out.__setitem__
         for field, schema in self.index_schema.items():
             if schema.indexed is False:
                 continue
-            match schema.type:
-                case "path":
-                    val = self.datasets[standard].backend.path(inp.path)
-                case "uri":
-                    val = self.datasets[standard].backend.uri(inp.path)
-                case "storage":
-                    val = self.datasets[standard].backend.fs_type(inp.path)
-                case "dataset":
-                    val = standard
-                case "fmt":
-                    val = Path(inp.path).suffix.lstrip(".")
-                case "daterange":
-                    val = schema.get_time_range(
-                        inp.metadata.get(field) or defs.get(field)
-                    )
-                case _:
-                    key = cast(str, dia.facets.get(schema.key, field))
-                    val = inp.metadata.get(key) or defs.get(key)
+
+            stype = schema.type
+
+            # Fast path for simple, precomputed types
+            if stype in precomputed and stype != "daterange":
+                val = precomputed[stype]
+
+            elif stype == "daterange":
+                src = mget(field) or defs_get(field)
+                val = schema.get_time_range(src)
+
+            else:
+                # Resolve metadata key via facets once; default to field name
+                key = cast(str, facets_get(schema.key, field))
+                val = mget(key) or defs_get(key)
+
+            # Preserve your current semantics: fall back to schema.default on falsey
             val = val or schema.default
-            if schema.multi_valued or schema.length:
-                if not isinstance(val, list) and val:
-                    val = [val]
-            out[field] = self.datasets[standard].backend.render_templates(
-                val, out
-            )
+
+            # Multi-valued normalization
+            if (
+                (schema.multi_valued or schema.length)
+                and val
+                and not isinstance(val, list)
+            ):
+                val = [val]
+
+            out_set(field, val)
         return out
