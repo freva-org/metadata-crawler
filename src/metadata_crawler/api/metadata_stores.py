@@ -1,7 +1,6 @@
 """Metadata Storage definitions."""
 
 import abc
-import asyncio
 import gzip
 import json
 import multiprocessing as mp
@@ -17,9 +16,7 @@ from threading import Event, Lock, Thread
 from typing import (
     Any,
     AsyncIterator,
-    Callable,
     ClassVar,
-    Coroutine,
     Dict,
     List,
     Literal,
@@ -51,16 +48,11 @@ BATCH_SECS_THRESHOLD = 20
 BATCH_ITEM = List[Tuple[str, Dict[str, Any]]]
 
 
-def _run_async(
-    method: Callable[[Any], Coroutine[Any, Any, None]],
-    *args: Any,
-    **kwargs: Any,
-) -> Any:
-    """Run a async method in a sync.
+class Stream(NamedTuple):
+    """A representation of a path stream as named tuple."""
 
-    environment.
-    """
-    return asyncio.run(method(*args, **kwargs))
+    name: str
+    path: str
 
 
 class DateTimeEncoder(json.JSONEncoder):
@@ -132,8 +124,11 @@ class IndexStore:
         storage_options: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> None:
-        self._queue: Queue[Union[object, BATCH_ITEM]] = Queue()
-        self._SENTINEL = object()
+        self._ctx = mp.get_context("spawn")
+        self._queue: "mp.queues.SimpleQueue[Union[int, BATCH_ITEM]]" = (
+            self._ctx.SimpleQueue()
+        )
+        self._SENTINEL = 42
         self.storage_options = storage_options or {}
         self._fs, self._is_local_path = self.get_fs(path, **self.storage_options)
         self._path = self._fs.unstrip_protocol(path)
@@ -143,10 +138,10 @@ class IndexStore:
         self.mode = mode
         self._rows_since_flush = 0
         self._last_flush = time.time()
-        self._writer_thread: Optional[Thread] = Thread(
-            target=self.batch_writer, daemon=True
-        )
-        self._writer_thread.start()
+        self._paths: List[Stream] = []
+        for name in self.index_names:
+            out_path = self.get_path(name)
+            self._paths.append(Stream(name=name, path=out_path))
 
     @staticmethod
     def get_fs(
@@ -195,32 +190,17 @@ class IndexStore:
     def join(self) -> None:
         """Shutdown the writer task."""
         self._queue.put(self._SENTINEL)
-        if self._writer_thread is not None:
-            self._writer_thread.join()
-            self._writer_thread = None
+        if self.proc is not None:
+            self.proc.join()
 
-    def batch_writer(self) -> None:
-        """Start the batch writer daemon."""
-        get = self._queue.get
-        add = self._add
-        while True:
-            item = get()
-            if item is self._SENTINEL:
-                break
-            try:
-                add(cast(BATCH_ITEM, item))
-            except Exception as error:
-                logger.error(error)
-
-    @abc.abstractmethod
-    def _add(self, metadata_batch: List[Tuple[str, Dict[str, Any]]]) -> None:
-        """Add a chunk metadata to the store."""
-        ...  # pragma: no cover
-
-    @abc.abstractmethod
     def close(self) -> None:
-        """Close the data store."""
-        ...  # pragma: no cover
+        """Shutdown the write worker."""
+        self.join()
+
+    @property
+    def proc(self) -> Optional["mp.process.BaseProcess"]:
+        """The writer process."""
+        raise NotImplementedError("This property must be defined.")
 
     @abc.abstractmethod
     def get_args(self, index_name: str) -> Dict[str, Any]:
@@ -228,39 +208,47 @@ class IndexStore:
         ...  # pragma: no cover
 
 
-class JSONLines(IndexStore):
-    """Write metadata to gzipped JSONLines files."""
-
-    suffix = ".json.gz"
-    driver = "intake.source.jsonfiles.JSONLinesFileSource"
+class JSONLineWriter:
+    """Write JSONLines to disk."""
 
     def __init__(
-        self,
-        path: str,
-        index_name: IndexName,
-        schema: Dict[str, SchemaField],
-        mode: Literal["w", "r"] = "r",
-        storage_options: Optional[Dict[str, Any]] = None,
-        **kwargs: Any,
-    ):
+        self, *streams: Stream, comp_level: int = 4, **storage_options: Any
+    ) -> None:
+
+        self._comp_level = comp_level
         self._streams: Dict[str, BytesIO] = {}
-        super().__init__(
-            path,
-            index_name,
-            schema,
-            mode=mode,
-            storage_options=storage_options,
-        )
-        self._comp_level = int(kwargs.get("comp_level", "4"))
-        for name in self.index_names:
-            out_path = self.get_path(name)
-            if mode == "w":
-                parent = os.path.dirname(out_path).rstrip("/")
-                try:
-                    self._fs.makedirs(parent, exist_ok=True)
-                except Exception:  # pragma: no cover
-                    pass  # pragma: no cover
-                self._streams[name] = self._fs.open(out_path, mode=f"{mode}b")
+        self._index_names = [s.name for s in streams]
+        for _stream in streams:
+            fs, _ = IndexStore.get_fs(_stream.path, **storage_options)
+            parent = os.path.dirname(_stream.path).rstrip("/")
+            try:
+                fs.makedirs(parent, exist_ok=True)
+            except Exception:  # pragma: no cover
+                pass  # pragma: no cover
+            self._streams[_stream.name] = fs.open(_stream.path, mode="wb")
+
+    @classmethod
+    def as_daemon(
+        cls,
+        _sent: int,
+        queue: "mp.queues.SimpleQueue[Union[int, BATCH_ITEM]]",
+        *streams: Stream,
+        comp_level: int = 4,
+        **storage_options: Any,
+    ) -> None:
+        """Start the writer process as a daemon."""
+        get = queue.get
+        this = cls(*streams, comp_level=comp_level, **storage_options)
+        add = this._add
+        while True:
+            item = get()
+            if item == _sent:
+                break
+            try:
+                add(cast(BATCH_ITEM, item))
+            except Exception as error:
+                logger.error(error)
+        this.close()
 
     @staticmethod
     def _encode_records(records: List[Dict[str, Any]]) -> bytes:
@@ -275,7 +263,7 @@ class JSONLines(IndexStore):
     def _add(self, metadata_batch: List[Tuple[str, Dict[str, Any]]]) -> None:
         """Add a batch of metadata to the gzip store."""
         by_index: Dict[str, List[Dict[str, Any]]] = {
-            name: [] for name in self.index_names
+            name: [] for name in self._index_names
         }
         for index_name, metadata in metadata_batch:
             by_index[index_name].append(metadata)
@@ -294,6 +282,49 @@ class JSONLines(IndexStore):
             except Exception:
                 pass
             stream.close()
+
+
+class JSONLines(IndexStore):
+    """Write metadata to gzipped JSONLines files."""
+
+    suffix = ".json.gz"
+    driver = "intake.source.jsonfiles.JSONLinesFileSource"
+
+    def __init__(
+        self,
+        path: str,
+        index_name: IndexName,
+        schema: Dict[str, SchemaField],
+        mode: Literal["w", "r"] = "r",
+        storage_options: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ):
+        super().__init__(
+            path,
+            index_name,
+            schema,
+            mode=mode,
+            storage_options=storage_options,
+        )
+        _comp_level = int(kwargs.get("comp_level", "4"))
+        self._proc: Optional["mp.process.BaseProcess"] = None
+        if mode == "w":
+            self._proc = self._ctx.Process(
+                target=JSONLineWriter.as_daemon,
+                args=(
+                    self._SENTINEL,
+                    self._queue,
+                )
+                + tuple(self._paths),
+                kwargs={**{"comp_level": _comp_level}, **self.storage_options},
+                daemon=True,
+            )
+            self._proc.start()
+
+    @property
+    def proc(self) -> Optional["mp.process.BaseProcess"]:
+        """The writer process."""
+        return self._proc
 
     def get_args(self, index_name: str) -> Dict[str, Any]:
         """Define the intake arguments."""
@@ -407,7 +438,7 @@ class CatalogueWriter:
         yaml_path: str,
         index_name: IndexName,
         data_store_prefix: str = "metadata",
-        backend: str = "sqlite",
+        backend: str = "jsonlines",
         batch_size: int = 2500,
         config: Optional[DRSConfig] = None,
         threads: Optional[int] = None,

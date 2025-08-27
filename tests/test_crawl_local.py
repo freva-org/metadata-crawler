@@ -68,8 +68,8 @@ def test_crawl_local_cmip6(
     add(
         cat_file,
         drs_config_path,
-        threads=1,
-        batch_size=3,
+        threads=10,
+        batch_size=20_000,
         data_object=[_data_dir],
     )
     assert cat_file.exists()

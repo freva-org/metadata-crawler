@@ -205,7 +205,7 @@ class IntakePath(PathTemplate):
         fs_type, _ = fsspec.core.split_protocol(str(path))
         return fs_type or "posix"
 
-    async def walk(self, path: str) -> None:
+    async def walk(self, path: str) -> AsyncIterator[Metadata]:
         """Walk a catalogue."""
         async for md in self.rglob(path):
-            print(md)
+            yield md

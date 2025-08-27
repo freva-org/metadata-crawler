@@ -38,7 +38,8 @@ from tomlkit.container import OutOfOrderTableProxy
 from tomlkit.items import Table
 
 from ..utils import convert_str_to_timestamp, load_plugins
-from .storage_backend import Metadata, TemplateMixin
+from .mixin import TemplateMixin
+from .storage_backend import Metadata
 
 
 class BaseType(str, Enum):

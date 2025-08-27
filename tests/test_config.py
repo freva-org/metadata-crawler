@@ -1,5 +1,6 @@
 """Testing the config module."""
 
+import json
 import os
 from datetime import datetime
 from pathlib import Path
@@ -12,6 +13,7 @@ from jinja2 import Template
 
 from metadata_crawler import add, index
 from metadata_crawler.api.config import DRSConfig
+from metadata_crawler.api.metadata_stores import DateTimeDecoder, DateTimeEncoder
 from metadata_crawler.api.storage_backend import Metadata
 from metadata_crawler.backends.posix import PosixPath
 
@@ -145,7 +147,26 @@ def test_benchmark_settings(drs_config_path: Path, cat_file: Path) -> None:
 async def test_posix() -> None:
     """Test posix behaviour."""
     p = PosixPath()
+    p.clear_dynamic_cache()
     _dirs = [f async for f in p.iterdir(".")]
     assert len(_dirs)
     _dirs = [f async for f in p.iterdir("/foo/bar")]
     assert not (len(_dirs))
+
+
+def test_datetime_decoder_encoder() -> None:
+    """Test the Datetime Encoding/Decoding."""
+    now = datetime.now()
+    out = json.dumps(
+        {
+            "now": now,
+            "foo": ["bar"],
+        },
+        cls=DateTimeEncoder,
+    )
+    assert "now" in out
+    assert now.isoformat() in out
+
+    out1 = json.loads(out.encode(), cls=DateTimeDecoder)
+    assert "now" in out1
+    assert out1["now"] == now

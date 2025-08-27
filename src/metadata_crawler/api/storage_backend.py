@@ -4,7 +4,6 @@ import abc
 import os
 import pathlib
 import threading
-from functools import lru_cache
 from getpass import getuser
 from typing import (
     Any,
@@ -12,23 +11,16 @@ from typing import (
     ClassVar,
     Dict,
     List,
-    Mapping,
     Optional,
-    Tuple,
     Union,
     cast,
 )
-from urllib.parse import urlsplit
 
-import fsspec
 import xarray as xr
 from anyio import Path
-from jinja2 import Environment, Template, Undefined
 from pydantic import BaseModel, Field
 
-from ..backends.lookup_tables import cmor_lookup
-
-ENV = Environment(undefined=Undefined, autoescape=False)
+from .mixin import LookupMixin, PathMixin, TemplateMixin
 
 
 class Metadata(BaseModel):
@@ -38,185 +30,13 @@ class Metadata(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
-@lru_cache(maxsize=1024)
-def _compile_jinja_template(s: str) -> Template:
-    return ENV.from_string(s)
-
-
-class TemplateMixin:
-    """Apply templating egine jinja2."""
-
-    env_map: Optional[Dict[str, str]] = None
-    _rendered = False
-
-    def prep_template_env(self) -> None:
-        """Prepare the jinja2 env."""
-
-        def _env_get(name: str, default: Optional[str] = None) -> Optional[str]:
-            return os.getenv(name, default)
-
-        def _getenv_filter(
-            varname: str, default: Optional[str] = None
-        ) -> Optional[str]:
-            return os.getenv(varname, default)
-
-        ENV.globals.setdefault("env", _env_get)
-        ENV.globals.setdefault("ENV", dict(os.environ))
-        ENV.filters.setdefault("getenv", _getenv_filter)
-        self._rendered = True
-
-    def render_templates(
-        self,
-        data: Any,
-        context: Mapping[str, Any],
-        *,
-        max_passes: int = 2,
-    ) -> Any:
-        """Recursively render Jinja2 templates found in strings within data.
-
-        This function traverses common container types (``dict``, ``list``,
-        ``tuple``, ``set``), dataclasses, namedtuples, and ``pathlib.Path`` objects.
-        Every string encountered is treated as a Jinja2 template and rendered with
-        the provided ``context``. Rendering can be repeated up to ``max_passes``
-        times to resolve templates that produce further templates on the first pass.
-
-        Parameters
-        ^^^^^^^^^^
-        data:
-            Arbitrary Python data structure. Supported containers are ``dict``
-            (keys and values), ``list``, ``tuple`` (including namedtuples),
-            ``set``, dataclasses (fields), and ``pathlib.Path``.
-            Scalars (e.g., ``int``, ``float``, ``bool``, ``None``) are returned
-            unchanged. Strings are rendered as Jinja2 templates.
-        context:
-            Mapping of template variables available to Jinja2 during rendering.
-        max_passes:
-            Maximum number of rendering passes to perform on each string,
-            by default ``2``. Increase this if templates generate further
-            templates that need resolution.
-
-        Returns
-        ^^^^^^^
-        Any:
-            A structure of the same shape with all strings rendered. Container and
-            object types are preserved where feasible (e.g., ``tuple`` stays a
-            ``tuple``, namedtuple stays a namedtuple, dataclass remains the
-            same dataclass type).
-
-        Raises
-        ^^^^^^^
-        jinja2.TemplateError
-            For other Jinja2 template errors encountered during rendering.
-
-        Notes
-        ^^^^^^
-        * Dictionary keys are also rendered if they are strings (or nested
-          containers with strings). If rendering causes key collisions, the
-          **last** rendered key wins.
-        * For dataclasses, all fields are rendered and a new instance is returned using
-          ``dataclasses.replace``. Frozen dataclasses are supported.
-        * Namedtuples are detected via the ``_fields`` attribute and
-          reconstructed with the same type.
-
-        Examples
-        ^^^^^^^^^
-
-        .. code-block::python
-
-            data = {
-                "greeting": "Hello, {{ name }}!",
-                "items": ["{{ count }} item(s)", 42],
-                "path": {"root": "/home/{{ user }}", "cfg": "{{ root }}/cfg"},
-            }
-            ctx = {"name": "Ada", "count": 3, "user": "ada", "root": "/opt/app"}
-            TemplateMixin().render_templates(data, ctx)
-            # {'greeting': 'Hello, Ada!',
-            #   'items': ['3 item(s)', 42],
-            #    'path': {'root': '/home/ada', 'cfg': '/opt/app/cfg'}}
-
-        """
-        if not self._rendered:
-            self.prep_template_env()
-
-        def _render_str(s: str) -> str:
-            out = s
-            if ("{{" not in s) and ("{%" not in s):
-                return out
-            for _ in range(max_passes):
-                new = _compile_jinja_template(out).render(context)
-                if new == out:
-                    break
-                out = new
-            return out
-
-        def _walk(obj: Any) -> Any:
-            if isinstance(obj, str):
-                return _render_str(obj)
-
-            if isinstance(obj, dict):
-                rendered: dict[Any, Any] = {}
-                for k, v in obj.items():
-                    rk = _render_str(k) if isinstance(k, str) else k
-                    rendered[rk] = _walk(v)
-                return rendered
-
-            if isinstance(obj, list):
-                return [_walk(x) for x in obj]
-
-            if isinstance(obj, tuple):
-                return tuple(_walk(x) for x in obj)
-
-            if isinstance(obj, set):
-                return {_walk(x) for x in obj}
-
-            return obj
-
-        return _walk(data)
-
-
-class PathMixin:
-    """Class that defines typical Path operations."""
-
-    async def suffix(self, path: Union[str, Path, pathlib.Path]) -> str:
-        """Get the suffix of a given input path.
-
-        Parameters
-        ^^^^^^^^^^
-        path: str, asyncio.Path, pathlib.Path
-            Path of the object store
-
-        Returns
-        ^^^^^^-
-        str: The file type extension of the path.
-        """
-        return Path(path).suffix
-
-    def get_fs_and_path(self, uri: str) -> Tuple[fsspec.AbstractFileSystem, str]:
-        """Return (fs, path) suitable for xarray.
-
-        Parameters
-        ^^^^^^^^^^
-        uri:
-            Path to the object store / file name
-
-
-        Returns
-        ^^^^^^-
-        fsspec.AbstractFileSystem, str:
-            The AbstractFileSystem class and the corresponding path to the
-            data store.
-        """
-        protocol, path = fsspec.core.split_protocol(uri)
-        protocol = protocol or "file"
-        path = urlsplit(uri.removeprefix(f"{protocol}://")).path
-        return fsspec.filesystem(protocol), path
-
-
 class BasePath(abc.ABCMeta):
     """Every storage backend class should be of this type."""
 
 
-class PathTemplate(abc.ABC, PathMixin, TemplateMixin, metaclass=BasePath):
+class PathTemplate(
+    abc.ABC, PathMixin, TemplateMixin, LookupMixin, metaclass=BasePath
+):
     """Base class for interacting with different storage systems.
 
     This class defines fundamental methods that should be implemented
@@ -259,6 +79,7 @@ class PathTemplate(abc.ABC, PathMixin, TemplateMixin, metaclass=BasePath):
         self.storage_options = cast(
             Dict[str, Any], self.render_templates(storage_options or {}, {})
         )
+        self.set_static_from_nested()
         self.__post_init__()
 
     def __post_init__(self) -> None:
@@ -309,42 +130,6 @@ class PathTemplate(abc.ABC, PathMixin, TemplateMixin, metaclass=BasePath):
             return xr.open_mfdataset(path, **kwargs)
         with fs.open(path, "rb") as stream:
             return xr.open_dataset(stream, **kwargs)
-
-    def lookup(
-        self, path: str, attribute: str, *tree: str, **read_kws: Any
-    ) -> Any:
-        """Get metadata from a lookup table.
-
-        This function will read metadata from a pre-defined cache table and if
-        the metadata is not present in the cache table it'll read the
-        the object store and add the metadata to the cache table.
-
-        Parameters
-        ^^^^^^^^^^
-
-        path:
-            Path to the object store / file name
-        attribute:
-            The attribute that is retrieved from the data.
-            variable attributes can be defined by a ``.``.
-            For example: ``tas.long_name`` would get attribute ``long_name``
-            from variable ``tas``.
-        *tree:
-            A tuple representing nested attributes. Attributes are nested for
-            more efficient lookup. ('atmos', '1hr', 'tas') will translate into
-            a tree of ['atmos']['1hr']['tas']
-        **read_kws:
-            Keyword arguments passed to open the datasets.
-        """
-        keys = tuple(tree) + (attribute,)
-        d: Dict[str, Any] = cmor_lookup
-        with self._lock:
-            for a in keys[:-1]:
-                d = d.setdefault(a, {})
-            if keys[-1] in d:
-                return d[attribute]
-            d[keys[-1]] = self.read_attr(attribute, path, **read_kws)
-        return d[keys[-1]]
 
     def read_attr(
         self, attribute: str, path: Union[str, pathlib.Path], **read_kws: Any

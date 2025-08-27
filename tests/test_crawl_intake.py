@@ -37,15 +37,11 @@ def test_crawl_intake_catalogue(
     assert len(cat.latest.read()) > 0
 
 
-def test_walk_intake_catalogue(
-    data_dir: Path, capsys: pytest.CaptureFixture
-) -> None:
+def test_walk_intake_catalogue(data_dir: Path) -> None:
     """Test walking the catalogue."""
     cat_file = data_dir / "intake" / "catalog" / "dkrz_dyamond-winter_disk.json"
-    capsys.readouterr()
-    walk_catalogue(cat_file)
-    captured = capsys.readouterr()
-    assert len(captured.out.splitlines()) > 100
+    num = walk_catalogue(cat_file)
+    assert num > 100
 
 
 def test_intake_utils() -> None:

@@ -44,7 +44,7 @@ KwargValue = Union[
 
 def walk_catalogue(
     path: str, storage_options: Optional[Dict[str, Any]] = None, **kwargs: Any
-) -> None:
+) -> int:
     """Recursively traverse an intake catalogue.
 
     Parameters
@@ -56,8 +56,17 @@ def walk_catalogue(
         Optional configuration passed to open catalogues residing on non posix
         storage backends, such as S3/MinIO
     """
-    ip = IntakePath(**(storage_options or {}))
-    asyncio.run(ip.walk(path))
+
+    async def _walk(path: str, **storage_options: Any) -> int:
+        num_items = 0
+        ip = IntakePath(**storage_options)
+        async for md in ip.walk(path):
+            print(md)
+            num_items += 1
+        return num_items
+
+    storage_options = storage_options or {}
+    return asyncio.run(_walk(path, **storage_options))
 
 
 def _process_storage_option(option: str) -> Union[str, bool, int, float]:

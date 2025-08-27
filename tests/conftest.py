@@ -1,7 +1,9 @@
 """Setup for the tests."""
 
 from pathlib import Path
-from tempfile import NamedTemporaryFile, TemporaryDirectory
+from queue import Queue
+from tempfile import TemporaryDirectory
+from threading import Thread
 from typing import Any, Dict, Iterator
 
 import numpy as np
@@ -11,6 +13,32 @@ import requests
 import toml
 import xarray as xr
 from pymongo import MongoClient
+
+
+class ThreadContext:
+    """Fake the mp.get_context with threads."""
+
+    def SimpleQueue(self) -> Queue[Any]:
+        """Alias for Queue."""
+        return Queue()
+
+    def Process(self, *args: Any, **kwargs: Any) -> Thread:
+        """Alias for Thread."""
+        return Thread(*args, **kwargs)
+
+
+@pytest.fixture(autouse=True)
+def mock_subprocess(monkeypatch) -> Iterator[None]:
+    """Multiprocess -> Thread."""
+    import metadata_crawler.api.metadata_stores as stores_mod
+
+    monkeypatch.setattr(
+        stores_mod.mp,
+        "get_context",
+        lambda method="spawn": ThreadContext(),
+        raising=True,
+    )
+    yield
 
 
 @pytest.fixture(scope="function")

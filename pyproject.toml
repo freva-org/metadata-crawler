@@ -148,7 +148,7 @@ ignore-words-list = "te,nd,fo,ist"
 ignore-words = ".codespellignorewords.txt"
 check-filenames = true
 check-hidden = true
-exclude-file = "src/metadata_crawler/backends/lookup_tables.py"
+exclude-file = "src/metadata_crawler/api/mixin/lookup_tables.py"
 
 [tool.pydocstyle]
 convention = "numpy"
