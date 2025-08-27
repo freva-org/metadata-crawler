@@ -1,5 +1,6 @@
 """Setup for the tests."""
 
+import multiprocessing as mp
 from pathlib import Path
 from queue import Queue
 from tempfile import TemporaryDirectory
@@ -22,9 +23,16 @@ class ThreadContext:
         """Alias for Queue."""
         return Queue()
 
+    def Queue(self) -> Queue[Any]:
+        """Alias for Queue."""
+        return Queue()
+
     def Process(self, *args: Any, **kwargs: Any) -> Thread:
         """Alias for Thread."""
         return Thread(*args, **kwargs)
+
+    def Value(slef, *args: Any, **kwargs: Any) -> Any:
+        return mp.Value("i", 0)
 
 
 @pytest.fixture(autouse=True)
@@ -180,7 +188,7 @@ def cat_file() -> Iterator[Path]:
 
 
 @pytest.fixture(scope="session")
-def zarr_data() -> Iterator[Path]:
+def dataset() -> Iterator[xr.Dataset]:
     lon = xr.DataArray(
         np.linspace(-120, -30, 20),
         name="lon",
@@ -221,7 +229,7 @@ def zarr_data() -> Iterator[Path]:
         },
         coords={"time": time, "lat": lat, "lon": lon},
     )
-    dset = xr.Dataset(
+    yield xr.Dataset(
         {"tas": tas},
         attrs={
             "product": "foo",
@@ -230,7 +238,11 @@ def zarr_data() -> Iterator[Path]:
             "experiment": "random",
         },
     )
+
+
+@pytest.fixture(scope="session")
+def zarr_data(dataset: xr.Dataset) -> Iterator[Path]:
     with TemporaryDirectory() as temp_dir:
         out = Path(temp_dir) / "tas.zarr"
-        dset.to_zarr(out)
+        dataset.to_zarr(out)
         yield out

@@ -151,7 +151,7 @@ def add(
     storage_options: Optional[Dict[str, Any]] = None,
     latest_version: str = IndexName().latest,
     all_versions: str = IndexName().all,
-    threads: Optional[int] = None,
+    n_procs: Optional[int] = None,
     verbosity: int = 0,
     password: bool = False,
     **kwargs: Any,
@@ -193,8 +193,8 @@ def add(
         Name of the core holding 'all' metadata versions.
     password:
         Display a password prompt and set password before beginning.
-    threads:
-        Set the number of threads for collecting.
+    n_procs:
+        Set the number of parallel processes for collecting.
     verbosity:
         Set the verbosity of the system.
 
@@ -229,7 +229,7 @@ def add(
             data_store_prefix=data_store_prefix,
             latest_version=latest_version,
             all_versions=all_versions,
-            threads=threads,
+            n_procs=n_procs,
             storage_options=storage_options,
             verbosity=verbosity,
             **kwargs,

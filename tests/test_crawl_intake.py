@@ -29,7 +29,7 @@ def test_crawl_intake_catalogue(
         data_object=[inp],
         verbosity=10,
         batch_size=3,
-        threads=1,
+        n_procs=1,
         catalogue_backend="jsonlines",
     )
     assert cat_file.exists()

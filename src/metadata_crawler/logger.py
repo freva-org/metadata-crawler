@@ -2,9 +2,10 @@
 
 import logging
 import logging.config
+import os
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import appdirs
 from rich.console import Console
@@ -58,7 +59,9 @@ class Logger(logging.Logger):
         self, name: Optional[str] = None, level: Optional[int] = None
     ) -> None:
         """Instantiate this logger only once and for all."""
-        level = level or logging.WARNING
+        level = level or int(
+            cast(str, os.getenv("MDC_LOG_LEVEL", str(logging.WARNING)))
+        )
         name = name or THIS_NAME
         logger_format = logging.Formatter(self.logfmt, self.datefmt)
         self.file_format = logging.Formatter(self.filelogfmt, self.datefmt)
@@ -125,9 +128,14 @@ def add_file_handle(
     logger.addHandler(logger_file_handle)
 
 
+def get_level_from_verbosity(verbosity: int) -> int:
+    """Calculate the log level from a verbosity."""
+    return max(logging.ERROR - 10 * verbosity, -1)
+
+
 def apply_verbosity(level: int) -> int:
     """Set the logging level of the handlers to a certain level."""
     old_level = logger.level
-    level = max(logging.ERROR - 10 * level, -1)
+    level = get_level_from_verbosity(level)
     logger.set_level(level)
     return old_level

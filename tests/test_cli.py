@@ -123,7 +123,7 @@ def test_crawl_parsing_and_dispatch(
             "icon",
             "--data-object",
             "foo.yaml",
-            "--threads",
+            "--n-procs",
             "4",
             "-s",
             "anon",
@@ -152,7 +152,7 @@ def test_crawl_parsing_and_dispatch(
     # Core arguments
     assert kw["store"] == "s3://bucket/catalog.yml"
     assert kw["batch_size"] == 42
-    assert kw["threads"] == 4
+    assert kw["n_procs"] == 4
     assert kw["data_set"] == ["cmip6", "icon"]
     assert kw["data_object"] == ["foo.yaml"]
 

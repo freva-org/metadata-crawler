@@ -264,11 +264,12 @@ file_sep = "_"
 type   = "lookup"
 tree   = ["{{ table_id }}", "{{ variable_id }}"]
 attribute = "realm"
+standard = "cmip6"
 [drs_settings.dialect.cmip6.special.time_frequency]
 type   = "lookup"
 tree   = ["{{ table_id }}","{{ variable_id }}"]
-attribute = "frequency"
-
+attribute = "time-frequency"
+standard = "cmip6"
 # -- CMIP5 --------------------------------------------------------
 [drs_settings.dialect.cmip5]
 defaults = { level_type = "2d", bbox = [0, 360, -90, 90]}

@@ -103,7 +103,8 @@ Once registered, you can set ``fs_type = "foo"`` in a dataset
 definition and optionally provide ``storage_options`` that will be
 passed into your backend’s constructor.
 
-**API Reference:**
+API Reference:
+--------------
 
 .. autoclass:: metadata_crawler.api.storage_backend.PathTemplate
    :inherited-members: False

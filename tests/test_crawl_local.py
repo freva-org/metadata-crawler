@@ -19,7 +19,7 @@ def test_crawl_local_obs(
     add(
         cat_file,
         drs_config_path,
-        threads=1,
+        n_procs=1,
         batch_size=3,
         catalogue_backend="jsonlines",
         data_object=[data_dir / "observations"],
@@ -29,7 +29,7 @@ def test_crawl_local_obs(
     add(
         cat_file,
         drs_config_path,
-        threads=1,
+        n_procs=1,
         batch_size=3,
         data_set=["obs-fs"],
         catalogue_backend="jsonlines",
@@ -68,7 +68,7 @@ def test_crawl_local_cmip6(
     add(
         cat_file,
         drs_config_path,
-        threads=10,
+        n_procs=10,
         batch_size=20_000,
         data_object=[_data_dir],
     )
@@ -77,7 +77,7 @@ def test_crawl_local_cmip6(
     add(
         cat_file,
         drs_config_path,
-        threads=1,
+        n_procs=1,
         batch_size=3,
         data_set=["cmip6-fs"],
     )
@@ -144,6 +144,7 @@ def test_crawl_single_files(
         cat_file,
         drs_config_path,
         data_object=[_file],
+        verbosity=5,
     )
     cat = intake.open_catalog(cat_file)
     assert len(cat.latest.read()) > 0

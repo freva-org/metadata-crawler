@@ -12,15 +12,24 @@ from typing import (
     Dict,
     List,
     Optional,
+    TypedDict,
     Union,
     cast,
 )
 
+import h5netcdf
 import xarray as xr
 from anyio import Path
 from pydantic import BaseModel, Field
 
 from .mixin import LookupMixin, PathMixin, TemplateMixin
+
+
+class MetadataType(TypedDict):
+    """A dict representation of the metadata."""
+
+    path: str
+    metadata: Dict[str, Any]
 
 
 class Metadata(BaseModel):
@@ -91,7 +100,9 @@ class PathTemplate(
     async def close(self) -> None:
         """Close any open sessions."""
 
-    def open_dataset(self, path: str, **read_kws: Any) -> xr.Dataset:
+    def open_dataset(
+        self, path: str, **read_kws: Any
+    ) -> Union[xr.Dataset, h5netcdf.core.File]:
         """Open a dataset with xarray.
 
         Parameters
@@ -110,15 +121,20 @@ class PathTemplate(
 
         def _get_engine(file_name: str) -> str:
             engines = {
-                "cfgrib": (".grb", ".grib", ".gb"),
-                "h5netcdf": (".nc", ".nc4", ".netcdf", ".cdf", ".hdf5", ".h5"),
-                "zarr": (".zarr", ".zar"),
+                "grb": "cfgrib",
+                "grib": "cfgrib",
+                "gb": "gb",
+                "nc": "h5netcdf",
+                "nc4": "h5netcdf",
+                "netcdf": "h5netcdf",
+                "cdf": "h5netcdf",
+                "hdf5": "h5netcdf",
+                "h5": "h5netcdf",
+                "zarr": "zarr",
+                "zar": "zarr",
             }
-            for eng, suffixes in engines.items():
-                for suffix in suffixes:
-                    if file_name.endswith(suffix):
-                        return eng
-            return ""
+            suffix = file_name.rpartition(".")[-1]
+            return engines.get(suffix, "")
 
         kwargs = read_kws.copy()
         engine = kwargs.setdefault("engine", _get_engine(path) or None)
@@ -126,6 +142,8 @@ class PathTemplate(
         if engine == "zarr":
             dset: xr.Dataset = xr.open_zarr(fs.get_mapper(path))
             return dset
+        if fs.protocol[0] == "file" and engine == "h5netcdf":
+            return h5netcdf.File(path)
         if fs.protocol[0] == "file":
             return xr.open_mfdataset(path, **kwargs)
         with fs.open(path, "rb") as stream:
@@ -149,11 +167,10 @@ class PathTemplate(
         str: Metadata from the data.
         """
         with self.open_dataset(str(path), **read_kws) as dset:
-            attrs = dset.attrs
-            for var in dset.variables:
-                for name, value in dset[var].attrs.items():
-                    attrs[f"{var}.{name}"] = value
-            return attrs[attribute]
+            if "." not in attribute:
+                return dset.attrs[attribute]
+            var, _, attr = attribute.partition(".")
+            return dset[var].attrs[attr]
 
     @abc.abstractmethod
     async def is_dir(self, path: Union[str, Path, pathlib.Path]) -> bool:
@@ -207,7 +224,7 @@ class PathTemplate(
     @abc.abstractmethod
     async def rglob(
         self, path: Union[str, Path, pathlib.Path], glob_pattern: str = "*"
-    ) -> AsyncIterator[Metadata]:
+    ) -> AsyncIterator[MetadataType]:
         """Search recursively for paths matching a given glob pattern.
 
         Parameters
@@ -219,9 +236,9 @@ class PathTemplate(
 
         Yields
         ^^^^^^
-        str: Path of the object store that matches the glob pattern.
+        MetadataType: Path of the object store that matches the glob pattern.
         """
-        yield Metadata(path="")  # pragma: no cover
+        yield MetadataType(path="", metadata={})  # pragma: no cover
 
     def fs_type(self, path: Union[str, Path, pathlib.Path]) -> str:
         """Define the file system type."""

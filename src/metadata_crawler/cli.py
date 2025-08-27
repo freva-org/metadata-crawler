@@ -239,8 +239,9 @@ class ArgParse:
             action="store_true",
         )
         parser.add_argument(
-            "--threads",
-            help="Set the number of threads for collecting.",
+            "--n-procs",
+            "--procs",
+            help="Set the number of parallel processes for collecting.",
             type=int,
             default=None,
         )

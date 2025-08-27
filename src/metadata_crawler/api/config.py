@@ -39,7 +39,7 @@ from tomlkit.items import Table
 
 from ..utils import convert_str_to_timestamp, load_plugins
 from .mixin import TemplateMixin
-from .storage_backend import Metadata
+from .storage_backend import Metadata, MetadataType
 
 
 class BaseType(str, Enum):
@@ -295,14 +295,14 @@ class DataSpecs(BaseModel):
 
         for facet, attr in self.globals.items():
             if attr == "__variable__":
-                out[facet] = list(map(str, dset.data_vars))
+                out[facet] = list(getattr(dset, "data_vara", dset.variables))
             else:
                 out[facet] = dset.attrs.get(attr)
 
     def _set_variable_attributes(
         self, dset: "xarray.Dataset", out: Dict[str, Any]
     ) -> None:
-        data_vars = list(dset.data_vars)
+        data_vars = list(getattr(dset, "data_vars", dset.variables))
 
         def get_val(
             rule: VarAttrRule, vnames: Union[str, List[str]]
@@ -440,6 +440,7 @@ class LookupRule(BaseModel):
     type: Literal["lookup"] = "lookup"
     tree: List[str] = Field(default_factory=list)
     attribute: str
+    standard: Optional[str] = None
 
 
 SpecialRule = Annotated[
@@ -582,7 +583,11 @@ class DRSConfig(BaseModel, TemplateMixin):
         return values
 
     def _apply_special_rules(
-        self, standard: str, inp: Metadata, specials: Dict[str, SpecialRule]
+        self,
+        standard: str,
+        drs_type: str,
+        inp: Metadata,
+        specials: Dict[str, SpecialRule],
     ) -> None:
         data = {**inp.metadata, **{"file": inp.path, "uri": inp.path}}
 
@@ -598,10 +603,11 @@ class DRSConfig(BaseModel, TemplateMixin):
                     result = rule.true if cond else rule.false
                 case "lookup":
                     args = cast(List[str], self.render_templates(rule.tree, data))
+
                     result = self.datasets[standard].backend.lookup(
                         inp.path,
                         self.render_templates(rule.attribute, data),
-                        standard,
+                        rule.standard or drs_type,
                         *args,
                         **self.dialect[standard].data_specs.read_kws,
                     )
@@ -718,14 +724,17 @@ class DRSConfig(BaseModel, TemplateMixin):
                                     standard
                                 ].data_specs.extract_from_data(ds)
                             )
-        self._apply_special_rules(standard, inp, self.dialect[standard].special)
+        self._apply_special_rules(
+            standard, drs_type, inp, self.dialect[standard].special
+        )
         return self._translate(standard, inp)
 
-    def read_metadata(self, standard: str, inp: Metadata) -> Dict[str, Any]:
+    def read_metadata(self, standard: str, inp: MetadataType) -> Dict[str, Any]:
         """Get the meta data for a given file path."""
         try:
             return self._read_metadata(
-                standard, Metadata(path=inp.path, metadata=inp.metadata.copy())
+                standard,
+                Metadata(path=inp["path"], metadata=inp["metadata"].copy()),
             )
         except Exception as error:
             raise ValueError(error) from error

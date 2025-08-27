@@ -16,7 +16,6 @@ layers:
 
 .. toctree::
    :maxdepth: 1
-   :caption: Sections
 
    sec1-datasets
    sec2-dialects

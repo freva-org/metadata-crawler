@@ -8,7 +8,7 @@ import fsspec
 from anyio import Path
 from s3fs import S3FileSystem
 
-from ..api.storage_backend import Metadata, PathTemplate
+from ..api.storage_backend import MetadataType, PathTemplate
 from ..logger import logger
 
 
@@ -79,7 +79,7 @@ class S3Path(PathTemplate):
 
     async def rglob(
         self, path: str | Path | pathlib.Path, glob_pattern: str = "*"
-    ) -> AsyncIterator[Metadata]:
+    ) -> AsyncIterator[MetadataType]:
         """Search recursively for files matching a ``glob_pattern``.
 
         Parameters
@@ -97,11 +97,11 @@ class S3Path(PathTemplate):
         """
         client = await self._get_client()
         if await self.is_file(path):
-            yield Metadata(path=str(path))
+            yield MetadataType(path=str(path), metadata={})
         else:
             for suffix in self.suffixes:
                 for content in await client._glob(f"{path}/**/*{suffix}"):
-                    yield Metadata(path=f"/{content}")
+                    yield MetadataType(path=f"/{content}", metadata={})
 
     def path(self, path: Union[str, Path, pathlib.Path]) -> str:
         """Get the full path (including any schemas/netlocs).

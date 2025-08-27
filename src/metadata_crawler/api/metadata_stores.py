@@ -10,9 +10,8 @@ import time
 from datetime import datetime
 from enum import Enum
 from io import BytesIO
+from multiprocessing import queues, sharedctypes
 from pathlib import Path
-from queue import Empty, Queue
-from threading import Event, Lock, Thread
 from typing import (
     Any,
     AsyncIterator,
@@ -31,6 +30,7 @@ from typing import (
 
 import fsspec
 import orjson
+import tomlkit
 import yaml
 
 import metadata_crawler
@@ -38,7 +38,7 @@ import metadata_crawler
 from ..logger import logger
 from ..utils import create_async_iterator
 from .config import DRSConfig, SchemaField
-from .storage_backend import Metadata
+from .storage_backend import MetadataType
 
 ISO_FORMAT_REGEX = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?$"
@@ -46,6 +46,10 @@ ISO_FORMAT_REGEX = re.compile(
 
 BATCH_SECS_THRESHOLD = 20
 BATCH_ITEM = List[Tuple[str, Dict[str, Any]]]
+
+
+ConsumerQueueType = queues.Queue[Union[int, Tuple[str, str, MetadataType]]]
+WriterQueueType = queues.SimpleQueue[Union[int, BATCH_ITEM]]
 
 
 class Stream(NamedTuple):
@@ -124,12 +128,10 @@ class IndexStore:
         storage_options: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> None:
-        self._ctx = mp.get_context("spawn")
-        self._queue: "mp.queues.SimpleQueue[Union[int, BATCH_ITEM]]" = (
-            self._ctx.SimpleQueue()
-        )
-        self._SENTINEL = 42
         self.storage_options = storage_options or {}
+        self._ctx = mp.get_context("spawn")
+        self.queue: WriterQueueType = self._ctx.SimpleQueue()
+        self._sent = 42
         self._fs, self._is_local_path = self.get_fs(path, **self.storage_options)
         self._path = self._fs.unstrip_protocol(path)
         self.schema = schema
@@ -183,13 +185,9 @@ class IndexStore:
         )
         return new_path
 
-    def add(self, metadata_batch: List[Tuple[str, Dict[str, Any]]]) -> None:
-        """Add a chunk metadata to the store."""
-        self._queue.put(metadata_batch)
-
     def join(self) -> None:
         """Shutdown the writer task."""
-        self._queue.put(self._SENTINEL)
+        self.queue.put(self._sent)
         if self.proc is not None:
             self.proc.join()
 
@@ -230,19 +228,20 @@ class JSONLineWriter:
     @classmethod
     def as_daemon(
         cls,
-        _sent: int,
-        queue: "mp.queues.SimpleQueue[Union[int, BATCH_ITEM]]",
+        queue: WriterQueueType,
+        semaphore: int,
         *streams: Stream,
         comp_level: int = 4,
         **storage_options: Any,
     ) -> None:
         """Start the writer process as a daemon."""
-        get = queue.get
         this = cls(*streams, comp_level=comp_level, **storage_options)
+        get = queue.get
         add = this._add
         while True:
             item = get()
-            if item == _sent:
+            if item == semaphore:
+                logger.info("Closing writer task.")
                 break
             try:
                 add(cast(BATCH_ITEM, item))
@@ -312,8 +311,8 @@ class JSONLines(IndexStore):
             self._proc = self._ctx.Process(
                 target=JSONLineWriter.as_daemon,
                 args=(
-                    self._SENTINEL,
-                    self._queue,
+                    self.queue,
+                    self._sent,
                 )
                 + tuple(self._paths),
                 kwargs={**{"comp_level": _comp_level}, **self.storage_options},
@@ -416,6 +415,69 @@ class CatalogueReader:
         )
 
 
+class QueueConsumer:
+    """Class that consumes the file discovery queue."""
+
+    def __init__(
+        self,
+        config: Optional[Union[str, Path]],
+        num_objects: "sharedctypes.Synchronized[Any]",
+        writer_queue: WriterQueueType,
+    ) -> None:
+        self.config = DRSConfig.load(config)
+        self._writer_queue = writer_queue
+        self._num_objects = num_objects
+
+    def _flush_batch(
+        self,
+        batch: List[Tuple[str, Dict[str, Any]]],
+    ) -> None:
+        logger.info("Ingesting %i items", len(batch))
+        try:
+            self._writer_queue.put(batch.copy())
+            with self._num_objects.get_lock():
+                self._num_objects.value += len(batch)
+        except Exception as error:  # pragma: no cover
+            logger.error(error)  # pragma: no cover
+        batch.clear()
+
+    @classmethod
+    def run_consumer_task(
+        cls,
+        queue: ConsumerQueueType,
+        writer_queue: WriterQueueType,
+        config: Optional[Union[str, Path]],
+        num_objects: "sharedctypes.Synchronized[Any]",
+        batch_size: int,
+        poison_pill: int,
+    ) -> None:
+        """Set up a consumer task waiting for incoming data to be ingested."""
+        this = cls(config, num_objects, writer_queue)
+        this_worker = os.getpid()
+        logger.info("Adding %i consumer to consumers.", this_worker)
+        batch: List[Tuple[str, Dict[str, Any]]] = []
+        append = batch.append
+        read_metadata = this.config.read_metadata
+        flush = this._flush_batch
+        get = queue.get
+        while True:
+            item = get()
+            if item == poison_pill:
+                break
+            try:
+                name, drs_type, inp = cast(Tuple[str, str, MetadataType], item)
+                metadata = read_metadata(drs_type, inp)
+            except Exception as error:
+                logger.error(error)
+                continue
+            append((name, metadata))
+            if len(batch) >= batch_size:
+                flush(batch)
+        if batch:
+            flush(batch)
+        logger.info("Closing consumer %i", this_worker)
+
+
 class CatalogueWriter:
     """Create intake catalogues that store metadata entries.
 
@@ -440,15 +502,14 @@ class CatalogueWriter:
         data_store_prefix: str = "metadata",
         backend: str = "jsonlines",
         batch_size: int = 2500,
-        config: Optional[DRSConfig] = None,
-        threads: Optional[int] = None,
+        config: Optional[
+            Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument]
+        ] = None,
+        n_procs: Optional[int] = None,
         storage_options: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> None:
-        self.config = config or DRSConfig.load()
-        self._done = Event()
-        self._num_objects = 0
-        self.lock = Lock()
+        self.config = DRSConfig.load(config)
         storage_options = storage_options or {}
         self.fs, _ = IndexStore.get_fs(yaml_path, **storage_options)
         self.path = self.fs.unstrip_protocol(yaml_path)
@@ -469,22 +530,30 @@ class CatalogueWriter:
             storage_options=storage_options,
             **kwargs,
         )
-        threads = threads or (min(mp.cpu_count(), 15))
-        self._tasks = {
-            i: Thread(
-                target=self._run_consumer_task,
-                args=(max(int(batch_size / threads), 1), i),
+        self._ctx = mp.get_context("spawn")
+        self._queue: ConsumerQueueType = self._ctx.Queue()
+        self._poison_pill = 13
+        self._num_objects = self._ctx.Value("i", 0)
+        n_procs = n_procs or min(mp.cpu_count(), 15)
+        batch_size_per_proc = max(int(batch_size / n_procs), 100)
+        self._tasks = [
+            self._ctx.Process(
+                target=QueueConsumer.run_consumer_task,
+                args=(
+                    self._queue,
+                    self.store.queue,
+                    config,
+                    self._num_objects,
+                    batch_size_per_proc,
+                    self._poison_pill,
+                ),
             )
-            for i in range(threads)
-        }
-        self._queue: Queue[Tuple[str, str, Metadata]] = Queue()
-
-    def write_batch(self, index_name: str, batch: List[Dict[str, Any]]) -> None:
-        """Write a batch of metadata to the storage system."""
+            for i in range(n_procs)
+        ]
 
     async def put(
         self,
-        inp: Metadata,
+        inp: MetadataType,
         drs_type: str,
         name: str = "",
     ) -> None:
@@ -497,11 +566,10 @@ class CatalogueWriter:
 
         Parameters
         ^^^^^^^^^^
-        info_obj:
-            The name of the input object path where the metadata should be
-            retrieved from catalogue_entry
-        cls:
-            An instance of the DRS class that fits to the input file object.
+        inp:
+            Path and metadata of the discovered object.
+        drs_type:
+            The data type the discovered object belongs to.
         name:
             Name of the catalogue, if applicable. This variable depends on
             the cataloguing system. For example apache solr would use a `core`.
@@ -511,7 +579,7 @@ class CatalogueWriter:
     @property
     def ingested_objects(self) -> int:
         """Get the number of ingested objects."""
-        return self._num_objects
+        return cast(int, self._num_objects.value)
 
     @property
     def size(self) -> int:
@@ -521,9 +589,9 @@ class CatalogueWriter:
     def join_all_tasks(self) -> None:
         """Block the execution until all tasks are marked as done."""
         logger.debug("Releasing consumers from their duty.")
-        with self.lock:
-            self._done.set()
-        for task in self._tasks.values():
+        for _ in self._tasks:
+            self._queue.put(self._poison_pill)
+        for task in self._tasks:
             task.join()
         self.store.join()
 
@@ -535,7 +603,7 @@ class CatalogueWriter:
 
     def run_consumer(self) -> None:
         """Set up all the consumers."""
-        for task in self._tasks.values():
+        for task in self._tasks:
             task.start()
 
     def _create_catalogue_file(self) -> None:
@@ -579,55 +647,3 @@ class CatalogueWriter:
                 sort_keys=False,  # preserve our ordering
                 default_flow_style=False,
             )
-
-    def _flush_batch(
-        self,
-        batch: List[Tuple[str, Dict[str, Any]]],
-    ) -> None:
-        logger.info("Ingesting %i items", len(batch))
-        try:
-            self.store.add(batch.copy())
-            with self.lock:
-                self._num_objects += len(batch)
-        except Exception as error:  # pragma: no cover
-            logger.error(error)  # pragma: no cover
-        batch.clear()
-
-    def _run_consumer_task(self, batch_size: int, this_worker: int) -> None:
-        """Set up a consumer task waiting for incoming data to be ingested."""
-        logger.info("Adding %i consumer to consumers.", this_worker)
-        batch: List[Tuple[str, Dict[str, Any]]] = []
-        append = batch.append
-        read_metadata = self.config.read_metadata
-        flush = self._flush_batch
-        get = self._queue.get
-        while not self._done.is_set():
-            try:
-                name, drs_type, inp = get(timeout=1)
-                metadata = read_metadata(drs_type, inp)
-            except Empty:
-                continue
-            except Exception as error:
-                logger.error(error)
-                continue
-            append((name, metadata))
-            if len(batch) >= batch_size:
-                flush(batch)
-        # If in the meanwhile new data has arrive, take it.
-        # TODO: Find out an approach to put this under a test.
-        while not self._queue.empty():
-            try:
-                name, drs_type, inp = get(timeout=1)
-                metadata = read_metadata(drs_type, inp)
-            except Empty:
-                break
-            except Exception as error:
-                logger.error(error)
-                continue
-            append((name, metadata))
-            if len(batch) >= batch_size:
-                flush(batch)
-
-        if batch:
-            flush(batch)
-        logger.info("Closing consumer %i", this_worker)

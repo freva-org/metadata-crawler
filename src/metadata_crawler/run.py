@@ -13,7 +13,7 @@ from rich.prompt import Prompt
 from .api.config import CrawlerSettings, DRSConfig, strip_protocol
 from .api.metadata_stores import CatalogueBackendType, IndexName
 from .data_collector import DataCollector
-from .logger import apply_verbosity, logger
+from .logger import apply_verbosity, get_level_from_verbosity, logger
 from .utils import (
     Console,
     find_closest,
@@ -216,7 +216,7 @@ async def async_add(
     latest_version: str = IndexName().latest,
     all_versions: str = IndexName().all,
     password: bool = False,
-    threads: Optional[int] = None,
+    n_procs: Optional[int] = None,
     verbosity: int = 0,
     **kwargs: Any,
 ) -> None:
@@ -255,8 +255,8 @@ async def async_add(
         Name of the core holding 'all' metadata versions.
     password:
         Display a password prompt before beginning
-    threads:
-        Set the number of threads for collecting.
+    n_procs:
+        Set the number of parallel processes for collecting.
     verbosity:
         Set the verbosity of the system.
 
@@ -282,6 +282,7 @@ async def async_add(
     env = cast(os._Environ[str], os.environ.copy())
     old_level = apply_verbosity(verbosity)
     try:
+        os.environ["MDC_LOG_LEVEL"] = str(get_level_from_verbosity(verbosity))
         config_file = config_file or os.environ.get(
             "EVALUATION_SYSTEM_CONFIG_DIR"
         )
@@ -315,7 +316,7 @@ async def async_add(
             comp_level=comp_level,
             backend=catalogue_backend,
             data_store_prefix=data_store_prefix,
-            threads=threads,
+            n_procs=n_procs,
             storage_options=storage_options or {},
             **kwargs,
         ) as data_col:

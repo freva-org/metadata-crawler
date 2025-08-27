@@ -72,7 +72,7 @@ class DataCollector:
         self.ingest_queue = CatalogueWriter(
             str(metadata_store or "metadata.yaml"),
             index_name=index_name,
-            config=self.config,
+            config=config_file,
             **kwargs,
         )
         self.ingest_queue.run_consumer()

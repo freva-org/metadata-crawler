@@ -167,6 +167,7 @@ the function executes your custom logic.
 .. automodule:: metadata_crawler.api.cli
    :exclude-members: Parameter
 
-**API Reference:**
+API Reference
+-------------
 
 .. autoclass:: metadata_crawler.api.index.BaseIndex

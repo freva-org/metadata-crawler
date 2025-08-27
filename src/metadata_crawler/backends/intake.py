@@ -19,7 +19,7 @@ import intake
 import pandas as pd
 from anyio import Path
 
-from ..api.storage_backend import Metadata, PathTemplate
+from ..api.storage_backend import Metadata, MetadataType, PathTemplate
 from ..logger import logger
 
 
@@ -46,7 +46,7 @@ class IntakePath(PathTemplate):
     async def _walk_yaml_catalogue(
         self,
         cat: intake.catalog.Catalog,
-    ) -> AsyncIterator[Metadata]:
+    ) -> AsyncIterator[MetadataType]:
 
         for name in cat:
             entry = cat[name]
@@ -71,7 +71,7 @@ class IntakePath(PathTemplate):
             for raw_path in urlpath if isinstance(urlpath, list) else [urlpath]:
                 path = self._normalize_path(raw_path)
                 logger.debug("Found file %s", path)
-                yield Metadata(
+                yield MetadataType(
                     path=path,
                     metadata=getattr(src, "metadata", meta.get("metadata", {})),
                 )
@@ -92,7 +92,7 @@ class IntakePath(PathTemplate):
     async def _walk_esm_catalogue(
         self,
         cat: intake.catalog.Catalog,
-    ) -> AsyncIterator[Metadata]:
+    ) -> AsyncIterator[MetadataType]:
         df: pd.DataFrame = getattr(cat, "df", pd.DataFrame())
         cols = list(df.columns)
         for row in df.itertuples(index=False, name=None):
@@ -108,7 +108,7 @@ class IntakePath(PathTemplate):
             for raw_path in urlpath if isinstance(urlpath, list) else [urlpath]:
                 path = self._normalize_path(raw_path)
                 logger.debug("Found file %s", path)
-                yield Metadata(path=path, metadata=meta)
+                yield MetadataType(path=path, metadata=meta)
 
     async def iterdir(
         self,
@@ -148,14 +148,14 @@ class IntakePath(PathTemplate):
 
     async def rglob(
         self, path: str | Path | pathlib.Path, glob_pattern: str = "*"
-    ) -> AsyncIterator[Metadata]:
+    ) -> AsyncIterator[MetadataType]:
         """Go through catalogue path."""
         path = str(path)
         if self._is_esm_catalogue(path):
             cat: intake.catalog.Catalog = intake.open_esm_datastore(
                 path, **self.storage_options
             )
-            func: Callable[[str], AsyncIterator[Metadata]] = (
+            func: Callable[[str], AsyncIterator[MetadataType]] = (
                 self._walk_esm_catalogue
             )
         else:
@@ -163,8 +163,8 @@ class IntakePath(PathTemplate):
             func = self._walk_yaml_catalogue
 
         async for md in func(cat):
-            if "." + md.path.rpartition(".")[-1] in self.suffixes and fnmatch(
-                md.path, glob_pattern
+            if "." + md["path"].rpartition(".")[-1] in self.suffixes and fnmatch(
+                md["path"], glob_pattern
             ):
                 yield md
 
@@ -208,4 +208,4 @@ class IntakePath(PathTemplate):
     async def walk(self, path: str) -> AsyncIterator[Metadata]:
         """Walk a catalogue."""
         async for md in self.rglob(path):
-            yield md
+            yield Metadata(path=md["path"], metadata=md["metadata"])

@@ -92,7 +92,7 @@ class TemplateMixin:
         Examples
         ^^^^^^^^^
 
-            .. code-block::python
+            .. code-block:: python
 
                 data = {
                     "greeting": "Hello, {{ name }}!",

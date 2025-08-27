@@ -23,7 +23,6 @@ account (*latest* versions only).
 
 .. toctree::
    :maxdepth: 1
-   :caption: Sections
 
    sec1-cli
    sec2-python

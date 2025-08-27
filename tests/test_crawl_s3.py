@@ -19,7 +19,7 @@ def test_crawl_s3_obs(
         drs_config_path,
         data_store_prefix="s3://test/metadata_crawler/tests/metadata",
         batch_size=3,
-        threads=1,
+        n_procs=1,
         data_set=["obs-s3"],
         storage_options=storage_options,
     )
@@ -37,7 +37,7 @@ def test_crawl_s3_cmip6(
         drs_config_path,
         data_store_prefix="s3://test/metadata_crawler/tests/cmip6-s3",
         batch_size=3,
-        threads=1,
+        n_procs=1,
         data_set=["cmip6-s3"],
         verbosity=5,
         storage_options=storage_options,
@@ -61,7 +61,7 @@ def test_crawl_single_s3_file(
     add(
         cat_file,
         drs_config_path,
-        threads=1,
+        n_procs=1,
         batch_size=3,
         data_object=[file],
     )
@@ -77,7 +77,7 @@ def test_crawl_s3_zarr(drs_config_path: Path, cat_file: Path) -> None:
         cat_file,
         drs_config_path,
         data_set=["nextgems-s3"],
-        threads=1,
+        n_procs=1,
         batch_size=3,
     )
     assert cat_file.is_file()

@@ -93,7 +93,8 @@ the lookup rule:
        [drs_settings.dialect.cmip6.special.realm]
        type            = "lookup"
        attribute       = "realm"
-       tree           = ["{{ table_id }}", "{{ variable_id }}"]
+       tree            = ["{{ table_id }}", "{{ variable_id }}"]
+       standard        = "cmip6"
 
        [drs_settings.dialect.cmip6.special.time_frequency]
        type   = "lookup"
@@ -103,9 +104,15 @@ the lookup rule:
 
 .. note::
 
-    - The backend should **memoize** lookups in a tree cache
-      so repeated calls across millions of files are O(1) hits after the first read.
-    - ``read_kws`` come from ``dialect[standard].data_specs.read_kws`` (e.g., xarray engine).
+    - Backends should **memoize** lookups in an in-memory, tree-shaped cache so
+      repeated queries across millions of files are O(1) after the first read.
+
+    - ``read_kws`` are taken from ``dialect[standard].data_specs.read_kws`` (e.g.,
+      the xarray engine) and passed through to the dataset reader.
+
+   - The ``standard`` key in the lookup-table configuration selects the top-level
+     namespace (branch) where data are stored. If ``standard`` is omitted or empty,
+     the lookup falls back to the DRS-type name (the dialect).
 
 
 Call
