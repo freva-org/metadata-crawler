@@ -89,7 +89,7 @@ class Logger(logging.Logger):
         for handler in self.handlers:
             log_level = level
             if isinstance(handler, RotatingFileHandler):
-                log_level = min(level, logging.ERROR)
+                log_level = min(level, logging.CRITICAL)
             handler.setLevel(log_level)
         self.setLevel(level)
 
@@ -109,7 +109,7 @@ logger = Logger()
 
 
 def add_file_handle(
-    suffix: Optional[str], log_level: int = logging.ERROR
+    suffix: Optional[str], log_level: int = logging.CRITICAL
 ) -> None:
     """Add a file log handle to the logger."""
     base_name = f"{THIS_NAME}-{suffix}" if suffix else THIS_NAME
@@ -124,13 +124,13 @@ def add_file_handle(
         delay=False,
     )
     logger_file_handle.setFormatter(logger.file_format)
-    logger_file_handle.setLevel(min(log_level, logging.ERROR))
+    logger_file_handle.setLevel(min(log_level, logging.CRITICAL))
     logger.addHandler(logger_file_handle)
 
 
 def get_level_from_verbosity(verbosity: int) -> int:
     """Calculate the log level from a verbosity."""
-    return max(logging.ERROR - 10 * verbosity, -1)
+    return max(logging.CRITICAL - 10 * verbosity, -1)
 
 
 def apply_verbosity(level: int) -> int:
