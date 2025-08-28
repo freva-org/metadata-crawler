@@ -37,7 +37,11 @@ from pydantic import (
 from tomlkit.container import OutOfOrderTableProxy
 from tomlkit.items import Table
 
-from ..utils import convert_str_to_timestamp, load_plugins
+from ..utils import (
+    MetadataCrawlerException,
+    convert_str_to_timestamp,
+    load_plugins,
+)
 from .mixin import TemplateMixin
 from .storage_backend import Metadata, MetadataType
 
@@ -96,7 +100,7 @@ class SchemaField(BaseModel):
         f_type = getattr(getattr(Types, v, None), "value", v)
         m = re.fullmatch(r"({})(\[(\d*)\])?".format("|".join(BaseType)), f_type)
         if not m:
-            raise ValueError(f"invalid type spec {v!r}")
+            raise MetadataCrawlerException(f"invalid type spec {v!r}")
         base, _, num = m.groups()
         setattr(
             cls,
@@ -197,7 +201,9 @@ class ConfigMerger:
             try:
                 self._user_doc = tomlkit.parse(_config)
             except Exception:
-                raise ValueError("Could not load config path.")
+                raise MetadataCrawlerException(
+                    "Could not load config path."
+                ) from None
             self._merge_tables(self._system_doc, self._user_doc)
 
     def _merge_tables(
@@ -256,12 +262,12 @@ class PathSpecs(BaseModel):
         if len(dir_parts) == len(self.dir_parts):
             data: Dict[str, Any] = dict(zip(self.dir_parts, dir_parts))
         else:
-            raise ValueError(
+            raise MetadataCrawlerException(
                 (
                     f"Number of dir parts for {rel_path.parent} do not match "
                     f"- needs: {len(self.dir_parts)} has: {len(dir_parts)}"
                 )
-            )
+            ) from None
         if len(file_parts) == len(self.file_parts):
             _parts = dict(zip(self.file_parts, file_parts))
         elif (
@@ -269,7 +275,7 @@ class PathSpecs(BaseModel):
         ):
             _parts = dict(zip(self.file_parts[:-1], file_parts))
         else:
-            raise ValueError(
+            raise MetadataCrawlerException(
                 (
                     f"Number of file parts for {rel_path.name} do not match "
                     f"- needs: {len(self.file_parts)} has: {len(file_parts)})"
@@ -474,7 +480,7 @@ class Dialect(BaseModel):
         invalid = [s for s in srcs if s.upper() not in names and s not in values]
         if invalid:
             allowed = sorted(values | {n.lower() for n in names})
-            raise ValueError(
+            raise MetadataCrawlerException(
                 f"Invalid metadata source(s): {invalid!r}. Allowed: {allowed}"
             )
         return srcs
@@ -554,7 +560,7 @@ class DRSConfig(BaseModel, TemplateMixin):
                 parent = cfg.get("inherits_from")
                 if parent:
                     if parent not in merged:
-                        raise ValueError(
+                        raise MetadataCrawlerException(
                             f"'{name}' inherits from unknown " f"'{parent}'"
                         )
                     # take parent base, then overlay this dialect
@@ -650,7 +656,7 @@ class DRSConfig(BaseModel, TemplateMixin):
             for err in e.errors():
                 loc = ".".join(str(x) for x in err["loc"])
                 msgs.append(f"{loc}: {err['msg']}")
-            raise ValueError(
+            raise MetadataCrawlerException(
                 "DRSConfig validation failed:\n" + "\n".join(msgs)
             ) from None
 
@@ -731,13 +737,10 @@ class DRSConfig(BaseModel, TemplateMixin):
 
     def read_metadata(self, standard: str, inp: MetadataType) -> Dict[str, Any]:
         """Get the meta data for a given file path."""
-        try:
-            return self._read_metadata(
-                standard,
-                Metadata(path=inp["path"], metadata=inp["metadata"].copy()),
-            )
-        except Exception as error:
-            raise ValueError(error) from error
+        return self._read_metadata(
+            standard,
+            Metadata(path=inp["path"], metadata=inp["metadata"].copy()),
+        )
 
     def _translate(self, standard: str, inp: Metadata) -> Dict[str, Any]:
         out: Dict[str, Any] = {}

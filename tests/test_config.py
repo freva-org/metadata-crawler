@@ -18,6 +18,7 @@ from metadata_crawler.api.config import DRSConfig
 from metadata_crawler.api.metadata_stores import DateTimeDecoder, DateTimeEncoder
 from metadata_crawler.backends.posix import PosixPath
 from metadata_crawler.backends.swift import SwiftPath
+from metadata_crawler.utils import MetadataCrawlerException
 
 CONFIG = """[bar]
 root_path = "{{path | default('/foo')}}"
@@ -64,14 +65,14 @@ def test_bad_config() -> None:
     wrong_config = Template(CONFIG).render(
         vars='{vars = "foo", attrs = "long_name", default = "__name__" }',
     )
-    with pytest.raises(ValueError):
+    with pytest.raises(MetadataCrawlerException):
         DRSConfig.load(wrong_config)
 
     wrong_config = Template(CONFIG).render(
         vars='{var = "foo", attr = "long_name", default = "__name__" }',
         inherits="mohh",
     )
-    with pytest.raises(ValueError):
+    with pytest.raises(MetadataCrawlerException):
         DRSConfig.load(wrong_config)
 
     wrong_config = Template(CONFIG).render(
@@ -84,7 +85,7 @@ def test_bad_config() -> None:
         vars='{var = "foo", attr = "long_name", default = "__name__" }',
         sources='["foo"]',
     )
-    with pytest.raises(ValueError):
+    with pytest.raises(MetadataCrawlerException):
         DRSConfig.load(wrong_config)
 
 
@@ -104,7 +105,7 @@ def test_read_zarr_data(zarr_data: Path) -> None:
     )
     config = DRSConfig.load(conf)
     assert "path" in config.dialect["bar"].sources
-    with pytest.raises(ValueError):
+    with pytest.raises(MetadataCrawlerException):
         data = config.dialect["bar"].path_specs.get_metadata_from_path(
             Path("foo/muh_bar_zup.nc")
         )

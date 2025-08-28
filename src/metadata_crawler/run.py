@@ -16,6 +16,7 @@ from .data_collector import DataCollector
 from .logger import apply_verbosity, get_level_from_verbosity, logger
 from .utils import (
     Console,
+    MetadataCrawlerException,
     find_closest,
     load_plugins,
     timedelta_to_str,
@@ -55,7 +56,7 @@ def _get_search(
             )
         except KeyError:
             msg = find_closest(f"No such dataset: {item}", item, config.keys())
-            raise ValueError(msg) from None
+            raise MetadataCrawlerException(msg) from None
     for num, _dir in enumerate(map(strip_protocol, search_dirs or [])):
         for name, cfg in config.items():
             if _dir.is_relative_to(strip_protocol(cfg.root_path)):
@@ -287,7 +288,9 @@ async def async_add(
             "EVALUATION_SYSTEM_CONFIG_DIR"
         )
         if not config_file:
-            raise ValueError("You must give a config file/directory")
+            raise MetadataCrawlerException(
+                "You must give a config file/directory"
+            )
         st = time.time()
         passwd = ""
         if password:  # pragma: no cover

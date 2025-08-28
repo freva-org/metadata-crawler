@@ -9,6 +9,7 @@ import pytest
 
 from metadata_crawler import add
 from metadata_crawler.api.config import DRSConfig
+from metadata_crawler.utils import MetadataCrawlerException
 
 
 def test_crawl_local_obs(
@@ -37,7 +38,7 @@ def test_crawl_local_obs(
     assert cat_file.exists()
     _lens.append(len(intake.open_catalog(cat_file).latest.read()))
     assert _lens[0] == _lens[-1]
-    with pytest.raises(ValueError):
+    with pytest.raises(MetadataCrawlerException):
         add(cat_file)
 
 
@@ -84,20 +85,20 @@ def test_crawl_local_cmip6(
     assert cat_file.exists()
     _lens.append(len(intake.open_catalog(cat_file).latest.read()))
     assert _lens[0] == _lens[-1]
-    with pytest.raises(ValueError):
+    with pytest.raises(MetadataCrawlerException):
         add(cat_file, drs_config_path, data_set=["zzz"])
 
 
 def test_crawl_empty_set(drs_config_path: Path, cat_file: Path) -> None:
     """Test the behaviour of crawling non existing data(sets)."""
 
-    with pytest.raises(ValueError):
+    with pytest.raises(MetadataCrawlerException):
         add("foo.yml", "foo.toml")
-    with pytest.raises(ValueError):
+    with pytest.raises(MetadataCrawlerException):
         add("foo.yml", drs_config_path, data_set=["zzz"])
-    with pytest.raises(ValueError):
+    with pytest.raises(MetadataCrawlerException):
         add("foo.yml", drs_config_path, data_set=["nextgems_zarr"])
-    with pytest.raises(ValueError):
+    with pytest.raises(MetadataCrawlerException):
         add("foo.yml", drs_config_path, data_object=["/foo"])
     add(cat_file, drs_config_path, data_set=["fool"])
 

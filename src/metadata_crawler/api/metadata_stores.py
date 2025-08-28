@@ -38,7 +38,13 @@ import yaml
 import metadata_crawler
 
 from ..logger import logger
-from ..utils import Counter, QueueLike, SimpleQueueLike, create_async_iterator
+from ..utils import (
+    Counter,
+    MetadataCrawlerException,
+    QueueLike,
+    SimpleQueueLike,
+    create_async_iterator,
+)
 from .config import DRSConfig, SchemaField
 from .storage_backend import MetadataType
 
@@ -471,6 +477,9 @@ class QueueConsumer:
             try:
                 name, drs_type, inp = cast(Tuple[str, str, MetadataType], item)
                 metadata = read_metadata(drs_type, inp)
+            except MetadataCrawlerException as error:
+                logger.warning(error)
+                continue
             except Exception as error:
                 logger.error(error)
                 continue

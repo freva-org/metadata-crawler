@@ -24,7 +24,12 @@ from .api.config import CrawlerSettings, DRSConfig
 from .api.metadata_stores import CatalogueWriter, IndexName
 from .api.storage_backend import PathTemplate
 from .logger import logger
-from .utils import Counter, create_async_iterator, print_performance
+from .utils import (
+    Counter,
+    MetadataCrawlerException,
+    create_async_iterator,
+    print_performance,
+)
 
 ScanItem = tuple[str, str, bool]
 
@@ -58,7 +63,7 @@ class DataCollector:
     ):
         self._search_objects = search_objects
         if not search_objects:
-            raise ValueError("You have to give search directories")
+            raise MetadataCrawlerException("You have to give search directories")
         self._num_files: Counter = Value("i", 0)
         self.index_name = index_name
         self.config = DRSConfig.load(config_file)

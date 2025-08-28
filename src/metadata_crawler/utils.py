@@ -95,10 +95,13 @@ class ValueLike(Protocol[U]):
         ...
 
 
+Counter: TypeAlias = ValueLike[int]
 PrintLock = mp.Lock()
 Console = rich.console.Console(force_terminal=True, stderr=True)
 
-Counter: TypeAlias = ValueLike[int]
+
+class MetadataCrawlerException(BaseException):
+    """Custom Exception for the crawling."""
 
 
 async def create_async_iterator(itt: Iterable[Any]) -> AsyncIterator[Any]:
