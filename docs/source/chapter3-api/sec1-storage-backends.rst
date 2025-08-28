@@ -18,7 +18,7 @@ The core classes used for storage backends are:
 * ``PathMixin`` – Provides convenience methods ``suffix`` and
   ``name`` to extract parts of a path using ``anyio.Path``.
 * ``PathTemplate`` – Abstract base class combining
-  ``TemplateMixin`` and ``PathMixin``.  Concrete backends must
+  ``TemplateMixin`` , ``LookupMixin`` and ``PathMixin``.  Concrete backends must
   implement asynchronous methods ``is_dir``, ``is_file``, ``iterdir``,
   ``rglob`` and synchronous methods ``path`` and ``uri``.  Optional
   overrides include ``open_dataset`` (open an xarray dataset given
@@ -103,13 +103,16 @@ Once registered, you can set ``fs_type = "foo"`` in a dataset
 definition and optionally provide ``storage_options`` that will be
 passed into your backend’s constructor.
 
-**API Reference:**
+API Reference:
+--------------
 
 .. autoclass:: metadata_crawler.api.storage_backend.PathTemplate
    :inherited-members: False
 
-.. autoclass:: metadata_crawler.api.storage_backend.PathMixin
+.. autoclass:: metadata_crawler.api.mixin.PathMixin
    :inherited-members: False
 
-.. autoclass:: metadata_crawler.api.storage_backend.TemplateMixin
+.. autoclass:: metadata_crawler.api.mixin.TemplateMixin
    :inherited-members: False
+
+.. autoclass:: metadata_crawler.api.mixin.LookupMixin

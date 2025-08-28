@@ -7,7 +7,7 @@ from typing import AsyncIterator, Union
 
 from anyio import Path
 
-from ..api.storage_backend import Metadata, PathTemplate
+from ..api.storage_backend import MetadataType, PathTemplate
 
 
 class PosixPath(PathTemplate):
@@ -68,7 +68,7 @@ class PosixPath(PathTemplate):
 
     async def rglob(
         self, path: Union[str, Path, pathlib.Path], glob_pattern: str = "*"
-    ) -> AsyncIterator[Metadata]:
+    ) -> AsyncIterator[MetadataType]:
         """Search recursively for paths matching a given glob pattern.
 
         Parameter
@@ -80,15 +80,15 @@ class PosixPath(PathTemplate):
 
         Yields
         ------
-        str: Path of the object store that matches the glob pattern.
+        MetadataType: Path of the object store that matches the glob pattern.
         """
         p = Path(path)
         if await self.is_file(p) or p.suffix == ".zarr":
-            yield Metadata(path=str(p))
+            yield MetadataType(path=str(p), metadata={})
         else:
             async for out_f in p.rglob(glob_pattern):
                 if out_f.suffix in self.suffixes:
-                    yield Metadata(path=str(out_f))
+                    yield MetadataType(path=str(out_f), metadata={})
 
     def path(self, path: Union[str, Path, pathlib.Path]) -> str:
         """Get the full path (including any schemas/netlocs).

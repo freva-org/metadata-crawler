@@ -28,8 +28,7 @@ in your ``pyproject.toml`` file:
 
 
 .. toctree::
-   :maxdepth: 1
-   :caption: Sections
+   :maxdepth: 2
 
    sec1-storage-backends
    sec2-index-backends

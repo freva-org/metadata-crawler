@@ -10,7 +10,7 @@ headers="$(curl -si -H "X-Auth-User: $USER" -H "X-Auth-Key: $KEY" "$AUTH_URL")"
 token="$(printf '%s' "$headers" | tr -d '\r' | awk -F': ' '/^X-Auth-Token:/ {print $2}')"
 storage_url="$(printf '%s' "$headers" | tr -d '\r' | awk -F': ' '/^X-Storage-Url:/ {print $2}')"
 
-# 
+#
 if [ -z "${token:-}" ] || [ -z "${storage_url:-}" ]; then
   echo "Failed to authenticate against Swift at $AUTH_URL" >&2
   exit 1

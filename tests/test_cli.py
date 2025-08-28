@@ -3,7 +3,17 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import Annotated, Any, Callable, Dict, List, Optional, Tuple, cast
+from typing import (
+    Annotated,
+    Any,
+    AsyncIterator,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    cast,
+)
 
 import pytest
 
@@ -48,9 +58,11 @@ class FakeIntakePath:
         self.storage_options = storage_options
         self.walk_called_with: Optional[str] = None
 
-    async def walk(self, path: str) -> None:
+    async def walk(self, path: str) -> AsyncIterator[str]:
         # store the path so tests can assert
         self.walk_called_with = path
+        for i in range(10):
+            yield i
 
 
 # Fake plugin class to exercise the dynamic subparsers
@@ -111,7 +123,7 @@ def test_crawl_parsing_and_dispatch(
             "icon",
             "--data-object",
             "foo.yaml",
-            "--threads",
+            "--n-procs",
             "4",
             "-s",
             "anon",
@@ -140,7 +152,7 @@ def test_crawl_parsing_and_dispatch(
     # Core arguments
     assert kw["store"] == "s3://bucket/catalog.yml"
     assert kw["batch_size"] == 42
-    assert kw["threads"] == 4
+    assert kw["n_procs"] == 4
     assert kw["data_set"] == ["cmip6", "icon"]
     assert kw["data_object"] == ["foo.yaml"]
 
@@ -193,13 +205,14 @@ def test_walk_intake_invokes_async_walk(monkeypatch: pytest.MonkeyPatch) -> None
         nonlocal fake_ip
         return fake_ip
 
-    def fake_run(coro: Any) -> None:
+    def fake_run(coro: Any) -> int:
         # Execute the coroutine on a fresh loop to avoid interference
         loop = asyncio.new_event_loop()
         try:
             loop.run_until_complete(coro)
         finally:
             loop.close()
+        return 1
 
     monkeypatch.setattr(mc_cli, "IntakePath", fake_ctor)  # class replacement
     monkeypatch.setattr(mc_cli.asyncio, "run", fake_run)

@@ -9,7 +9,7 @@ import uvloop
 
 from ._version import __version__
 from .api.config import ConfigMerger
-from .api.metadata_stores import IndexName
+from .api.metadata_stores import CatalogueBackendType, IndexName
 from .data_collector import DataCollector
 from .logger import logger
 from .run import async_add, async_delete, async_index
@@ -145,15 +145,16 @@ def add(
     data_object: Optional[List[str]] = None,
     data_set: Optional[List[str]] = None,
     data_store_prefix: str = "metadata",
-    catalogue_backend: str = "duckdb",
-    batch_size: int = 2500,
+    catalogue_backend: CatalogueBackendType = "jsonlines",
+    batch_size: int = 25_000,
     comp_level: int = 4,
     storage_options: Optional[Dict[str, Any]] = None,
     latest_version: str = IndexName().latest,
     all_versions: str = IndexName().all,
-    threads: Optional[int] = None,
+    n_procs: Optional[int] = None,
     verbosity: int = 0,
     password: bool = False,
+    **kwargs: Any,
 ) -> None:
     """Harvest metadata from storage systems and add them to an intake catalogue.
 
@@ -192,10 +193,16 @@ def add(
         Name of the core holding 'all' metadata versions.
     password:
         Display a password prompt and set password before beginning.
-    threads:
-        Set the number of threads for collecting.
+    n_procs:
+        Set the number of parallel processes for collecting.
     verbosity:
         Set the verbosity of the system.
+
+    Other Parameters
+    ^^^^^^^^^^^^^^^^
+
+    **kwargs:
+        Additional keyword arguments.
 
 
     Examples
@@ -222,8 +229,9 @@ def add(
             data_store_prefix=data_store_prefix,
             latest_version=latest_version,
             all_versions=all_versions,
-            threads=threads,
+            n_procs=n_procs,
             storage_options=storage_options,
             verbosity=verbosity,
+            **kwargs,
         )
     )

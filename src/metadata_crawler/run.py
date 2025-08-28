@@ -8,14 +8,15 @@ from types import NoneType
 from typing import Any, Dict, List, Optional, Sequence, Union, cast
 
 import tomlkit
-from rich import print as pprint
 from rich.prompt import Prompt
 
 from .api.config import CrawlerSettings, DRSConfig, strip_protocol
-from .api.metadata_stores import IndexName
+from .api.metadata_stores import CatalogueBackendType, IndexName
 from .data_collector import DataCollector
-from .logger import apply_verbosity, logger
+from .logger import apply_verbosity, get_level_from_verbosity, logger
 from .utils import (
+    Console,
+    MetadataCrawlerException,
     find_closest,
     load_plugins,
     timedelta_to_str,
@@ -27,9 +28,11 @@ FilesArg = Optional[Union[str, Path, Sequence[Union[str, Path]]]]
 def _norm_files(catalogue_files: FilesArg) -> List[str]:
     if catalogue_files is None:
         return [""]
-    if isinstance(catalogue_files, (str, Path)):
-        return [str(catalogue_files)]
-    return [str(p) for p in catalogue_files]
+    return (
+        [str(catalogue_files)]
+        if isinstance(catalogue_files, (str, Path))
+        else [str(p) for p in catalogue_files]
+    )
 
 
 def _get_search(
@@ -53,7 +56,7 @@ def _get_search(
             )
         except KeyError:
             msg = find_closest(f"No such dataset: {item}", item, config.keys())
-            raise ValueError(msg) from None
+            raise MetadataCrawlerException(msg) from None
     for num, _dir in enumerate(map(strip_protocol, search_dirs or [])):
         for name, cfg in config.items():
             if _dir.is_relative_to(strip_protocol(cfg.root_path)):
@@ -207,15 +210,16 @@ async def async_add(
     data_object: Optional[Union[str, List[str]]] = None,
     data_set: Optional[Union[List[str], str]] = None,
     data_store_prefix: str = "metadata",
-    batch_size: int = 2500,
+    batch_size: int = 25_000,
     comp_level: int = 4,
     storage_options: Optional[Dict[str, Any]] = None,
-    catalogue_backend: str = "duckdb",
+    catalogue_backend: CatalogueBackendType = "jsonlines",
     latest_version: str = IndexName().latest,
     all_versions: str = IndexName().all,
     password: bool = False,
-    threads: Optional[int] = None,
+    n_procs: Optional[int] = None,
     verbosity: int = 0,
+    **kwargs: Any,
 ) -> None:
     """Harvest metadata from storage systems and add them to an intake catalogue.
 
@@ -252,10 +256,16 @@ async def async_add(
         Name of the core holding 'all' metadata versions.
     password:
         Display a password prompt before beginning
-    threads:
-        Set the number of threads for collecting.
+    n_procs:
+        Set the number of parallel processes for collecting.
     verbosity:
         Set the verbosity of the system.
+
+    Other Parameters
+    ^^^^^^^^^^^^^^^^
+
+    **kwargs:
+        Additional keyword arguments.
 
 
     Examples
@@ -273,11 +283,14 @@ async def async_add(
     env = cast(os._Environ[str], os.environ.copy())
     old_level = apply_verbosity(verbosity)
     try:
+        os.environ["MDC_LOG_LEVEL"] = str(get_level_from_verbosity(verbosity))
         config_file = config_file or os.environ.get(
             "EVALUATION_SYSTEM_CONFIG_DIR"
         )
         if not config_file:
-            raise ValueError("You must give a config file/directory")
+            raise MetadataCrawlerException(
+                "You must give a config file/directory"
+            )
         st = time.time()
         passwd = ""
         if password:  # pragma: no cover
@@ -306,8 +319,9 @@ async def async_add(
             comp_level=comp_level,
             backend=catalogue_backend,
             data_store_prefix=data_store_prefix,
-            threads=threads,
+            n_procs=n_procs,
             storage_options=storage_options or {},
+            **kwargs,
         ) as data_col:
             await data_col.ingest_data()
             num_files = data_col.ingested_objects
@@ -316,7 +330,7 @@ async def async_add(
         logger.info("Discovered: %s files", f"{files_discovered:10,.0f}")
         logger.info("Ingested: %s files", f"{num_files:10,.0f}")
         logger.info("Spend: %s", dt)
-        pprint(
+        Console.print(
             (
                 f"[bold]Ingested [green]{num_files:10,.0f}[/green] "
                 f"within [green]{dt}[/green][/bold]"

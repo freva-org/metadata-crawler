@@ -1,11 +1,12 @@
 """Test general utilities."""
 
+from __future__ import annotations
+
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
-from metadata_crawler.api.config import DRSConfig
 from metadata_crawler.utils import convert_str_to_timestamp
 
 
@@ -66,3 +67,45 @@ def test_len_gt_8_without_T_and_hour_only_falls_back_to_alternative() -> None:
 def test_with_T_and_hour_only_uses_fallback_to_hours() -> None:
     dt = convert_str_to_timestamp("2022-03-04T7")
     assert dt == datetime(2022, 3, 4, 7, 0)
+
+
+# tests/test_convert_str_to_timestamp.py
+
+
+@pytest.mark.parametrize(
+    "time_str, alternative, expected",
+    [
+        ("", "0001-01-01", datetime.fromisoformat("0001-01-01")),
+        ("fx", "0001-01-01", datetime.fromisoformat("0001-01-01")),
+        ("2022", "0001-01-01", datetime.fromisoformat("0001-01-01")),
+        ("202201", "1999-12-31", datetime.fromisoformat("1999-12-31")),
+        ("2022203", "0001-01-01", datetime(2022, 1, 1) + timedelta(days=203 - 1)),
+        ("20220101", "0001-01-01", datetime.fromisoformat("2022-01-01")),
+        ("2022010112", "0001-01-01", datetime.fromisoformat("2022-01-01T12")),
+        (
+            "202201011234",
+            "0001-01-01",
+            datetime.fromisoformat("2022-01-01T12:34"),
+        ),
+        (
+            "20220101123456",
+            "0001-01-01",
+            datetime.fromisoformat("2022-01-01T12:34"),
+        ),
+        (
+            "2022-07-22T12:34",
+            "0001-01-01",
+            datetime.fromisoformat("2022-07-22T12:34"),
+        ),
+        ("2022-01-01T", "0001-01-01", datetime.fromisoformat("2022-01-01T00")),
+    ],
+)
+def test_convert_str_to_timestamp(time_str, alternative, expected):
+    assert convert_str_to_timestamp(time_str, alternative) == expected
+
+
+def test_custom_alternative_used_on_failure():
+    alt = "1999-12-31"
+    assert convert_str_to_timestamp("nonsense", alt) == datetime.fromisoformat(
+        alt
+    )

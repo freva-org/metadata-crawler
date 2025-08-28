@@ -89,6 +89,10 @@ drs_format = "cordex"
 domain = "EUR-11"
 time_frequency = "mon"
 
+[cordex-benchmark]
+root_path = "./data/cordex-tree/"
+drs_format = "cordex"
+
 [obs-swift]
 root_path = "/observations"
 fs_type = "swift"

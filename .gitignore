@@ -5,7 +5,7 @@ data*.yml
 data*.yaml
 data.yaml
 data.yml
-
+data/cordex-tree
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
