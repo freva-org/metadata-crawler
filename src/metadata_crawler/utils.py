@@ -259,12 +259,12 @@ def print_performance(
     print_status: EventLike,
     num_files: Counter,
     ingest_queue: QueueLike[Any],
+    num_objects: Counter,
 ) -> None:
     """Display the progress of the crawler."""
     spinner = rich.spinner.Spinner(
         os.getenv("SPINNER", "earth"), text="[b]Preparing crawler ...[/]"
     )
-    ingested_files = 0
     with Live(spinner, console=Console, refresh_per_second=1, transient=True):
         while print_status.is_set() is True:
             start = time.time()
@@ -283,14 +283,13 @@ def print_performance(
                 q_col = "red"
             if queue_size < 10_000:
                 q_col = "green"
-            ingested_files += ingest_queue.qsize()
             msg = (
                 f"[bold]Discovering: [{f_col}]{perf_file:>6,.1f}[/{f_col}] "
                 "files / sec. #files discovered: "
                 f"[blue]{num_files.value:>10,.0f}[/blue]"
                 f" in queue: [{q_col}]{queue_size:>6,.0f}[/{q_col}] "
                 f"#indexed files: "
-                f"[{p_col}]{ingested_files:>10,.0f}[/{p_col}][/bold] "
+                f"[{p_col}]{num_objects.value:>10,.0f}[/{p_col}][/bold] "
                 f"{20 * ' '}"
             )
             spinner.update(text=msg)

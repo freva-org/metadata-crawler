@@ -214,7 +214,7 @@ class DataCollector:
         self._print_status.set()
         self._num_files.value = 0
         print_performance(
-            self._print_status, self._num_files, self.ingest_queue.queue
+            self._print_status, self._num_files, self.ingest_queue.num_objects
         )
 
         async with asyncio.TaskGroup() as tg:
