@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-import time
+from multiprocessing import Event, Value
 from pathlib import Path
 from typing import (
     Any,
@@ -18,15 +18,13 @@ from typing import (
     cast,
 )
 
-import rich.spinner
 import tomlkit
-from rich.live import Live
 
 from .api.config import CrawlerSettings, DRSConfig
 from .api.metadata_stores import CatalogueWriter, IndexName
 from .api.storage_backend import PathTemplate
 from .logger import logger
-from .utils import Console, PrintLock, create_async_iterator, daemon
+from .utils import Counter, create_async_iterator, print_performance
 
 ScanItem = tuple[str, str, bool]
 
@@ -61,7 +59,7 @@ class DataCollector:
         self._search_objects = search_objects
         if not search_objects:
             raise ValueError("You have to give search directories")
-        self._num_files = 0
+        self._num_files: Counter = Value("i", 0)
         self.index_name = index_name
         self.config = DRSConfig.load(config_file)
         kwargs.setdefault("scan_concurrency", os.getenv("SCAN_CONCURRENCY", "64"))
@@ -69,6 +67,7 @@ class DataCollector:
         self._scan_queue: asyncio.Queue[Optional[ScanItem]] = asyncio.Queue(
             maxsize=int(kwargs.pop("scan_queue_size", 10_000))
         )
+        self._print_status = Event()
         self.ingest_queue = CatalogueWriter(
             str(metadata_store or "metadata.yaml"),
             index_name=index_name,
@@ -76,7 +75,6 @@ class DataCollector:
             **kwargs,
         )
         self.ingest_queue.run_consumer()
-        self._print_status = False
         self._max_files = int(cast(str, os.getenv("MDC_MAX_FILES", "-1")))
 
     @property
@@ -84,7 +82,7 @@ class DataCollector:
         self,
     ) -> int:
         """Get the total number of crawled files."""
-        return self._num_files
+        return self._num_files.value
 
     @property
     def ingested_objects(self) -> int:
@@ -101,7 +99,7 @@ class DataCollector:
         return self
 
     async def __aexit__(self, *args: Any, **kwargs: Any) -> None:
-        self._print_status = False
+        self._print_status.clear()
         self.ingest_queue.join_all_tasks()
         await self.ingest_queue.close()
 
@@ -115,42 +113,6 @@ class DataCollector:
             *[_safe_close(ds.backend) for ds in self.config.datasets.values()],
             return_exceptions=True,
         )
-
-    @daemon
-    def _print_performance(self) -> None:
-
-        spinner = rich.spinner.Spinner(
-            os.getenv("SPINNER", "earth"), text="[b]Preparing crawler ...[/]"
-        )
-        with Live(spinner, console=Console, refresh_per_second=1, transient=True):
-            while self._print_status is True:
-                start = time.time()
-                num = self._num_files
-                time.sleep(1)
-                d_num = self._num_files - num
-                dt = time.time() - start
-                perf_file = d_num / dt
-                queue_size = self.ingest_queue.size
-                f_col = p_col = q_col = "blue"
-                if perf_file > 500:
-                    f_col = "green"
-                if perf_file < 100:
-                    f_col = "red"
-                if queue_size > 100_000:
-                    q_col = "red"
-                if queue_size < 10_000:
-                    q_col = "green"
-                msg = (
-                    f"[bold]Discovering: [{f_col}]{perf_file:>6,.1f}[/{f_col}] "
-                    "files / sec. #files discovered: "
-                    f"[blue]{self.crawled_files:>10,.0f}[/blue]"
-                    f" in queue: [{q_col}]{queue_size:>6,.0f}[/{q_col}] "
-                    f"#indexed files: "
-                    f"[{p_col}]{self.ingested_objects:>10,.0f}[/{p_col}][/bold] "
-                    f"{20 * ' '}"
-                )
-                if not PrintLock.locked():  # pragma: no cover
-                    spinner.update(text=msg)
 
     def _test_env(self) -> bool:
         return (
@@ -191,7 +153,7 @@ class DataCollector:
                     await self.ingest_queue.put(
                         _inp, drs_type, name=self.index_name.latest
                     )
-                self._num_files += 1
+                self._num_files.value += 1
             rank += 1
         return None
 
@@ -249,8 +211,11 @@ class DataCollector:
 
     async def ingest_data(self) -> None:
         """Produce scan tasks and process them with a bounded worker pool."""
-        self._print_status = True
-        self._print_performance()
+        self._print_status.set()
+        self._num_files.value = 0
+        print_performance(
+            self._print_status, self._num_files, self.ingest_queue.queue
+        )
 
         async with asyncio.TaskGroup() as tg:
             # start scan workers
@@ -275,4 +240,4 @@ class DataCollector:
             "%i ingestion tasks have been completed", len(self._search_objects)
         )
         self.ingest_queue.join_all_tasks()
-        self._print_status = False
+        self._print_status.clear()

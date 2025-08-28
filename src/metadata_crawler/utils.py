@@ -1,7 +1,10 @@
 """Random utility functions."""
 
 import difflib
-import threading
+import multiprocessing as mp
+import multiprocessing.context as mctx
+import os
+import time
 from datetime import datetime, timedelta
 from importlib.metadata import entry_points
 from typing import (
@@ -11,19 +14,91 @@ from typing import (
     Dict,
     Iterable,
     Optional,
+    Protocol,
+    TypeAlias,
     TypeVar,
     Union,
 )
 
 import rich.console
+import rich.spinner
+from rich.live import Live
 
 from .logger import logger
 
 T = TypeVar("T")
+U = TypeVar("U")
 
 
-PrintLock = threading.Lock()
+class SimpleQueueLike(Protocol[T]):
+    """A simple queue like Type class."""
+
+    def put(self, item: T) -> None:  # noqa
+        ...
+
+    def get(self) -> T:  # noqa
+        ...
+
+
+class QueueLike(Protocol[T]):
+    """A queue like Type class."""
+
+    def put(self, item: T) -> None:  # noqa
+        ...
+
+    def get(
+        self, block: bool = True, timeout: Optional[float] = ...
+    ) -> T:  # noqa
+        ...
+
+    def qsize(self) -> int:  # noqa
+        ...
+
+
+class EventLike(Protocol):
+    """An event like Type class."""
+
+    def set(self) -> None:  # noqa
+        ...
+
+    def clear(self) -> None:  # noqa
+        ...
+
+    def is_set(self) -> bool:  # noqa
+        ...
+
+    def wait(self) -> None:  # noqa
+        ...
+
+
+class LockLike(Protocol):
+    """A lock like Type class."""
+
+    def acquire(
+        self, blocking: bool = ..., timeout: Optional[float] = ...
+    ) -> bool:  # noqa
+        ...
+
+    def release(self) -> None:  # noqa
+        ...
+
+    def __enter__(self) -> "LockLike": ...
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None: ...
+
+
+class ValueLike(Protocol[U]):
+    """A value like Type class."""
+
+    value: U
+
+    def get_lock(self) -> "Any":  # noqa
+        ...
+
+
+PrintLock = mp.Lock()
 Console = rich.console.Console(force_terminal=True, stderr=True)
+
+Counter: TypeAlias = ValueLike[int]
 
 
 async def create_async_iterator(itt: Iterable[Any]) -> AsyncIterator[Any]:
@@ -152,18 +227,17 @@ def exception_handler(exception: BaseException) -> None:
 
 def daemon(
     func: Callable[..., Any],
-) -> Callable[..., Optional[threading.Thread]]:
+) -> Callable[..., mctx.ForkProcess]:
     """Threading decorator.
 
     use @daemon above the function you want to run in the background
     """
 
-    def background_func(*args: Any, **kwargs: Any) -> Optional[threading.Thread]:
-        thread = threading.Thread(
-            target=func, args=args, kwargs=kwargs, daemon=True
-        )
-        thread.start()
-        return thread
+    def background_func(*args: Any, **kwargs: Any) -> mctx.ForkProcess:
+        ctx = mp.get_context("fork")
+        proc = ctx.Process(target=func, args=args, kwargs=kwargs, daemon=True)
+        proc.start()
+        return proc
 
     return background_func
 
@@ -178,3 +252,43 @@ def timedelta_to_str(seconds: Union[int, float]) -> str:
         if num > 0:
             out.append(f"{num} {letter}")
     return " ".join(out[::-1])
+
+
+@daemon
+def print_performance(
+    print_status: EventLike,
+    num_files: Counter,
+    ingest_queue: QueueLike[Any],
+) -> None:
+    """Display the progress of the crawler."""
+    spinner = rich.spinner.Spinner(
+        os.getenv("SPINNER", "earth"), text="[b]Preparing crawler ...[/]"
+    )
+    with Live(spinner, console=Console, refresh_per_second=1, transient=True):
+        while print_status.is_set() is True:
+            start = time.time()
+            num = num_files.value
+            time.sleep(1)
+            d_num = num_files.value - num
+            dt = time.time() - start
+            perf_file = d_num / dt
+            queue_size = ingest_queue.qsize()
+            f_col = p_col = q_col = "blue"
+            if perf_file > 500:
+                f_col = "green"
+            if perf_file < 100:
+                f_col = "red"
+            if queue_size > 100_000:
+                q_col = "red"
+            if queue_size < 10_000:
+                q_col = "green"
+            msg = (
+                f"[bold]Discovering: [{f_col}]{perf_file:>6,.1f}[/{f_col}] "
+                "files / sec. #files discovered: "
+                f"[blue]{num_files.value:>10,.0f}[/blue]"
+                f" in queue: [{q_col}]{queue_size:>6,.0f}[/{q_col}] "
+                f"#indexed files: "
+                f"[{p_col}]{ingest_queue.qsize():>10,.0f}[/{p_col}][/bold] "
+                f"{20 * ' '}"
+            )
+            spinner.update(text=msg)

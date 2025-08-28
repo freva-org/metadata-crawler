@@ -12,7 +12,7 @@ import time
 from datetime import datetime
 from enum import Enum
 from io import BytesIO
-from multiprocessing import queues, sharedctypes
+from multiprocessing import sharedctypes
 from pathlib import Path
 from typing import (
     Any,
@@ -38,7 +38,7 @@ import yaml
 import metadata_crawler
 
 from ..logger import logger
-from ..utils import create_async_iterator
+from ..utils import Counter, QueueLike, SimpleQueueLike, create_async_iterator
 from .config import DRSConfig, SchemaField
 from .storage_backend import MetadataType
 
@@ -50,8 +50,10 @@ BATCH_SECS_THRESHOLD = 20
 BATCH_ITEM = List[Tuple[str, Dict[str, Any]]]
 
 
-ConsumerQueueType = queues.Queue[Union[int, Tuple[str, str, MetadataType]]]
-WriterQueueType = queues.SimpleQueue[Union[int, BATCH_ITEM]]
+ConsumerQueueType: TypeAlias = QueueLike[
+    Union[int, Tuple[str, str, MetadataType]]
+]
+WriterQueueType: TypeAlias = SimpleQueueLike[Union[int, BATCH_ITEM]]
 
 
 class Stream(NamedTuple):
@@ -428,7 +430,7 @@ class QueueConsumer:
     ) -> None:
         self.config = DRSConfig.load(config)
         self._writer_queue = writer_queue
-        self._num_objects = num_objects
+        self.num_objects = num_objects
 
     def _flush_batch(
         self,
@@ -437,8 +439,8 @@ class QueueConsumer:
         logger.info("Ingesting %i items", len(batch))
         try:
             self._writer_queue.put(batch.copy())
-            with self._num_objects.get_lock():
-                self._num_objects.value += len(batch)
+            with self.num_objects.get_lock():
+                self.num_objects.value += len(batch)
         except Exception as error:  # pragma: no cover
             logger.error(error)  # pragma: no cover
         batch.clear()
@@ -533,19 +535,19 @@ class CatalogueWriter:
             **kwargs,
         )
         self._ctx = mp.get_context("spawn")
-        self._queue: ConsumerQueueType = self._ctx.Queue()
+        self.queue: ConsumerQueueType = self._ctx.Queue()
         self._poison_pill = 13
-        self._num_objects = self._ctx.Value("i", 0)
+        self.num_objects: Counter = self._ctx.Value("i", 0)
         n_procs = n_procs or min(mp.cpu_count(), 15)
         batch_size_per_proc = max(int(batch_size / n_procs), 100)
         self._tasks = [
             self._ctx.Process(
                 target=QueueConsumer.run_consumer_task,
                 args=(
-                    self._queue,
+                    self.queue,
                     self.store.queue,
                     config,
-                    self._num_objects,
+                    self.num_objects,
                     batch_size_per_proc,
                     self._poison_pill,
                 ),
@@ -576,23 +578,23 @@ class CatalogueWriter:
             Name of the catalogue, if applicable. This variable depends on
             the cataloguing system. For example apache solr would use a `core`.
         """
-        self._queue.put((name, drs_type, inp))
+        self.queue.put((name, drs_type, inp))
 
     @property
     def ingested_objects(self) -> int:
         """Get the number of ingested objects."""
-        return cast(int, self._num_objects.value)
+        return self.num_objects.value
 
     @property
     def size(self) -> int:
         """Get the size of the worker queue."""
-        return self._queue.qsize()
+        return self.queue.qsize()
 
     def join_all_tasks(self) -> None:
         """Block the execution until all tasks are marked as done."""
         logger.debug("Releasing consumers from their duty.")
         for _ in self._tasks:
-            self._queue.put(self._poison_pill)
+            self.queue.put(self._poison_pill)
         for task in self._tasks:
             task.join()
         self.store.join()

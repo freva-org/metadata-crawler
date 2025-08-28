@@ -39,9 +39,16 @@ class ThreadContext:
 def mock_subprocess(monkeypatch) -> Iterator[None]:
     """Multiprocess -> Thread."""
     import metadata_crawler.api.metadata_stores as stores_mod
+    import metadata_crawler.utils as md_utils
 
     monkeypatch.setattr(
         stores_mod.mp,
+        "get_context",
+        lambda method="spawn": ThreadContext(),
+        raising=True,
+    )
+    monkeypatch.setattr(
+        md_utils.mp,
         "get_context",
         lambda method="spawn": ThreadContext(),
         raising=True,

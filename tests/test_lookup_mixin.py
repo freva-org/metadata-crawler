@@ -23,7 +23,7 @@ def test_static_cmor_fastpath(monkeypatch, tmp_path):
             return f"{attribute}@{path}"
 
     # provide a static entry; read_attr must NOT be called
-    lm.LookupMixin.CMOR_STATIC = {("tier", "attr"): "STATIC"}
+    lm.LookupMixin.CMOR_STATIC = {("tier",): "STATIC"}
 
     f = Fake()
     out = f.lookup("/p/file.nc", "attr", "tier")
