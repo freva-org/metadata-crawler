@@ -100,14 +100,13 @@ class LookupMixin:
         """
         # 1) static fast-path
         try:
-            return self.CMOR_STATIC[(*tree, attribute)]
+            return self.CMOR_STATIC[tree]
         except KeyError:
             pass
         # 2) process-safe disk cache (key includes path)
-        key = (path, *tree, attribute)
-        val = _DC.get(key)
+        val = _DC.get(tree)
         if val is None:
             val = self.read_attr(attribute, path, **read_kws)
-            if not _DC.add(key, val):
-                val = _DC.get(key)
+            if not _DC.add(tree, val):
+                val = _DC.get(tree)
         return val

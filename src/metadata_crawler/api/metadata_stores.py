@@ -1,5 +1,7 @@
 """Metadata Storage definitions."""
 
+from __future__ import annotations
+
 import abc
 import gzip
 import json
