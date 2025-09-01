@@ -1,7 +1,10 @@
 """Setup for the tests."""
 
+import multiprocessing as mp
 from pathlib import Path
-from tempfile import NamedTemporaryFile, TemporaryDirectory
+from queue import Queue
+from tempfile import TemporaryDirectory
+from threading import Thread
 from typing import Any, Dict, Iterator
 
 import numpy as np
@@ -11,6 +14,46 @@ import requests
 import toml
 import xarray as xr
 from pymongo import MongoClient
+
+
+class ThreadContext:
+    """Fake the mp.get_context with threads."""
+
+    def SimpleQueue(self) -> Queue[Any]:
+        """Alias for Queue."""
+        return Queue()
+
+    def Queue(self) -> Queue[Any]:
+        """Alias for Queue."""
+        return Queue()
+
+    def Process(self, *args: Any, **kwargs: Any) -> Thread:
+        """Alias for Thread."""
+        return Thread(*args, **kwargs)
+
+    def Value(slef, *args: Any, **kwargs: Any) -> Any:
+        return mp.Value("i", 0)
+
+
+@pytest.fixture(autouse=True)
+def mock_subprocess(monkeypatch) -> Iterator[None]:
+    """Multiprocess -> Thread."""
+    import metadata_crawler.api.metadata_stores as stores_mod
+    import metadata_crawler.utils as md_utils
+
+    monkeypatch.setattr(
+        stores_mod.mp,
+        "get_context",
+        lambda method="spawn": ThreadContext(),
+        raising=True,
+    )
+    monkeypatch.setattr(
+        md_utils.mp,
+        "get_context",
+        lambda method="spawn": ThreadContext(),
+        raising=True,
+    )
+    yield
 
 
 @pytest.fixture(scope="function")
@@ -152,7 +195,7 @@ def cat_file() -> Iterator[Path]:
 
 
 @pytest.fixture(scope="session")
-def zarr_data() -> Iterator[Path]:
+def dataset() -> Iterator[xr.Dataset]:
     lon = xr.DataArray(
         np.linspace(-120, -30, 20),
         name="lon",
@@ -193,7 +236,7 @@ def zarr_data() -> Iterator[Path]:
         },
         coords={"time": time, "lat": lat, "lon": lon},
     )
-    dset = xr.Dataset(
+    yield xr.Dataset(
         {"tas": tas},
         attrs={
             "product": "foo",
@@ -202,7 +245,11 @@ def zarr_data() -> Iterator[Path]:
             "experiment": "random",
         },
     )
+
+
+@pytest.fixture(scope="session")
+def zarr_data(dataset: xr.Dataset) -> Iterator[Path]:
     with TemporaryDirectory() as temp_dir:
         out = Path(temp_dir) / "tas.zarr"
-        dset.to_zarr(out)
+        dataset.to_zarr(out)
         yield out

@@ -20,7 +20,7 @@ def test_crawl_obs(
         cat_file,
         drs_config_path,
         batch_size=3,
-        threads=1,
+        n_procs=1,
         data_set=["obs-swift"],
         catalogue_backend="jsonlines",
     )
@@ -38,9 +38,8 @@ def test_crawl_cmip6(
         cat_file,
         drs_config_path,
         batch_size=3,
-        threads=1,
+        n_procs=1,
         data_set=["cmip6-swift"],
-        catalogue_backend="duckdb",
     )
     assert cat_file.exists()
     cat = intake.open_catalog(cat_file)
@@ -62,7 +61,7 @@ def test_crawl_single_file(
     add(
         cat_file,
         drs_config_path,
-        threads=1,
+        n_procs=1,
         batch_size=3,
         data_object=[file],
     )
@@ -78,8 +77,9 @@ def test_crawl_zarr(drs_config_path: Path, cat_file: Path) -> None:
         cat_file,
         drs_config_path,
         data_set=["nextgems-swift"],
-        threads=1,
+        n_procs=1,
         batch_size=3,
+        verbosity=4,
     )
     assert cat_file.is_file()
     cat = intake.open_catalog(cat_file)

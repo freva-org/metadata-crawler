@@ -44,7 +44,7 @@ KwargValue = Union[
 
 def walk_catalogue(
     path: str, storage_options: Optional[Dict[str, Any]] = None, **kwargs: Any
-) -> None:
+) -> int:
     """Recursively traverse an intake catalogue.
 
     Parameters
@@ -56,8 +56,17 @@ def walk_catalogue(
         Optional configuration passed to open catalogues residing on non posix
         storage backends, such as S3/MinIO
     """
-    ip = IntakePath(**(storage_options or {}))
-    asyncio.run(ip.walk(path))
+
+    async def _walk(path: str, **storage_options: Any) -> int:
+        num_items = 0
+        ip = IntakePath(**storage_options)
+        async for md in ip.walk(path):
+            print(md)
+            num_items += 1
+        return num_items
+
+    storage_options = storage_options or {}
+    return asyncio.run(_walk(path, **storage_options))
 
 
 def _process_storage_option(option: str) -> Union[str, bool, int, float]:
@@ -193,8 +202,15 @@ class ArgParse:
             "-b",
             "--batch-size",
             type=int,
-            default=2500,
+            default=25_000,
             help="Set the batch size for ingestion.",
+        )
+        parser.add_argument(
+            "--scan-concurrency",
+            "--concurrency",
+            type=int,
+            default=64,
+            help="Level of aync concurrency for data discovery.",
         )
         parser.add_argument(
             "-d",
@@ -223,8 +239,9 @@ class ArgParse:
             action="store_true",
         )
         parser.add_argument(
-            "--threads",
-            help="Set the number of threads for collecting.",
+            "--n-procs",
+            "--procs",
+            help="Set the number of parallel processes for collecting.",
             type=int,
             default=None,
         )

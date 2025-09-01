@@ -280,6 +280,16 @@ PRs and issues welcome. Please add tests and keep examples minimal & reproducibl
    tox -e test lint types
 ```
 
+### Benchmarks
+For benchmarking you can create a directory tree with roughly 1.5 M files by
+calling the ``create-cordex.sh`` script in the ``dev-env`` folder:
+
+```console
+./dev-env/create-cordex.sh
+python dev-env/benchmark.py --max-files 20000
+```
+
+
 See ``code-of-conduct.rst`` and ``whatsnew.rst`` for guidelines and changelog.
 
 Use MinIO or LocalStack via ``docker-compose`` and seed a bucket (e.g., ``test-bucket``).

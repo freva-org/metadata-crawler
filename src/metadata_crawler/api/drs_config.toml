@@ -262,13 +262,14 @@ file_sep = "_"
 # override async methods for cmip6
 [drs_settings.dialect.cmip6.special.realm]
 type   = "lookup"
-tree   = ["{{ table_id }}", "{{ variable_id }}"]
+tree   = ["{{ table_id }}", "{{ variable_id }}", "realm"]
 attribute = "realm"
+standard = "cmip6"
 [drs_settings.dialect.cmip6.special.time_frequency]
 type   = "lookup"
-tree   = ["{{ table_id }}","{{ variable_id }}"]
+tree   = ["{{ table_id }}","{{ variable_id }}", "time-frequency"]
 attribute = "frequency"
-
+standard = "cmip6"
 # -- CMIP5 --------------------------------------------------------
 [drs_settings.dialect.cmip5]
 defaults = { level_type = "2d", bbox = [0, 360, -90, 90]}

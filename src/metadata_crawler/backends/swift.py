@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import pathlib
 from fnmatch import fnmatch
 from typing import AsyncIterator, Dict, List, Optional, Tuple, Union, cast
@@ -11,7 +12,7 @@ import aiohttp
 import fsspec
 from anyio import Path
 
-from ..api.storage_backend import Metadata, PathTemplate
+from ..api.storage_backend import MetadataType, PathTemplate
 
 
 def _basename(key: str) -> str:
@@ -71,6 +72,11 @@ class SwiftPath(PathTemplate):
         storage_url = self._os_storage_url.removesuffix(self._container)
         self._url_split = urlsplit(urljoin(storage_url, self._container))
         return self._url_split
+
+    @property
+    def _anon(self) -> bool:
+        """Decide if we can logon at all."""
+        return False if self.os_password or self.headers else True
 
     async def logon(self) -> None:
         """Logon to the swfit system if necessary."""
@@ -192,7 +198,7 @@ class SwiftPath(PathTemplate):
         self,
         path: Union[str, Path, pathlib.Path],
         glob_pattern: str = "*",
-    ) -> AsyncIterator[Metadata]:
+    ) -> AsyncIterator[MetadataType]:
         """Search recursively for files matching a glob_pattern."""
         delimiter: Optional[str] = None
         if await self.is_dir(path):
@@ -205,7 +211,7 @@ class SwiftPath(PathTemplate):
             if dir_name:
                 # if it's an actual object named foo.zarr, treat as zarr store
                 if self._is_zarr_like_match(dir_name, glob_pattern):
-                    yield Metadata(path=dir_name.rstrip("/"))
+                    yield MetadataType(path=dir_name.rstrip("/"), metadata={})
                 else:
                     async for md in self.rglob(dir_name, glob_pattern):
                         yield md
@@ -213,7 +219,7 @@ class SwiftPath(PathTemplate):
                 if pathlib.PosixPath(name).suffix in self.suffixes and fnmatch(
                     name, glob_pattern
                 ):
-                    yield Metadata(path=name)
+                    yield MetadataType(path=name, metadata={})
 
     def get_fs_and_path(self, uri: str) -> Tuple[fsspec.AbstractFileSystem, str]:
         """Return (fs, path) suitable for xarray.
@@ -244,6 +250,8 @@ class SwiftPath(PathTemplate):
             url_split.query,
             url_split.fragment,
         ).geturl()
+        if not self._anon:
+            asyncio.run(self.logon())
         return (
             fsspec.filesystem(
                 "http",

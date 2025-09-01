@@ -37,8 +37,13 @@ from pydantic import (
 from tomlkit.container import OutOfOrderTableProxy
 from tomlkit.items import Table
 
-from ..utils import convert_str_to_timestamp, load_plugins
-from .storage_backend import Metadata, TemplateMixin
+from ..utils import (
+    MetadataCrawlerException,
+    convert_str_to_timestamp,
+    load_plugins,
+)
+from .mixin import TemplateMixin
+from .storage_backend import Metadata, MetadataType
 
 
 class BaseType(str, Enum):
@@ -95,7 +100,7 @@ class SchemaField(BaseModel):
         f_type = getattr(getattr(Types, v, None), "value", v)
         m = re.fullmatch(r"({})(\[(\d*)\])?".format("|".join(BaseType)), f_type)
         if not m:
-            raise ValueError(f"invalid type spec {v!r}")
+            raise MetadataCrawlerException(f"invalid type spec {v!r}")
         base, _, num = m.groups()
         setattr(
             cls,
@@ -196,7 +201,9 @@ class ConfigMerger:
             try:
                 self._user_doc = tomlkit.parse(_config)
             except Exception:
-                raise ValueError("Could not load config path.")
+                raise MetadataCrawlerException(
+                    "Could not load config path."
+                ) from None
             self._merge_tables(self._system_doc, self._user_doc)
 
     def _merge_tables(
@@ -255,12 +262,12 @@ class PathSpecs(BaseModel):
         if len(dir_parts) == len(self.dir_parts):
             data: Dict[str, Any] = dict(zip(self.dir_parts, dir_parts))
         else:
-            raise ValueError(
+            raise MetadataCrawlerException(
                 (
                     f"Number of dir parts for {rel_path.parent} do not match "
                     f"- needs: {len(self.dir_parts)} has: {len(dir_parts)}"
                 )
-            )
+            ) from None
         if len(file_parts) == len(self.file_parts):
             _parts = dict(zip(self.file_parts, file_parts))
         elif (
@@ -268,7 +275,7 @@ class PathSpecs(BaseModel):
         ):
             _parts = dict(zip(self.file_parts[:-1], file_parts))
         else:
-            raise ValueError(
+            raise MetadataCrawlerException(
                 (
                     f"Number of file parts for {rel_path.name} do not match "
                     f"- needs: {len(self.file_parts)} has: {len(file_parts)})"
@@ -294,14 +301,14 @@ class DataSpecs(BaseModel):
 
         for facet, attr in self.globals.items():
             if attr == "__variable__":
-                out[facet] = list(map(str, dset.data_vars))
+                out[facet] = list(getattr(dset, "data_vara", dset.variables))
             else:
                 out[facet] = dset.attrs.get(attr)
 
     def _set_variable_attributes(
         self, dset: "xarray.Dataset", out: Dict[str, Any]
     ) -> None:
-        data_vars = list(dset.data_vars)
+        data_vars = list(getattr(dset, "data_vars", dset.variables))
 
         def get_val(
             rule: VarAttrRule, vnames: Union[str, List[str]]
@@ -403,9 +410,8 @@ class Datasets(BaseModel):
     def _render_storage_options(
         cls, storage_options: Dict[str, Any]
     ) -> Dict[str, Any]:
-        return cast(
-            Dict[str, Any], TemplateMixin.render_templates(storage_options, {})
-        )
+        tmpl = TemplateMixin()
+        return cast(Dict[str, Any], tmpl.render_templates(storage_options, {}))
 
     def model_post_init(self, __context: Any = None) -> None:
         """Apply rules after init."""
@@ -440,6 +446,7 @@ class LookupRule(BaseModel):
     type: Literal["lookup"] = "lookup"
     tree: List[str] = Field(default_factory=list)
     attribute: str
+    standard: Optional[str] = None
 
 
 SpecialRule = Annotated[
@@ -473,13 +480,13 @@ class Dialect(BaseModel):
         invalid = [s for s in srcs if s.upper() not in names and s not in values]
         if invalid:
             allowed = sorted(values | {n.lower() for n in names})
-            raise ValueError(
+            raise MetadataCrawlerException(
                 f"Invalid metadata source(s): {invalid!r}. Allowed: {allowed}"
             )
         return srcs
 
 
-class DRSConfig(BaseModel):
+class DRSConfig(BaseModel, TemplateMixin):
     """BaseModel model for the entire user config."""
 
     datasets: Dict[str, Datasets]
@@ -515,6 +522,10 @@ class DRSConfig(BaseModel):
                 self._defaults[key].setdefault(k, _def)
             for k, _def in self.defaults.items():
                 self._defaults[key].setdefault(k, _def)
+        self.prep_template_env()
+        for standard in self.dialect:
+            for key in self.special:
+                self.dialect[standard].special.setdefault(key, self.special[key])
 
     @model_validator(mode="before")
     @classmethod
@@ -549,7 +560,7 @@ class DRSConfig(BaseModel):
                 parent = cfg.get("inherits_from")
                 if parent:
                     if parent not in merged:
-                        raise ValueError(
+                        raise MetadataCrawlerException(
                             f"'{name}' inherits from unknown " f"'{parent}'"
                         )
                     # take parent base, then overlay this dialect
@@ -578,7 +589,11 @@ class DRSConfig(BaseModel):
         return values
 
     def _apply_special_rules(
-        self, standard: str, inp: Metadata, specials: Dict[str, SpecialRule]
+        self,
+        standard: str,
+        drs_type: str,
+        inp: Metadata,
+        specials: Dict[str, SpecialRule],
     ) -> None:
         data = {**inp.metadata, **{"file": inp.path, "uri": inp.path}}
 
@@ -589,24 +604,23 @@ class DRSConfig(BaseModel):
             match rule.type:
                 case "conditional":
                     _rule = textwrap.dedent(rule.condition or "").strip()
-                    s_cond = TemplateMixin.render_templates(_rule, data)
+                    s_cond = self.render_templates(_rule, data)
                     cond = eval(s_cond, {}, getattr(self, "_model_dict", {}))
                     result = rule.true if cond else rule.false
                 case "lookup":
-                    args = cast(
-                        List[str], TemplateMixin.render_templates(rule.tree, data)
-                    )
+                    args = cast(List[str], self.render_templates(rule.tree, data))
+
                     result = self.datasets[standard].backend.lookup(
                         inp.path,
-                        TemplateMixin.render_templates(rule.attribute, data),
-                        standard,
+                        self.render_templates(rule.attribute, data),
+                        rule.standard or drs_type,
                         *args,
                         **self.dialect[standard].data_specs.read_kws,
                     )
                 case "call":
                     _call = textwrap.dedent(rule.call or "").strip()
                     result = eval(
-                        TemplateMixin.render_templates(_call, data),
+                        self.render_templates(_call, data),
                         {},
                         getattr(self, "_model_dict", {}),
                     )
@@ -642,7 +656,7 @@ class DRSConfig(BaseModel):
             for err in e.errors():
                 loc = ".".join(str(x) for x in err["loc"])
                 msgs.append(f"{loc}: {err['msg']}")
-            raise ValueError(
+            raise MetadataCrawlerException(
                 "DRSConfig validation failed:\n" + "\n".join(msgs)
             ) from None
 
@@ -716,55 +730,68 @@ class DRSConfig(BaseModel):
                                     standard
                                 ].data_specs.extract_from_data(ds)
                             )
-        for key, default in self._defaults[standard].items():
-            inp.metadata.setdefault(key, default)
-        self._apply_special_rules(standard, inp, self.dialect[standard].special)
+        self._apply_special_rules(
+            standard, drs_type, inp, self.dialect[standard].special
+        )
         return self._translate(standard, inp)
 
-    def read_metadata(self, standard: str, inp: Metadata) -> Dict[str, Any]:
+    def read_metadata(self, standard: str, inp: MetadataType) -> Dict[str, Any]:
         """Get the meta data for a given file path."""
-        try:
-            return self._read_metadata(
-                standard, Metadata(path=inp.path, metadata=inp.metadata.copy())
-            )
-        except Exception as error:
-            raise ValueError(error) from error
+        return self._read_metadata(
+            standard,
+            Metadata(path=inp["path"], metadata=inp["metadata"].copy()),
+        )
 
     def _translate(self, standard: str, inp: Metadata) -> Dict[str, Any]:
         out: Dict[str, Any] = {}
+        # locals to cut attribute lookups
         defs = self._defaults[standard]
         dia = self.dialect[standard]
-        self._apply_special_rules(
-            standard,
-            inp,
-            self.special,
-        )
+        facets_get = dia.facets.get
+        backend = self.datasets[standard].backend
+        mget = inp.metadata.get
+        defs_get = defs.get
+        path = inp.path
+        fmt = path.rsplit(".", 1)[1] if "." in path else ""
+
+        precomputed: Dict[str, Any] = {
+            "path": backend.path(path),
+            "uri": backend.uri(path),
+            "storage": backend.fs_type(path),
+            "dataset": standard,
+            "fmt": fmt,
+        }
+        val: Any = ""
+        out_set = out.__setitem__
         for field, schema in self.index_schema.items():
             if schema.indexed is False:
                 continue
-            match schema.type:
-                case "path":
-                    val = self.datasets[standard].backend.path(inp.path)
-                case "uri":
-                    val = self.datasets[standard].backend.uri(inp.path)
-                case "storage":
-                    val = self.datasets[standard].backend.fs_type(inp.path)
-                case "dataset":
-                    val = standard
-                case "fmt":
-                    val = Path(inp.path).suffix.lstrip(".")
-                case "daterange":
-                    val = schema.get_time_range(
-                        inp.metadata.get(field) or defs.get(field)
-                    )
-                case _:
-                    key = cast(str, dia.facets.get(schema.key, field))
-                    val = inp.metadata.get(key) or defs.get(key)
+
+            stype = schema.type
+
+            # Fast path for simple, precomputed types
+            if stype in precomputed and stype != "daterange":
+                val = precomputed[stype]
+
+            elif stype == "daterange":
+                src = mget(field) or defs_get(field)
+                val = schema.get_time_range(src)
+
+            else:
+                # Resolve metadata key via facets once; default to field name
+                key = cast(str, facets_get(schema.key, field))
+                val = mget(key) or defs_get(key)
+
+            # Preserve your current semantics: fall back to schema.default on falsey
             val = val or schema.default
-            if schema.multi_valued or schema.length:
-                if not isinstance(val, list) and val:
-                    val = [val]
-            out[field] = self.datasets[standard].backend.render_templates(
-                val, out
-            )
+
+            # Multi-valued normalization
+            if (
+                (schema.multi_valued or schema.length)
+                and val
+                and not isinstance(val, list)
+            ):
+                val = [val]
+
+            out_set(field, val)
         return out
