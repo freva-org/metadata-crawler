@@ -235,6 +235,7 @@ realm = "realm"
 time_aggregation = "time_aggregation"
 time = "time"
 bbox = "bbox"
+institute = "institution"
 [drs_settings.dialect.cmip6.path_specs]
 dir_parts  = [
     "mip_era",

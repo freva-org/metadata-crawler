@@ -132,8 +132,12 @@ class SchemaField(BaseModel):
             if hasattr(ts, "isoformat"):
                 time_stamp[n] = ts.isoformat()
             time_stamp[n] = str(ts) or "fx"
-        start = convert_str_to_timestamp(time_stamp[0], alternative="0001-01-01")
-        end = convert_str_to_timestamp(time_stamp[-1], alternative="9999-12-31")
+        start = convert_str_to_timestamp(
+            time_stamp[0], alternative="0001-01-01T00:00"
+        )
+        end = convert_str_to_timestamp(
+            time_stamp[-1], alternative="9999-12-31T23:59"
+        )
         return [start, end]
 
 

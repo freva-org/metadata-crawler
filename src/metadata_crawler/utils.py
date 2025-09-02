@@ -22,6 +22,7 @@ from typing import (
 
 import rich.console
 import rich.spinner
+from dateutil.parser import isoparse
 from rich.live import Live
 
 from .logger import logger
@@ -134,35 +135,40 @@ def convert_str_to_timestamp(
     str: ISO time string representation of the input time step, such as
         %Y %Y-%m-%d or %Y-%m-%dT%H%M%S
     """
+    _date = isoparse(alternative)
+    _time = f"{_date.strftime('%H')}:{_date.strftime('%M')}"
+    _day = _date.strftime("%d")
+    _mon = _date.strftime("%m")
     has_t_separator = "T" in time_str
     position_t = time_str.find("T") if has_t_separator else -1
     # Strip anything that's not a number from the string
     if not time_str:
-        return datetime.fromisoformat(alternative)
+        return _date
     # Not valid if time repr empty or starts with a letter, such as 'fx'
     digits = "".join(filter(str.isdigit, time_str))
     l_times = len(digits)
-
     if not l_times:
-        return datetime.fromisoformat(alternative)
+        return _date
     try:
         if l_times <= 4:
             # Suppose this is a year only
-            return datetime.fromisoformat(digits.zfill(4))
+            return isoparse(f"{digits.zfill(4)}-{_mon}-{_day}T{_time}")
         if l_times <= 6:
             # Suppose this is %Y%m or %Y%e
-            return datetime.fromisoformat(f"{digits[:4]}-{digits[4:].zfill(2)}")
+            return isoparse(f"{digits[:4]}-{digits[4:].zfill(2)}-{_day}T{_time}")
         # Year and day of year
         if l_times == 7:
             # Suppose this is %Y%j
             year = int(digits[:4])
             day_of_year = int(digits[4:])
-            date = datetime(year, 1, 1) + timedelta(days=day_of_year - 1)
+            date = datetime(year, 1, 1, _date.hour, _date.minute) + timedelta(
+                days=day_of_year - 1
+            )
             return date
         if l_times <= 8:
             # Suppose this is %Y%m%d
-            return datetime.fromisoformat(
-                f"{digits[:4]}-{digits[4:6]}-{digits[6:].zfill(2)}"
+            return isoparse(
+                f"{digits[:4]}-{digits[4:6]}-{digits[6:].zfill(2)}T{_time}"
             )
 
         date_str = f"{digits[:4]}-{digits[4:6]}-{digits[6:8]}"
@@ -172,7 +178,7 @@ def convert_str_to_timestamp(
         else:
             # Alaways drop seconds
             time = time[:2] + ":" + time[2 : min(4, len(time))].zfill(2)
-        return datetime.fromisoformat(f"{date_str}T{time}")
+        return isoparse(f"{date_str}T{time}")
 
     except ValueError:
         if has_t_separator and position_t > 0:
@@ -181,12 +187,12 @@ def convert_str_to_timestamp(
 
             date_digits = "".join(filter(str.isdigit, date_part))
             if len(date_digits) >= 8:
-                return datetime.fromisoformat(
+                return isoparse(
                     f"{date_digits[:4]}-{date_digits[4:6]}"
                     f"-{date_digits[6:8]}T{time_part[:2].zfill(2)}"
                 )
 
-        return datetime.fromisoformat(alternative)
+        return _date
 
 
 def find_closest(msg: str, target: str, options: Iterable[str]) -> str:

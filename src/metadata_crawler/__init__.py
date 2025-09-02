@@ -8,7 +8,7 @@ import tomlkit
 import uvloop
 
 from ._version import __version__
-from .api.config import ConfigMerger
+from .api.config import ConfigMerger, DRSConfig
 from .api.metadata_stores import CatalogueBackendType, IndexName
 from .data_collector import DataCollector
 from .logger import logger
@@ -44,6 +44,7 @@ def get_config(config: Optional[Union[Path, str]] = None) -> ConfigMerger:
         Path to a user defined config file that is going to be merged with
         the default config.
     """
+    _ = DRSConfig.load(config)
     return ConfigMerger(config)
 
 
