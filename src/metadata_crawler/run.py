@@ -3,9 +3,10 @@
 import asyncio
 import os
 import time
+from fnmatch import fnmatch
 from pathlib import Path
 from types import NoneType
-from typing import Any, Dict, List, Optional, Sequence, Union, cast
+from typing import Any, Collection, Dict, List, Optional, Sequence, Union, cast
 
 import tomlkit
 from rich.prompt import Prompt
@@ -35,6 +36,16 @@ def _norm_files(catalogue_files: FilesArg) -> List[str]:
     )
 
 
+def _match(match: str, items: Collection[str]) -> str:
+
+    for item in items:
+        if fnmatch(item, match):
+            return item
+
+    msg = find_closest(f"No such dataset: {match}", match, items)
+    raise MetadataCrawlerException(msg) from None
+
+
 def _get_search(
     config_file: Union[str, Path, Dict[str, Any], tomlkit.TOMLDocument],
     search_dirs: Optional[List[str]] = None,
@@ -50,13 +61,10 @@ def _get_search(
             for (k, cfg) in config.items()
         ]
     for item in datasets or []:
-        try:
-            _search_items.append(
-                CrawlerSettings(name=item, search_path=config[item].root_path)
-            )
-        except KeyError:
-            msg = find_closest(f"No such dataset: {item}", item, config.keys())
-            raise MetadataCrawlerException(msg) from None
+        ds = _match(item, config.keys())
+        _search_items.append(
+            CrawlerSettings(name=ds, search_path=config[ds].root_path)
+        )
     for num, _dir in enumerate(map(strip_protocol, search_dirs or [])):
         for name, cfg in config.items():
             if _dir.is_relative_to(strip_protocol(cfg.root_path)):
@@ -239,6 +247,7 @@ async def async_add(
     data_set:
         Dataset(s) that should be crawled. The datasets need to be defined
         in the drs-config file. By default all datasets are crawled.
+        Names can contain wildcards such as ``xces-*``.
     data_store_prefix: str
         Absolute path or relative path to intake catalogue source
     batch_size:
