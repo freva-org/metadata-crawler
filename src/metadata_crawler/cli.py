@@ -225,7 +225,10 @@ class ArgParse:
             "-ds",
             "--data-set",
             type=str,
-            help="The name of the dataset(s) that are processed.",
+            help=(
+                "The name of the dataset(s) that are processed. "
+                "names can contain wildcards such as ``xces-*``."
+            ),
             default=None,
             action="append",
         )

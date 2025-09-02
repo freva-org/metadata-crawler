@@ -142,8 +142,8 @@ def add(
     config_file: Optional[
         Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument]
     ] = None,
-    data_object: Optional[List[str]] = None,
-    data_set: Optional[List[str]] = None,
+    data_object: Optional[Union[str, List[str]]] = None,
+    data_set: Optional[Union[str, List[str]]] = None,
     data_store_prefix: str = "metadata",
     catalogue_backend: CatalogueBackendType = "jsonlines",
     batch_size: int = 25_000,
@@ -172,6 +172,7 @@ def add(
     data_set:
         Datasets that should be crawled. The datasets need to be defined
         in the drs-config file. By default all datasets are crawled.
+        Names can contain wildcards such as ``xces-*``.
     data_store_prefix:
         Absolute path or relative path to intake catalogue source
     data_dir:
