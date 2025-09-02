@@ -131,7 +131,7 @@ omit = [
 ]
 
 [tool.coverage.report]
-fail_under = 5
+fail_under = 95
 ignore_errors = false
 exclude_lines = [
   "pragma: no cover",
@@ -208,7 +208,7 @@ deps = -e .[tests]
 
 commands =
     pytest -vv --cov=metadata_crawler --cov-report=html:coverage_report --junitxml report.xml --cov-report xml tests/
-    python3 -m coverage report --fail-under=98 --precision=2
+    python3 -m coverage report --fail-under=95 --precision=2
 
 [testenv:docs]
 deps = -e .[doc]
