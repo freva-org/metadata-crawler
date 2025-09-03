@@ -4,7 +4,7 @@ Command‑line interface
 The software installs a console entry point named
 ``metadata-crawler`` or ``mdc`` that exposes the high‑level subcommands:
 
-* ``crawl``  – Collect metadata into a temporary catalog.
+* ``add``  – Collect metadata into a temporary catalog.
 * ``config`` – Display general configuration
 * ``solr``   - Index and delete metadata to/from Apache solr.
 * ``mongo``  – Index and deleta metadata to/from MongoDB.
@@ -16,11 +16,11 @@ some examples.
 Basic crawling
 ^^^^^^^^^^^^^^
 
-To crawl a directory of files into a JSON lines catalog:
+To harvest a directory of files into a JSON lines catalog:
 
 .. code-block:: console
 
-   mdc crawl \
+   mdc add \
         /tmp/cat.yml \
        -c /path/to/drs_config.toml \
        --catalogue-backend jsonlines \
@@ -31,12 +31,11 @@ To crawl a directory of files into a JSON lines catalog:
 Alternatively you can provide one or more dataset names defined in
 your DRS configuration instead of explicit file paths:
 
-.. code-block:: bash
+.. code-block:: console
 
-   metadata-crawler crawl \
-       /tmp/catalog.duckdb \
+   metadata-crawler add \
+       /tmp/catalog.yaml \
        -c /path/to/drs_config.toml \
-       --catalogue-backend duckdb \
        --data-set cmip6-fs obs-fs
 
 
@@ -45,9 +44,9 @@ Indexing
 
 Once a catalog has been generated you can index it into a backend.
 Apache Slor and MongoDB backends are supported out of the box.  The
-following example writes to a DuckDB file and index named ``latest``:
+following example writes to a json.gz file and index named ``latest``:
 
-.. code-block:: bash
+.. code-block:: console
 
    metadata-crawler solr index \
        /tmp/catalog.yml \
@@ -55,7 +54,7 @@ following example writes to a DuckDB file and index named ``latest``:
 
 For MongoDB, supply the database URL and name:
 
-.. code-block:: bash
+.. code-block:: console
 
    metadata-crawler mongo index \
        /tmp/catalog.yml /tmp/catalog-2.yml \
@@ -70,7 +69,7 @@ more facet filters.  Facet values may contain shell wild cards
 (``*`` and ``?``) which are translated to MongoDB regular expressions
 (Apache Solr deletion uses filters internally).  For example:
 
-.. code-block:: bash
+.. code-block:: console
 
    metadata-crawler mongo delete \
        --url mongodb://localhost:27017 \

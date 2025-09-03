@@ -69,6 +69,14 @@ def walk_catalogue(
     return asyncio.run(_walk(path, **storage_options))
 
 
+def _flatten(inp: Union[List[str], List[List[str]]]) -> List[str]:
+
+    out = []
+    for item in inp:
+        out += item if isinstance(item, list) else [item]
+    return out
+
+
 def _process_storage_option(option: str) -> Union[str, bool, int, float]:
 
     if option.lower() in ("false", "true"):
@@ -160,9 +168,9 @@ class ArgParse:
     def _add_crawler_subcommand(self) -> None:
         """Add sub command for crawling metadata."""
         parser = self.subparsers.add_parser(
-            "crawl",
-            description="Collect (crawl) metadata",
-            help="Collect (crawl) metadata",
+            "add",
+            description="Harvest (add) metadata",
+            help="Harvest (crawl) metadata",
             formatter_class=ArgumentDefaultsRichHelpFormatter,
             epilog=self.epilog,
         )
@@ -276,6 +284,16 @@ class ArgParse:
             ),
             action="append",
             nargs=2,
+        )
+        parser.add_argument(
+            "--shadow",
+            help=(
+                "'Shadow' these storage options. This is useful to hide secrets "
+                "in public data catalogues."
+            ),
+            action="append",
+            default=None,
+            nargs="+",
         )
         self._add_general_config_to_parser(parser)
         parser.set_defaults(apply_func=add)
@@ -460,6 +478,7 @@ class ArgParse:
                 "version",
                 "log_suffix",
                 "storage_option",
+                "shadow",
             )
         }
         storage_option_pairs: List[Tuple[str, str]] = (
@@ -468,6 +487,8 @@ class ArgParse:
         so: StorageOptions = {}
         for option, value in storage_option_pairs:
             so[option] = _process_storage_option(value)
+        if getattr(args, "shadow", None) or []:
+            self.kwargs["shadow"] = _flatten(args.shadow)
         self.kwargs["storage_options"] = so
         self.verbose = args.verbose
         add_file_handle(args.log_suffix)

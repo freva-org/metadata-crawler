@@ -14,6 +14,7 @@ from enum import Enum
 from io import BytesIO
 from multiprocessing import sharedctypes
 from pathlib import Path
+from types import NoneType
 from typing import (
     Any,
     AsyncIterator,
@@ -136,9 +137,13 @@ class IndexStore:
         batch_size: int = 25_000,
         mode: Literal["r", "w"] = "r",
         storage_options: Optional[Dict[str, Any]] = None,
+        shadow: Optional[Union[str, List[str]]] = None,
         **kwargs: Any,
     ) -> None:
         self.storage_options = storage_options or {}
+        self._shadow_options = (
+            shadow or [] if isinstance(shadow, (list, NoneType)) else [shadow]
+        )
         self._ctx = mp.get_context("spawn")
         self.queue: WriterQueueType = self._ctx.SimpleQueue()
         self._sent = 42
@@ -215,12 +220,28 @@ class IndexStore:
         """Define the intake arguments."""
         ...  # pragma: no cover
 
+    @property
+    def catalogue_storage_options(self) -> Dict[str, Any]:
+        """Construct the storage options for the catalogue."""
+        opts = {
+            k: v
+            for k, v in self.storage_options.items()
+            if k not in self._shadow_options
+        }
+        shadow_keys = {"key", "secret", "token", "username", "user", "password"}
+        opts |= {"anon": True} if not shadow_keys & opts.keys() else {}
+        return opts
+
 
 class JSONLineWriter:
     """Write JSONLines to disk."""
 
     def __init__(
-        self, *streams: Stream, comp_level: int = 4, **storage_options: Any
+        self,
+        *streams: Stream,
+        comp_level: int = 4,
+        shadow: Optional[Union[str, List[str]]] = None,
+        **storage_options: Any,
     ) -> None:
 
         self._comp_level = comp_level
@@ -306,6 +327,7 @@ class JSONLines(IndexStore):
         schema: Dict[str, SchemaField],
         mode: Literal["w", "r"] = "r",
         storage_options: Optional[Dict[str, Any]] = None,
+        shadow: Optional[Union[str, List[str]]] = None,
         **kwargs: Any,
     ):
         super().__init__(
@@ -313,6 +335,7 @@ class JSONLines(IndexStore):
             index_name,
             schema,
             mode=mode,
+            shadow=shadow,
             storage_options=storage_options,
         )
         _comp_level = int(kwargs.get("comp_level", "4"))
@@ -341,7 +364,7 @@ class JSONLines(IndexStore):
             "urlpath": self.get_path(index_name),
             "compression": "gzip",
             "text_mode": True,
-            "storage_options": self.storage_options,
+            "storage_options": self.catalogue_storage_options,
         }
 
     async def read(
@@ -506,6 +529,11 @@ class CatalogueWriter:
         Size of the metadata chunks that should be added to the data store.
     index_schema:
         Schema of the metadata
+    storage_options:
+        Set additional storage options for adding metadata to the metadata store
+    shadow:
+        'Shadow' this storage options. This is useful to hide secrets in public
+        data catalogues.
     """
 
     def __init__(
@@ -514,12 +542,13 @@ class CatalogueWriter:
         index_name: IndexName,
         data_store_prefix: str = "metadata",
         backend: str = "jsonlines",
-        batch_size: int = 2500,
+        batch_size: int = 25_000,
         config: Optional[
             Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument]
         ] = None,
         n_procs: Optional[int] = None,
         storage_options: Optional[Dict[str, Any]] = None,
+        shadow: Optional[Union[str, List[str]]] = None,
         **kwargs: Any,
     ) -> None:
         self.config = DRSConfig.load(config)
@@ -541,6 +570,7 @@ class CatalogueWriter:
             self.config.index_schema,
             mode="w",
             storage_options=storage_options,
+            shadow=shadow,
             **kwargs,
         )
         self._ctx = mp.get_context("spawn")
@@ -630,7 +660,7 @@ class CatalogueWriter:
                 "version": 1,
                 "backend": self.backend,
                 "prefix": self.prefix,
-                "storage_options": self.store.storage_options,
+                "storage_options": self.store.catalogue_storage_options,
                 "index_names": {
                     "latest": self.index_name.latest,
                     "all": self.index_name.all,
