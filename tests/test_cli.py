@@ -332,7 +332,7 @@ def test_run_routes_exceptions_to_exception_handler(
     assert exc1 is None
 
     # --- branch 2: level <= 30 -> no suffix, exc_info is exception ---
-    low_logger = FakeLogger(level=20)
+    low_logger = FakeLogger(level=10)
     monkeypatch.setattr(mc_utils, "logger", low_logger, raising=True)
 
     with pytest.raises(SystemExit) as ei2:
