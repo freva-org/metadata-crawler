@@ -156,6 +156,7 @@ def add(
     n_procs: Optional[int] = None,
     verbosity: int = 0,
     password: bool = False,
+    fail_under: int = -1,
     **kwargs: Any,
 ) -> None:
     """Harvest metadata from storage systems and add them to an intake catalogue.
@@ -203,6 +204,8 @@ def add(
         Set the number of parallel processes for collecting.
     verbosity:
         Set the verbosity of the system.
+    fail_under:
+         Fail if less than X of the discovered files could be indexed.
 
     Other Parameters
     ^^^^^^^^^^^^^^^^
@@ -239,6 +242,7 @@ def add(
             n_procs=n_procs,
             storage_options=storage_options,
             verbosity=verbosity,
+            fail_under=fail_under,
             **kwargs,
         )
     )

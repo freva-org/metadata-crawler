@@ -217,7 +217,7 @@ class ArgParse:
             "--scan-concurrency",
             "--concurrency",
             type=int,
-            default=64,
+            default=1024,
             help="Level of aync concurrency for data discovery.",
         )
         parser.add_argument(
@@ -284,6 +284,12 @@ class ArgParse:
             ),
             action="append",
             nargs=2,
+        )
+        parser.add_argument(
+            "--fail-under",
+            help=" Fail if less than X of the discovered files could be indexed.",
+            type=int,
+            default=-1,
         )
         parser.add_argument(
             "--shadow",
