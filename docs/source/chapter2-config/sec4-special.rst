@@ -110,9 +110,9 @@ the lookup rule:
     - ``read_kws`` are taken from ``dialect[standard].data_specs.read_kws`` (e.g.,
       the xarray engine) and passed through to the dataset reader.
 
-   - The ``standard`` key in the lookup-table configuration selects the top-level
-     namespace (branch) where data are stored. If ``standard`` is omitted or empty,
-     the lookup falls back to the DRS-type name (the dialect).
+    - The ``standard`` key in the lookup-table configuration selects the top-level
+      namespace (branch) where data are stored. If ``standard`` is omitted or empty,
+      the lookup falls back to the DRS-type name (the dialect).
 
 
 Call
