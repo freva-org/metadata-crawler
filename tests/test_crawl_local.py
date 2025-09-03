@@ -12,20 +12,6 @@ from metadata_crawler.api.config import DRSConfig
 from metadata_crawler.utils import MetadataCrawlerException
 
 
-def test_crawl_thresh_fail(drs_config_path: Path, cat_file: Path) -> None:
-    """Test if we can't crawl under a certain threshold."""
-    with pytest.raises(ValueError):
-        add(
-            cat_file,
-            drs_config_path,
-            n_procs=1,
-            batch_size=3,
-            data_set=["obs-fs-missing"],
-            catalogue_backend="jsonlines",
-            fail_under=10,
-        )
-
-
 def test_crawl_local_obs(
     drs_config_path: Path, cat_file: Path, data_dir: Path
 ) -> None:
@@ -163,3 +149,15 @@ def test_crawl_single_files(
     )
     cat = intake.open_catalog(cat_file)
     assert len(cat.latest.read()) > 0
+
+
+def test_crawl_thresh_fail(drs_config_path: Path, cat_file: Path) -> None:
+    """Test if we can't crawl under a certain threshold."""
+    with pytest.raises(ValueError):
+        add(
+            cat_file,
+            drs_config_path,
+            data_set=["obs-fs-missing"],
+            catalogue_backend="jsonlines",
+            fail_under=10,
+        )

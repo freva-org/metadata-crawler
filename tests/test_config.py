@@ -131,17 +131,19 @@ def test_get_search():
         index("foo", conf)
 
 
-@mock.patch.dict(os.environ, {"MDC_MAX_FILES": "5"}, clear=True)
 def test_benchmark_settings(drs_config_path: Path, cat_file: Path) -> None:
     """Test some benchmark settings."""
-    add(
-        cat_file,
-        drs_config_path,
-        n_procs=1,
-        batch_size=3,
-        catalogue_backend="jsonlines",
-        data_set=["obs-fs"],
-    )
+    env = os.environ.copy()
+    with mock.patch.dict(os.environ, {"MDC_MAX_FILES": "5"}, clear=False):
+        add(
+            cat_file,
+            drs_config_path,
+            n_procs=1,
+            batch_size=3,
+            catalogue_backend="jsonlines",
+            data_set=["obs-fs"],
+        )
+    os.environ = env
     assert cat_file.exists()
     len(intake.open_catalog(cat_file).latest.read()) < 10
 
