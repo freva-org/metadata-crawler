@@ -220,16 +220,27 @@ class IndexStore:
         """Define the intake arguments."""
         ...  # pragma: no cover
 
-    @property
-    def catalogue_storage_options(self) -> Dict[str, Any]:
+    def catalogue_storage_options(
+        self, path: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Construct the storage options for the catalogue."""
+        is_s3 = (path or "").startswith("s3://")
         opts = {
             k: v
             for k, v in self.storage_options.items()
             if k not in self._shadow_options
         }
-        shadow_keys = {"key", "secret", "token", "username", "user", "password"}
-        opts |= {"anon": True} if not shadow_keys & opts.keys() else {}
+        shadow_keys = {
+            "key",
+            "secret",
+            "token",
+            "username",
+            "user",
+            "password",
+            "secret_file",
+            "secretfile",
+        }
+        opts |= {"anon": True} if is_s3 and not shadow_keys & opts.keys() else {}
         return opts
 
 
@@ -360,11 +371,12 @@ class JSONLines(IndexStore):
 
     def get_args(self, index_name: str) -> Dict[str, Any]:
         """Define the intake arguments."""
+        path = self.get_path(index_name)
         return {
-            "urlpath": self.get_path(index_name),
+            "urlpath": path,
             "compression": "gzip",
             "text_mode": True,
-            "storage_options": self.catalogue_storage_options,
+            "storage_options": self.catalogue_storage_options(path),
         }
 
     async def read(
@@ -660,7 +672,9 @@ class CatalogueWriter:
                 "version": 1,
                 "backend": self.backend,
                 "prefix": self.prefix,
-                "storage_options": self.store.catalogue_storage_options,
+                "storage_options": self.store.catalogue_storage_options(
+                    self.prefix
+                ),
                 "index_names": {
                     "latest": self.index_name.latest,
                     "all": self.index_name.all,

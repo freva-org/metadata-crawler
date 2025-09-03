@@ -302,3 +302,5 @@ def print_performance(
                 f"{20 * ' '}"
             )
             spinner.update(text=msg)
+    Console.print(" " * Console.width, end="\r")
+    Console.print(" ")

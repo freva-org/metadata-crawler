@@ -36,14 +36,16 @@ def _norm_files(catalogue_files: FilesArg) -> List[str]:
     )
 
 
-def _match(match: str, items: Collection[str]) -> str:
-
+def _match(match: str, items: Collection[str]) -> List[str]:
+    out: List[str] = []
     for item in items:
         if fnmatch(item, match):
-            return item
+            out.append(item)
 
-    msg = find_closest(f"No such dataset: {match}", match, items)
-    raise MetadataCrawlerException(msg) from None
+    if not out:
+        msg = find_closest(f"No such dataset: {match}", match, items)
+        raise MetadataCrawlerException(msg) from None
+    return out
 
 
 def _get_search(
@@ -61,13 +63,15 @@ def _get_search(
             for (k, cfg) in config.items()
         ]
     for item in datasets or []:
-        ds = _match(item, config.keys())
-        _search_items.append(
-            CrawlerSettings(name=ds, search_path=config[ds].root_path)
-        )
+        for ds in _match(item, config.keys()):
+            logger.debug("Adding dataset %s", ds)
+            _search_items.append(
+                CrawlerSettings(name=ds, search_path=config[ds].root_path)
+            )
     for num, _dir in enumerate(map(strip_protocol, search_dirs or [])):
         for name, cfg in config.items():
             if _dir.is_relative_to(strip_protocol(cfg.root_path)):
+                logger.debug("Adding dataset %s", name)
                 _search_items.append(
                     CrawlerSettings(name=name, search_path=str(search_dirs[num]))
                 )
