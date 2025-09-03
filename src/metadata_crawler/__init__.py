@@ -150,6 +150,7 @@ def add(
     batch_size: int = 25_000,
     comp_level: int = 4,
     storage_options: Optional[Dict[str, Any]] = None,
+    shadow: Optional[Union[str, List[str]]] = None,
     latest_version: str = IndexName().latest,
     all_versions: str = IndexName().all,
     n_procs: Optional[int] = None,
@@ -187,6 +188,9 @@ def add(
         Compression level used to write the meta data to csv.gz
     storage_options:
         Set additional storage options for adding metadata to the metadata store
+    shadow:
+        'Shadow' this storage options. This is useful to hide secrets in public
+        data catalogues.
     catalogue_backend:
         Intake catalogue backend
     latest_version:
@@ -229,6 +233,7 @@ def add(
             password=password,
             catalogue_backend=catalogue_backend,
             data_store_prefix=data_store_prefix,
+            shadow=shadow,
             latest_version=latest_version,
             all_versions=all_versions,
             n_procs=n_procs,

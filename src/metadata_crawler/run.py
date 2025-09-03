@@ -221,6 +221,7 @@ async def async_add(
     batch_size: int = 25_000,
     comp_level: int = 4,
     storage_options: Optional[Dict[str, Any]] = None,
+    shadow: Optional[Union[str, List[str]]] = None,
     catalogue_backend: CatalogueBackendType = "jsonlines",
     latest_version: str = IndexName().latest,
     all_versions: str = IndexName().all,
@@ -257,6 +258,9 @@ async def async_add(
         Compression level used to write the meta data to csv.gz
     storage_options:
         Set additional storage options for adding metadata to the metadata store
+    shadow:
+        'Shadow' this storage options. This is useful to hide secrets in public
+        data catalogues.
     catalogue_backend:
         Intake catalogue backend
     latest_version:
@@ -330,6 +334,7 @@ async def async_add(
             data_store_prefix=data_store_prefix,
             n_procs=n_procs,
             storage_options=storage_options or {},
+            shadow=shadow,
             **kwargs,
         ) as data_col:
             await data_col.ingest_data()

@@ -109,11 +109,11 @@ def test_crawl_parsing_and_dispatch(
     )  # no plugin subcommands in this test
     # Prevent real file logging side effects
 
-    # Build and parse args for the "crawl" subcommand
+    # Build and parse args for the "add" subcommand
     parser = mc_cli.ArgParse()
     args = parser.parse_args(
         [
-            "crawl",
+            "add",
             "s3://bucket/catalog.yml",
             "--batch-size",
             "42",
@@ -137,6 +137,12 @@ def test_crawl_parsing_and_dispatch(
             "-s",
             "endpoint_url",
             "http://minio:9000",
+            "--shadow",
+            "foo",
+            "bar",
+            "--shadow",
+            "1",
+            "2",
             "-v",
             "-v",
         ]
