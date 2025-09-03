@@ -17,14 +17,8 @@ The dialect definition typically consists of several components:
   (read attributes from the dataset), and ``storage`` (obtain from
   the storage backend).  Order matters: if the first source yields a
   value it will not be overridden by later sources.
-* **specs_dir** – An ordered list of facet names corresponding to
-  directory components between the ``root_path`` and the file name.  The
-  crawler splits the relative path on ``/`` and assigns each segment
-  to the corresponding facet.
-* **specs_file** – An ordered list of facet names corresponding to
-  parts of the file name (split by a separator, usually ``_``).  If
-  a file name ends with an extension (e.g. ``.nc``) the suffix is
-  ignored.  When ``specs_file`` is empty the file name is not parsed.
+* **path_specs** – The set of rules indicating how to derive metadata from
+  paths. See :doc:`sec3-specs` for more information.
 * **facets** – A mapping that overrides the raw key associated with
   a canonical facet.  For example, CMIP6 uses ``source_id`` to
   populate the ``model`` facet.  If omitted, the facet name itself is
@@ -43,6 +37,7 @@ The dialect definition typically consists of several components:
      with arguments referencing other facets and data attributes for lookup.
   - ``call`` rules evaluate an arbitrary expression using the
     ``drs_config`` entries and the already retrieved ``metadata``.
+  See :doc:`sec4-special` for more information.
 * **domains** – For CORDEX, a table mapping domain codes (e.g.
   ``EUR-11``) to bounding boxes; used by the ``bbox`` special rule.
 * **data_specs** – (see :doc:`sec3-specs`) define rules for reading
@@ -65,21 +60,23 @@ realm and time aggregation.
 
        [drs_settings.dialect.cmip6]
        sources = ["path", "data"]
-       specs_dir = [
+       # map canonical facet names to raw keys
+       facets = { model = "source_id", ensemble = "member_id" }
+       defaults = { grid_label = "gn", version = -1 }
+       [drs_settings.dialect.cmip6.path_specs]
+       dir_parts = [
          "mip_era", "activity_id", "institution_id", "source_id",
          "experiment_id", "member_id", "table_id", "variable_id",
          "grid_label", "version",
        ]
-       specs_file = [
+       file_parts = [
          "variable_id", "table_id", "source_id", "experiment_id",
          "member_id", "grid_label", "time",
        ]
-       # map canonical facet names to raw keys
-       facets = { model = "source_id", ensemble = "member_id" }
-       defaults = { grid_label = "gn", version = -1 }
-       [drs_settings.dialect.cmip6.special.realm]
+      [drs_settings.dialect.cmip6.special.realm]
        type = "lookup"
-       items = ["{{ table_id }}", "{{ variable_id }}", "realm"]
+       tree = ["{{ table_id }}", "{{ variable_id }}", "realm"]
+       standard = "cmip6"
        [drs_settings.dialect.cmip6.special.time_aggregation]
        type = "conditional"
        condition = "'pt' in '{{ time_frequency | lower}}'"
@@ -100,17 +97,19 @@ section defines a function rule that concatenates three facets, and
 
        [drs_settings.dialect.cordex]
        sources = ["path"]
-       specs_dir = [
+       [drs_settings.dialect.cordex.defaults]
+       realm = "atmos"
+       [drs_settings.dialect.cordex.path_specs]
+       dir_parts = [
          "project", "product", "domain", "institution", "driving_model",
          "experiment", "ensemble", "rcm_name", "rcm_version",
          "time_frequency", "variable", "version",
        ]
-       specs_file = [
+       file_parts = [
          "variable", "domain", "driving_model", "experiment",
          "ensemble", "rcm_name", "rcm_version", "time_frequency",
          "time",
        ]
-       defaults = { realm = "atmos" }
        [drs_settings.dialect.cordex.special.model]
        type = "function"
        call = "'{{driving_model}}-{{rcm_name}}-{rcm_version}}'"
