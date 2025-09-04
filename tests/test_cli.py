@@ -314,8 +314,11 @@ def test_run_routes_exceptions_to_exception_handler(
         def error(self, msg: str, *, exc_info: Any = None) -> None:
             self.records.append((msg, exc_info))
 
+        def critical(self, msg: str, *, exc_info: Any = None) -> None:
+            self.records.append((msg, exc_info))
+
     # --- branch 1: level > 30 -> suffix added, exc_info=None ---
-    high_logger = FakeLogger(level=40)
+    high_logger = FakeLogger(level=50)
     monkeypatch.setattr(mc_utils, "logger", high_logger, raising=True)
 
     with pytest.raises(SystemExit) as ei1:
@@ -329,7 +332,7 @@ def test_run_routes_exceptions_to_exception_handler(
     assert exc1 is None
 
     # --- branch 2: level <= 30 -> no suffix, exc_info is exception ---
-    low_logger = FakeLogger(level=20)
+    low_logger = FakeLogger(level=10)
     monkeypatch.setattr(mc_utils, "logger", low_logger, raising=True)
 
     with pytest.raises(SystemExit) as ei2:

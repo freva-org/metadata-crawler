@@ -232,6 +232,7 @@ async def async_add(
     password: bool = False,
     n_procs: Optional[int] = None,
     verbosity: int = 0,
+    fail_under: int = -1,
     **kwargs: Any,
 ) -> None:
     """Harvest metadata from storage systems and add them to an intake catalogue.
@@ -277,6 +278,8 @@ async def async_add(
         Set the number of parallel processes for collecting.
     verbosity:
         Set the verbosity of the system.
+    fail_under:
+        Fail if less than X of the discovered files could be indexed.
 
     Other Parameters
     ^^^^^^^^^^^^^^^^
@@ -354,6 +357,8 @@ async def async_add(
                 f"within [green]{dt}[/green][/bold]"
             )
         )
+        if files_discovered >= fail_under and num_files < fail_under:
+            raise ValueError("Could not fulfill discovery threshold!")
     finally:
         os.environ = env
         logger.set_level(old_level)

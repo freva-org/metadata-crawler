@@ -149,3 +149,15 @@ def test_crawl_single_files(
     )
     cat = intake.open_catalog(cat_file)
     assert len(cat.latest.read()) > 0
+
+
+def test_crawl_thresh_fail(drs_config_path: Path, cat_file: Path) -> None:
+    """Test if we can't crawl under a certain threshold."""
+    with pytest.raises(ValueError):
+        add(
+            cat_file,
+            drs_config_path,
+            data_set=["obs-fs-missing"],
+            catalogue_backend="jsonlines",
+            fail_under=10,
+        )

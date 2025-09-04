@@ -57,6 +57,25 @@ bbox = [0, 360, -60, 60]
 level_type = "2d"
 model = "sat"
 
+[drs_settings.dialect.obs-fs-missing.path_specs]
+dir_parts = [
+    "experiment", "time_frequency",
+    "realm", "cmor_table", "ensemble", "version", "variable",
+]
+file_parts = [
+    "instrument", "experiment", "ensemble", "time"
+]
+[obs-fs-missing]
+root_path = "./data/observations"
+drs_format = "obs-fs-missing"
+[obs-fs-missing.defaults]
+project = "observations"
+bbox = [0, 360, -60, 60]
+level_type = "2d"
+model = "sat"
+
+
+
 
 #[foo]
 #root_path = "./data/observations"
