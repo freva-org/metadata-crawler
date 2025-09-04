@@ -351,6 +351,7 @@ async def async_add(
         logger.info("Discovered: %s files", f"{files_discovered:10,.0f}")
         logger.info("Ingested: %s files", f"{num_files:10,.0f}")
         logger.info("Spend: %s", dt)
+        Console.print(" " * Console.width, end="\r")
         Console.print(
             (
                 f"[bold]Ingested [green]{num_files:10,.0f}[/green] "

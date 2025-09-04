@@ -5,6 +5,7 @@ import logging
 import multiprocessing as mp
 import multiprocessing.context as mctx
 import os
+import sys
 import time
 from datetime import datetime, timedelta
 from importlib.metadata import entry_points
@@ -16,6 +17,7 @@ from typing import (
     Iterable,
     Optional,
     Protocol,
+    Tuple,
     TypeAlias,
     TypeVar,
     Union,
@@ -99,7 +101,7 @@ class ValueLike(Protocol[U]):
 
 Counter: TypeAlias = ValueLike[int]
 PrintLock = mp.Lock()
-Console = rich.console.Console(force_terminal=True, stderr=True)
+Console = rich.console.Console(force_terminal=sys.stdout.isatty(), stderr=True)
 
 
 class MetadataCrawlerException(BaseException):
@@ -275,34 +277,69 @@ def print_performance(
     spinner = rich.spinner.Spinner(
         os.getenv("SPINNER", "earth"), text="[b]Preparing crawler ...[/]"
     )
-    rf = float(os.getenv("MDC_DISPLAY_REFRESH", "2.5"))
-    with Live(spinner, console=Console, refresh_per_second=rf, transient=True):
-        while print_status.is_set() is True:
-            start = time.time()
-            num = num_files.value
-            time.sleep(1)
-            d_num = num_files.value - num
-            dt = time.time() - start
-            perf_file = d_num / dt
-            queue_size = ingest_queue.qsize()
-            f_col = p_col = q_col = "blue"
-            if perf_file > 500:
-                f_col = "green"
-            if perf_file < 100:
-                f_col = "red"
-            if queue_size > 100_000:
-                q_col = "red"
-            if queue_size < 10_000:
-                q_col = "green"
-            msg = (
-                f"[bold]Discovering: [{f_col}]{perf_file:>6,.1f}[/{f_col}] "
-                "files / sec. #files discovered: "
-                f"[blue]{num_files.value:>10,.0f}[/blue]"
-                f" in queue: [{q_col}]{queue_size:>6,.0f}[/{q_col}] "
-                f"#indexed files: "
-                f"[{p_col}]{num_objects.value:>10,.0f}[/{p_col}][/bold] "
-                f"{20 * ' '}"
+    interactive = Console.is_terminal
+    log_interval = 30
+    sample_interval = 1.0 if interactive else 10.0
+
+    def _snapshot() -> Tuple[float, int, int, int]:
+        start = time.monotonic()
+        n0 = num_files.value
+        time.sleep(sample_interval)
+        dn = num_files.value - n0
+        dt = max(1e-6, time.monotonic() - start)
+        perf_file = dn / dt
+        queue_size = ingest_queue.qsize()
+        return perf_file, n0, queue_size, num_objects.value
+
+    def _build_msg(
+        perf_file: float,
+        discovered: int,
+        queue_size: int,
+        indexed: int,
+        *,
+        markup: bool,
+    ) -> str:
+        # Color thresholds only when markup=True (interactive)
+        if markup:
+            f_col = (
+                "green"
+                if perf_file > 500
+                else "red" if perf_file < 100 else "blue"
             )
-            spinner.update(text=msg)
-    Console.print(" " * Console.width, end="\r")
-    Console.print(" ")
+            q_col = (
+                "red"
+                if queue_size > 100_000
+                else "green" if queue_size < 10_000 else "blue"
+            )
+            return (
+                f"[bold]Discovering: [{f_col}]{perf_file:>6,.1f}[/{f_col}] files/s "
+                f"#files: [blue]{discovered:>10,.0f}[/blue] "
+                f"in queue: [{q_col}]{queue_size:>6,.0f}[/{q_col}] "
+                f"#indexed: [blue]{indexed:>10,.0f}[/blue][/bold]"
+            )
+        else:
+            return (
+                f"Discovering: {perf_file:,.1f} files/s | "
+                f"files={discovered:,} | queue={queue_size:,} | indexed={indexed:,}"
+            )
+
+    if interactive:
+        with Live(
+            spinner, console=Console, refresh_per_second=2.5, transient=True
+        ):
+            while print_status.is_set():
+                perf, disc, qsz, idx = _snapshot()
+                spinner.update(text=_build_msg(perf, disc, qsz, idx, markup=True))
+        # Clear the last line when done
+        Console.print(" " * Console.width, end="\r")
+        Console.print(" ")
+    else:
+        # Non-TTY (e.g. systemd): emit a plain summary every log_interval secs
+        next_log = time.monotonic()
+        while print_status.is_set():
+            perf, disc, qsz, idx = _snapshot()
+            now = time.monotonic()
+            if now >= next_log:
+                # Print one clean line; journald/Cockpit will show one entry
+                print(_build_msg(perf, disc, qsz, idx, markup=False), flush=True)
+                next_log = now + log_interval
