@@ -275,7 +275,8 @@ def print_performance(
     spinner = rich.spinner.Spinner(
         os.getenv("SPINNER", "earth"), text="[b]Preparing crawler ...[/]"
     )
-    with Live(spinner, console=Console, refresh_per_second=1, transient=True):
+    rf = float(os.getenv("MDC_DISPLAY_REFRESH", "2.5"))
+    with Live(spinner, console=Console, refresh_per_second=rf, transient=True):
         while print_status.is_set() is True:
             start = time.time()
             num = num_files.value
