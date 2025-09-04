@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 from functools import cached_property
 from typing import Annotated, Any, Dict, List, Optional, Tuple
@@ -78,6 +79,14 @@ class MongoIndex(BaseIndex):
         ]
         await collection.bulk_write(ops, ordered=False)
 
+    async def _index_collection(
+        self, db: AsyncIOMotorDatabase[Any], collection: str
+    ) -> None:
+        """Index a collection."""
+        await db[collection].create_index(self.unique_index, unique=True)
+        async for chunk in self.get_metadata(collection):
+            await self._bulk_upsert(chunk, db[collection])
+
     async def _prep_db_connection(
         self, database: str, url: str
     ) -> AsyncIOMotorDatabase[Any]:
@@ -113,10 +122,9 @@ class MongoIndex(BaseIndex):
     ) -> None:
         """Add metadata to the mongoDB metadata server."""
         db = await self._prep_db_connection(database, url or "")
-        for collection in self.index_names:
-            await db[collection].create_index(self.unique_index, unique=True)
-            async for chunk in self.get_metadata(collection):
-                await self._bulk_upsert(chunk, db[collection])
+        async with asyncio.TaskGroup() as tg:
+            for collection in self.index_names:
+                tg.create_task(self._index_collection(db, collection))
 
     async def close(self) -> None:
         """Close the mongoDB connection."""

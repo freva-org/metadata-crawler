@@ -89,8 +89,10 @@ async def async_call(
     **kwargs: Any,
 ) -> None:
     """Index metadata."""
+    env = cast(os._Environ[str], os.environ.copy())
     old_level = apply_verbosity(verbosity)
     try:
+        os.environ["MDC_LOG_LEVEL"] = str(get_level_from_verbosity(verbosity))
         backends = load_plugins("metadata_crawler.ingester")
         try:
             cls = backends[index_system]
@@ -115,6 +117,7 @@ async def async_call(
             futures.append(future)
         await asyncio.gather(*futures)
     finally:
+        os.environ = env
         logger.set_level(old_level)
 
 

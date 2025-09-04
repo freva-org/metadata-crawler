@@ -15,9 +15,10 @@ from typing import (
     cast,
 )
 
-from ..api.config import SchemaField
-from ..api.metadata_stores import CatalogueReader, IndexStore
 from ..logger import logger
+from ..utils import Console
+from .config import SchemaField
+from .metadata_stores import CatalogueReader, IndexStore
 
 
 class BaseIndex:
@@ -92,7 +93,8 @@ class BaseIndex:
             async for batch in self._store.read(index_name):
                 yield batch
                 num_items += len(batch)
-            logger.info("Indexed %i items for index %s", num_items, index_name)
+            msg = "Indexed {num_items:10,.0f} items for index {index_name}"
+            Console.print(msg) if Console.is_terminal else print(msg)
 
     @abc.abstractmethod
     async def delete(self, **kwargs: Any) -> None:

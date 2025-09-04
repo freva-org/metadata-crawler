@@ -92,6 +92,7 @@ class Logger(logging.Logger):
                 log_level = min(level, logging.CRITICAL)
             handler.setLevel(log_level)
         self.setLevel(level)
+        logger.level = level
 
     def error(
         self,
