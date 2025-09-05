@@ -32,7 +32,12 @@ from metadata_crawler import add, delete, get_config, index
 from ._version import __version__
 from .api.metadata_stores import CatalogueBackends, IndexName
 from .backends.intake import IntakePath
-from .logger import THIS_NAME, add_file_handle
+from .logger import (
+    THIS_NAME,
+    add_file_handle,
+    apply_verbosity,
+    logger,
+)
 from .utils import exception_handler, load_plugins
 
 StorageScalar = Union[str, int, float, bool]
@@ -164,6 +169,13 @@ class ArgParse:
             "--json", help="Print in json format.", action="store_true"
         )
         parser.set_defaults(apply_func=display_config)
+        parser.add_argument(
+            "-v",
+            "--verbose",
+            action="count",
+            default=self.verbose,
+            help="Increase the verbosity level.",
+        )
 
     def _add_crawler_subcommand(self) -> None:
         """Add sub command for crawling metadata."""
@@ -379,7 +391,7 @@ class ArgParse:
                     "-b",
                     "--batch-size",
                     type=int,
-                    default=2500,
+                    default=25_000,
                     help="Set the batch size for ingestion.",
                 )
                 parser.add_argument(
@@ -507,10 +519,13 @@ def _run(
     **kwargs: KwargValue,
 ) -> None:
     """Apply the parsed method."""
+    old_level = apply_verbosity(getattr(parser, "verbose", 0))
     try:
         parser.apply_func(**kwargs)
     except Exception as error:
         exception_handler(error)
+    finally:
+        logger.set_level(old_level)
 
 
 def cli(sys_args: list[str] | None = None) -> None:

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import abc
+import asyncio
 import gzip
 import json
 import multiprocessing as mp
 import os
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from enum import Enum
 from io import BytesIO
@@ -24,6 +26,7 @@ from typing import (
     Literal,
     NamedTuple,
     Optional,
+    Set,
     Tuple,
     Type,
     TypeAlias,
@@ -45,6 +48,7 @@ from ..utils import (
     QueueLike,
     SimpleQueueLike,
     create_async_iterator,
+    parse_batch,
 )
 from .config import DRSConfig, SchemaField
 from .storage_backend import MetadataType
@@ -156,18 +160,26 @@ class IndexStore:
         self._rows_since_flush = 0
         self._last_flush = time.time()
         self._paths: List[Stream] = []
+        self.max_workers: int = max(1, (os.cpu_count() or 4))
         for name in self.index_names:
             out_path = self.get_path(name)
             self._paths.append(Stream(name=name, path=out_path))
+        self._timestamp_keys: Set[str] = {
+            k
+            for k, col in schema.items()
+            if getattr(getattr(col, "base_type", None), "value", None)
+            == "timestamp"
+        }
 
     @staticmethod
     def get_fs(
         uri: str, **storage_options: Any
     ) -> Tuple[fsspec.AbstractFileSystem, bool]:
         """Get the base-url from a path."""
-        storage_options = storage_options or {"anon": True}
         protocol, path = fsspec.core.split_protocol(uri)
         protocol = protocol or "file"
+        add = {"anon": True} if protocol == "s3" else {}
+        storage_options = storage_options or add
         fs = fsspec.filesystem(protocol, **storage_options)
         return fs, protocol == "file"
 
@@ -339,6 +351,7 @@ class JSONLines(IndexStore):
         mode: Literal["w", "r"] = "r",
         storage_options: Optional[Dict[str, Any]] = None,
         shadow: Optional[Union[str, List[str]]] = None,
+        batch_size: int = 25_000,
         **kwargs: Any,
     ):
         super().__init__(
@@ -348,6 +361,7 @@ class JSONLines(IndexStore):
             mode=mode,
             shadow=shadow,
             storage_options=storage_options,
+            batch_size=batch_size,
         )
         _comp_level = int(kwargs.get("comp_level", "4"))
         self._proc: Optional["mp.process.BaseProcess"] = None
@@ -395,20 +409,32 @@ class JSONLines(IndexStore):
         List[Dict[str, Any]]:
             Deserialised metadata records.
         """
-        with self._fs.open(
-            self.get_path(index_name),
-            mode="rt",
-            compression="gzip",
-            encoding="utf-8",
-        ) as stream:
-            chunk: List[Dict[str, Any]] = []
+        loop = asyncio.get_running_loop()
+        ts_keys = self._timestamp_keys
+        path = self.get_path(index_name)
+        with (
+            self._fs.open(
+                path,
+                mode="rt",
+                compression="gzip",
+                encoding="utf-8",
+            ) as stream,
+            ThreadPoolExecutor(max_workers=self.max_workers) as pool,
+        ):
+            raw_lines: List[str] = []
             async for line in create_async_iterator(stream):
-                chunk.append(json.loads(line, cls=DateTimeDecoder))
-                if len(chunk) >= self.batch_size:
-                    yield chunk
-                    chunk = []
-            if chunk:
-                yield chunk
+                raw_lines.append(line)
+                if len(raw_lines) >= self.batch_size:
+                    batch = await loop.run_in_executor(
+                        pool, parse_batch, raw_lines, ts_keys
+                    )
+                    yield batch
+                    raw_lines.clear()
+            if raw_lines:
+                batch = await loop.run_in_executor(
+                    pool, parse_batch, raw_lines, ts_keys
+                )
+                yield batch
 
 
 class CatalogueBackends(Enum):

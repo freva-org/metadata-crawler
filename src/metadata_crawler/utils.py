@@ -10,19 +10,24 @@ import time
 from datetime import datetime, timedelta
 from importlib.metadata import entry_points
 from typing import (
+    IO,
     Any,
     AsyncIterator,
     Callable,
     Dict,
     Iterable,
+    List,
     Optional,
     Protocol,
+    Set,
     Tuple,
     TypeAlias,
     TypeVar,
     Union,
 )
 
+import ciso8601
+import orjson
 import rich.console
 import rich.spinner
 from dateutil.parser import isoparse
@@ -99,6 +104,20 @@ class ValueLike(Protocol[U]):
         ...
 
 
+class FilesystemLike(Protocol):
+    """File-like opener protocol (e.g., fsspec)."""
+
+    def open(
+        self,
+        path: str,
+        mode: str = "rt",
+        compression: Optional[str] = None,
+        encoding: Optional[str] = None,
+        **kwargs: Any,
+    ) -> IO[str]:  # noqa
+        ...
+
+
 Counter: TypeAlias = ValueLike[int]
 PrintLock = mp.Lock()
 Console = rich.console.Console(force_terminal=sys.stdout.isatty(), stderr=True)
@@ -112,6 +131,47 @@ async def create_async_iterator(itt: Iterable[Any]) -> AsyncIterator[Any]:
     """Create an async iterator from as sync iterable."""
     for item in itt:
         yield item
+
+
+def _parse_iso_datetime(s: str) -> datetime:
+    return ciso8601.parse_datetime(s) or datetime.fromisoformat(s)
+
+
+def parse_batch(
+    lines: List[str],
+    timestamp_keys: Set[str],
+) -> List[Dict[str, Any]]:
+    """Parse a batch of NDJSON lines and convert timestamp fields.
+
+    Parameters
+    ^^^^^^^^^^
+    lines : list of str
+        Raw NDJSON lines.
+    timestamp_keys : set of str
+        Keys that should be parsed as datetimes.
+
+    Returns
+    ^^^^^^^
+    list of dict
+        Parsed objects with timestamp fields converted to ``datetime``.
+    """
+    out: List[Dict[str, Any]] = []
+    append = out.append
+    loads = orjson.loads
+    parse_dt = _parse_iso_datetime
+
+    for line in lines:
+        obj: Dict[str, Any] = loads(line)
+        for k in timestamp_keys:
+            v = obj.get(k, None)
+            if v is None:
+                continue
+            if isinstance(v, str):
+                obj[k] = parse_dt(v)
+            elif isinstance(v, list):
+                obj[k] = [parse_dt(x) if isinstance(x, str) else x for x in v]
+        append(obj)
+    return out
 
 
 def convert_str_to_timestamp(

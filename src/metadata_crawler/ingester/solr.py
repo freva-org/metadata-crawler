@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from typing import Annotated, Any, Dict, List, Optional
@@ -108,7 +109,26 @@ class SolrIndex(BaseIndex):
                     metadata[k] = f"ENVELOPE({v[0]}, {v[1]}, {v[3]}, {v[2]})"
                 case "daterange":
                     metadata[k] = f"[{v[0].isoformat()} TO {v[-1].isoformat()}]"
+
         return metadata
+
+    async def _index_core(self, server: str, core: str) -> None:
+        """Index data to a solr core."""
+        url = await self.solr_url(server, core)
+        async for chunk in self.get_metadata(core):
+            async with aiohttp.ClientSession(
+                timeout=self.timeout, raise_for_status=True
+            ) as session:
+                try:
+                    payload = list(map(self._convert, chunk))
+                    async with session.post(url, json=payload) as resp:
+                        logger.debug(await resp.text())
+                except Exception as error:
+                    logger.log(
+                        logging.WARNING,
+                        error,
+                        exc_info=logger.level < logging.INFO,
+                    )
 
     @cli_function(
         help="Add metadata to the apache solr metadata server.",
@@ -127,17 +147,6 @@ class SolrIndex(BaseIndex):
         ] = None,
     ) -> None:
         """Add metadata to the apache solr metadata server."""
-        server = server or ""
-        async with aiohttp.ClientSession(timeout=self.timeout) as session:
+        async with asyncio.TaskGroup() as tg:
             for core in self.index_names:
-                url = await self.solr_url(server, core)
-                async for chunk in self.get_metadata(core):
-                    async with session.post(
-                        url, json=list(map(self._convert, chunk))
-                    ) as resp:
-                        level = (
-                            logging.WARNING
-                            if resp.status not in (200, 201)
-                            else logging.DEBUG
-                        )
-                        logger.log(level, await resp.text())
+                tg.create_task(self._index_core(server or "", core))
