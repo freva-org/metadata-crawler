@@ -13,8 +13,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true
+          lfs: false
           submodules: recursive
           fetch-depth: 0
       - name: Set up Python "3.X"
@@ -40,7 +39,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
           submodules: recursive
           fetch-depth: 0
       - name: Set up Python ${{ matrix.python-version }}
