@@ -268,8 +268,10 @@ class JSONLineWriter:
     ) -> None:
 
         self._comp_level = comp_level
-        self._streams: Dict[str, BytesIO] = {}
-        self._index_names = [s.name for s in streams]
+        self._f: Dict[str, BytesIO] = {}
+        self._streams = {s.name: s.path for s in streams}
+        self._records = 0
+        self.storage_options = storage_options
         for _stream in streams:
             fs, _ = IndexStore.get_fs(_stream.path, **storage_options)
             parent = os.path.dirname(_stream.path).rstrip("/")
@@ -277,7 +279,7 @@ class JSONLineWriter:
                 fs.makedirs(parent, exist_ok=True)
             except Exception:  # pragma: no cover
                 pass  # pragma: no cover
-            self._streams[_stream.name] = fs.open(_stream.path, mode="wb")
+            self._f[_stream.name] = fs.open(_stream.path, mode="wb")
 
     @classmethod
     def as_daemon(
@@ -316,7 +318,7 @@ class JSONLineWriter:
     def _add(self, metadata_batch: List[Tuple[str, Dict[str, Any]]]) -> None:
         """Add a batch of metadata to the gzip store."""
         by_index: Dict[str, List[Dict[str, Any]]] = {
-            name: [] for name in self._index_names
+            name: [] for name in self._streams
         }
         for index_name, metadata in metadata_batch:
             by_index[index_name].append(metadata)
@@ -325,16 +327,22 @@ class JSONLineWriter:
                 continue
             payload = self._encode_records(records)
             gz = self._gzip_once(payload)
-            self._streams[index_name].write(gz)
+            self._f[index_name].write(gz)
+            self._records += len(records)
 
     def close(self) -> None:
         """Close the files."""
-        for stream in self._streams.values():
+        for name, stream in self._f.items():
             try:
                 stream.flush()
             except Exception:
                 pass
             stream.close()
+            if not self._records:
+                fs, _ = IndexStore.get_fs(
+                    self._streams[name], **self.storage_options
+                )
+                fs.rm(self._streams[name])
 
 
 class JSONLines(IndexStore):
@@ -676,11 +684,20 @@ class CatalogueWriter:
             task.join()
         self.store.join()
 
-    async def close(self) -> None:
+    async def close(self, create_catalogue: bool = True) -> None:
         """Close any connections."""
         self.store.join()
         self.store.close()
-        self._create_catalogue_file()
+        if create_catalogue:
+            self._create_catalogue_file()
+
+    async def delete(self) -> None:
+        """Delete all stores."""
+        await self.close(False)
+        for name in self.index_name.latest, self.index_name.all:
+            path = self.store.get_path(name)
+            self.store._fs.rm(path) if self.store._fs.exists(path) else None
+        self.fs.rm(self.path) if self.fs.exists(self.path) else None
 
     def run_consumer(self) -> None:
         """Set up all the consumers."""

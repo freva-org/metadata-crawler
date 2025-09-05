@@ -9,7 +9,7 @@ import pytest
 
 from metadata_crawler import add
 from metadata_crawler.api.config import DRSConfig
-from metadata_crawler.utils import MetadataCrawlerException
+from metadata_crawler.utils import EmptyCrawl, MetadataCrawlerException
 
 
 def test_crawl_local_obs(
@@ -100,7 +100,8 @@ def test_crawl_empty_set(drs_config_path: Path, cat_file: Path) -> None:
         add("foo.yml", drs_config_path, data_set=["nextgems_zarr"])
     with pytest.raises(MetadataCrawlerException):
         add("foo.yml", drs_config_path, data_object=["/foo"])
-    add(cat_file, drs_config_path, data_set=["fool"])
+    with pytest.raises(EmptyCrawl):
+        add(cat_file, drs_config_path, data_set=["fool"])
 
 
 def test_crawl_single_files(
@@ -153,7 +154,7 @@ def test_crawl_single_files(
 
 def test_crawl_thresh_fail(drs_config_path: Path, cat_file: Path) -> None:
     """Test if we can't crawl under a certain threshold."""
-    with pytest.raises(ValueError):
+    with pytest.raises(EmptyCrawl):
         add(
             cat_file,
             drs_config_path,
@@ -161,3 +162,4 @@ def test_crawl_thresh_fail(drs_config_path: Path, cat_file: Path) -> None:
             catalogue_backend="jsonlines",
             fail_under=10,
         )
+    assert not cat_file.exists()

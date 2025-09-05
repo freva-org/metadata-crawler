@@ -123,8 +123,12 @@ PrintLock = mp.Lock()
 Console = rich.console.Console(force_terminal=sys.stdout.isatty(), stderr=True)
 
 
-class MetadataCrawlerException(BaseException):
+class MetadataCrawlerException(Exception):
     """Custom Exception for the crawling."""
+
+
+class EmptyCrawl(MetadataCrawlerException):
+    """Cusotom Exceptoin for a crawl with no results."""
 
 
 async def create_async_iterator(itt: Iterable[Any]) -> AsyncIterator[Any]:
@@ -337,8 +341,10 @@ def print_performance(
     spinner = rich.spinner.Spinner(
         os.getenv("SPINNER", "earth"), text="[b]Preparing crawler ...[/]"
     )
-    interactive = Console.is_terminal
-    log_interval = 30
+    interactive = bool(
+        int(os.getenv("MDC_INTERACTIVE", str(int(Console.is_terminal))))
+    )
+    log_interval = int(os.getenv("MDC_LOG_INTERVAL", "30"))
     sample_interval = 1.0 if interactive else 10.0
 
     def _snapshot() -> Tuple[float, int, int, int]:
