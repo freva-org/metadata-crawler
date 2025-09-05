@@ -1,0 +1,1 @@
+{"_ARRAY_DIMENSIONS": ["time", "level_full", "cell"], "cell_methods": "time: mean cell: mean", "component": "atmo", "grid_mapping": "crs", "long_name": "Zonal wind", "standard_name": "eastward_wind", "units": "m s-1", "vgrid": "reference", "coordinates": "zg"}

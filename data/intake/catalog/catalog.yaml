@@ -1,0 +1,26 @@
+sources:
+  ICON:
+    description: ICON model output
+    driver: yaml_file_cat
+    args:
+        path: "{{CATALOG_DIR}}/ICON/main.yaml"
+  IFS:
+    description: IFS model output
+    driver: yaml_file_cat
+    args:
+        path: "{{CATALOG_DIR}}/IFS/main.yaml"
+  FESOM:
+    description: FESOM ocean model output
+    driver: yaml_file_cat
+    args:
+        path: "{{CATALOG_DIR}}/FESOM/main.yaml"
+  minimal:
+    description: Minimal Zarr and NC files
+    driver: yaml_file_cat
+    args:
+        path: "{{CATALOG_DIR}}/minimals/main.yaml"
+  defects:
+    description: Data with known defects
+    driver: yaml_file_cat
+    args:
+        path: "{{CATALOG_DIR}}/defects/main.yaml"

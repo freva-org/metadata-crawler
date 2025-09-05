@@ -1,0 +1,12 @@
+sources:
+  OneDegree:
+    description: 10km ICON/HAMOCC interpolated to regular 1-degree grid
+    driver: netcdf
+    args:
+      urlpath:
+      - data/intake/work/bm1255/m300689/hackathon_hamocc/1degree/MSM12_r2b8L128SMT_ERA5_nextGEMSpar_2000__conc_zos_mld_slp__mergetime_restricted.nc
+    metadata:
+      project: nextGEMS
+      experiment_id: nextgems_cycle3
+      source_id: ICON-ESM
+      simulation_id: cycle3_HAMOCC

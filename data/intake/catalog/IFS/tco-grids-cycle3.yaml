@@ -1,0 +1,9 @@
+sources:
+  native4.4_grid:
+    driver: netcdf
+    args:
+      urlpath: "data/intake/work/bm1235/ifs-grids/tco_grids/tco2559_grid_restricted.nc"
+  native4.4_gridarea:
+    driver: netcdf
+    args:
+      urlpath: data/intake/work/bm1235/ifs-grids/tco_grids/tco2559_gridarea_restricted.nc

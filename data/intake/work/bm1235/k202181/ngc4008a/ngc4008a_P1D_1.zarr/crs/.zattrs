@@ -1,0 +1,8 @@
+{
+  "_ARRAY_DIMENSIONS": [
+    "crs"
+  ],
+  "grid_mapping_name": "healpix",
+  "healpix_nside": 2,
+  "healpix_order": "nest"
+}

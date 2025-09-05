@@ -1,0 +1,17 @@
+metadata:
+  access_url: data/intake/catalog/eerie_catalog/wrong.yaml
+  source: Served via `xpublish-intake`
+name: except_wrong
+sources:
+  except_wrong-zarr:
+    args:
+      consolidated: true
+      urlpath: https://eerie.cloud.dkrz.de/datasets/era5-dkrz.pressure-level_analysis_daily
+    description: ''
+    driver: zarr
+  except_wrong1-zarr:
+    args:
+      consolidated: true
+      urlpath: https://eerie.cloud.dkrz.de/datasets/era5-dkrz.pressure-level_analysis_daily1/zarr
+    description: ''
+    driver: zarr

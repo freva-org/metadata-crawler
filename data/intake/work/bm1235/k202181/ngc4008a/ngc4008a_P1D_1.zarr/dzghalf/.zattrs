@@ -1,0 +1,10 @@
+{
+    "_ARRAY_DIMENSIONS": [
+        "level_full",
+        "cell"
+    ],
+    "coordinates": "clat clon",
+    "long_name": "vertical extent of model full layer",
+    "standard_name": "cell_thickness",
+    "units": "m"
+}

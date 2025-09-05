@@ -1,0 +1,1 @@
+{"_ARRAY_DIMENSIONS": ["time", "level_full", "cell"], "cell_methods": "time: mean cell: mean", "component": "atmo", "grid_mapping": "crs", "standard_name": "air_pressure", "units": "Pa", "vgrid": "reference", "coordinates": "zg"}

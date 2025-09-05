@@ -1,0 +1,9 @@
+{
+    "dimensions": {
+        "lat": 180,
+        "lon": 360,
+        "time": null
+    },
+    "source": "Simulated data",
+    "title": "Zarr without variables"
+}

@@ -1,0 +1,9 @@
+{
+    "_ARRAY_DIMENSIONS": [
+        "level_half"
+    ],
+    "axis": "Z",
+    "long_name": "generalized_height",
+    "positive": "down",
+    "standard_name": "height"
+}

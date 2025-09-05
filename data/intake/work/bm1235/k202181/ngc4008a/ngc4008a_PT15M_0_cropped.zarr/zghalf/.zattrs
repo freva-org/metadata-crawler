@@ -1,0 +1,10 @@
+{
+    "_ARRAY_DIMENSIONS": [
+        "level_half",
+        "cell"
+    ],
+    "coordinates": "clat clon",
+    "long_name": "geometric height at half level center",
+    "standard_name": "height",
+    "units": "m"
+}
