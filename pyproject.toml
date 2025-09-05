@@ -123,6 +123,8 @@ intake = "metadata_crawler.backends.intake:IntakePath"
 [package-data]
 metadata_crawler = ["py.typed", "*.toml"]
 
+[tool.pytest.ini_options]
+env = ["MDC_LOG_INTERVAL=1"]
 
 [tool.coverage.run]
 branch = false

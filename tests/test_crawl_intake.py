@@ -1,10 +1,12 @@
 """Test crawling intake catalogues."""
 
 import json
+import os
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 import intake
+import mock
 import numpy as np
 import pandas as pd
 import pytest
@@ -22,16 +24,17 @@ def test_crawl_intake_catalogue(
 ) -> None:
     """Test if we can crawl intake catalogues."""
     monkeypatch.chdir(data_dir.parent)
-    inp = data_dir / "intake" / "catalog" / "catalog.yaml"
-    add(
-        cat_file,
-        drs_config_path,
-        data_object=[inp],
-        verbosity=10,
-        batch_size=3,
-        n_procs=1,
-        catalogue_backend="jsonlines",
-    )
+    with mock.patch.dict(os.environ, {"MDC_INTERACTIVE": "1"}, clear=True):
+        inp = data_dir / "intake" / "catalog" / "catalog.yaml"
+        add(
+            cat_file,
+            drs_config_path,
+            data_object=[inp],
+            verbosity=10,
+            batch_size=3,
+            n_procs=1,
+            catalogue_backend="jsonlines",
+        )
     assert cat_file.exists()
     cat = intake.open_catalog(cat_file)
     assert len(cat.latest.read()) > 0
