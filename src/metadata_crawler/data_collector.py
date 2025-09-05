@@ -6,6 +6,7 @@ import asyncio
 import os
 from multiprocessing import Event, Value
 from pathlib import Path
+from types import TracebackType
 from typing import (
     Any,
     AsyncIterator,
@@ -14,6 +15,7 @@ from typing import (
     Dict,
     Iterator,
     Optional,
+    Type,
     Union,
     cast,
 )
@@ -103,7 +105,12 @@ class DataCollector:
     async def __aenter__(self) -> "DataCollector":
         return self
 
-    async def __aexit__(self, *args: Any, **kwargs: Any) -> None:
+    async def __aexit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc: Optional[BaseException],
+        tb: TracebackType,
+    ) -> None:
         self._print_status.clear()
         self.ingest_queue.join_all_tasks()
         await self.ingest_queue.close()

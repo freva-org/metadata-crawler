@@ -17,6 +17,7 @@ from .data_collector import DataCollector
 from .logger import apply_verbosity, get_level_from_verbosity, logger
 from .utils import (
     Console,
+    EmptyCrawl,
     MetadataCrawlerException,
     find_closest,
     load_plugins,
@@ -361,8 +362,12 @@ async def async_add(
                 f"within [green]{dt}[/green][/bold]"
             )
         )
-        if files_discovered >= fail_under and num_files < fail_under:
-            raise ValueError("Could not fulfill discovery threshold!")
+
+        if (
+            files_discovered >= fail_under and num_files < fail_under
+        ) or files_discovered == 0:
+            await data_col.ingest_queue.delete()
+            raise EmptyCrawl("Could not fulfill discovery threshold!") from None
     finally:
         os.environ = env
         logger.set_level(old_level)

@@ -123,8 +123,12 @@ PrintLock = mp.Lock()
 Console = rich.console.Console(force_terminal=sys.stdout.isatty(), stderr=True)
 
 
-class MetadataCrawlerException(BaseException):
+class MetadataCrawlerException(Exception):
     """Custom Exception for the crawling."""
+
+
+class EmptyCrawl(MetadataCrawlerException):
+    """Cusotom Exceptoin for a crawl with no results."""
 
 
 async def create_async_iterator(itt: Iterable[Any]) -> AsyncIterator[Any]:
