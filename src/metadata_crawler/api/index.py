@@ -93,7 +93,7 @@ class BaseIndex:
             async for batch in self._store.read(index_name):
                 yield batch
                 num_items += len(batch)
-            msg = "Indexed {num_items:10,.0f} items for index {index_name}"
+            msg = f"Indexed {num_items:10,.0f} items for index {index_name}"
             Console.print(msg) if Console.is_terminal else print(msg)
 
     @abc.abstractmethod
