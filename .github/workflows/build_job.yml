@@ -1,0 +1,85 @@
+name: Creating pypi release.
+run-name: ${{ github.actor }} is preparing the next release
+
+permissions:
+  pull-requests: write
+  contents: write
+  packages: write
+
+
+"on":
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  release-type-determination:
+    name: Determine if tag is pre-released or not
+    runs-on: ubuntu-latest
+    outputs:
+      is_prerelease: ${{ steps.check-prerelease.outputs.is_prerelease }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get tag
+        id: get-tag
+        run: |
+          echo "tag=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: Check if tag is a pre-release
+        id: check-prerelease
+        run: |
+          TAG="${{ steps.get-tag.outputs.tag }}"
+          IS_PRERELEASE="false"
+          if [[ "$TAG" == *"-dev"* || "$TAG" == *"-beta"* || "$TAG" == *"-alpha"* ]]; then
+            echo "ghcr.io/freva-org/freva-rest-api-dev" > image.txt
+            IS_PRERELEASE="true"
+          else
+            echo "ghcr.io/freva-org/freva-rest-api" > image.txt
+          fi
+          echo "${{ steps.get-tag.outputs.tag }}" > tag.txt
+          echo "$IS_PRERELEASE" > is_prerelease.txt
+          echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-metadata
+          path: |
+            image.txt
+            tag.txt
+            is_prerelease.txt
+
+  pypi:
+    name: Create Pip package
+    needs: [release-type-determination]
+    if: needs.release-type-determination.outputs.is_prerelease == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      -
+        name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.x"
+      -
+        name: Install flit
+        run: python -m pip install flit
+      -
+        name: Building freva-client 📦 with flit
+        run: flit build
+        working-directory: .
+      -
+        name: publish distribution 📦 to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          skip-existing: true
+          verbose: true
+          packages-dir: dist
