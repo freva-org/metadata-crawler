@@ -20,7 +20,7 @@ The synchronous API functions return when the operation is finished
 and raise exceptions on error.  A typical workflow consists of
 
 1. **Crawling**: collect metadata from one or more files or datasets
-   into a temporary catalog (e.g. JSON lines or DuckDB).
+   into a temporary catalog (e.g. JSON lines).
 2. **Indexing**: read entries from the catalog and write them to the
    configured index backend (e.g. Apache Solr or MongoDB).
 3. **Deleting**: remove previously indexed entries matching a set
@@ -38,12 +38,12 @@ stores it in a JSON lines catalog, and indexes it to Apache Solr:
        store="/tmp/catalog.jsonl",
        config_fle="/path/to/drs_config.toml",
        data_object=["/path/to/data"],
-       catalogue_backend="jsonlines",  # or 'duckdb'
+       catalogue_backend="jsonlines",
        threads=8,
        batch_size=50,
    )
 
-   # 2) index the catalog into a DuckDB index named 'latest'
+   # 2) index the catalog into a Apache Solr core named 'latest'
    index(
        "solr",
        "/tmp/catalog-1.yml",
@@ -81,7 +81,6 @@ other tasks:
            store="/tmp/catalog.yaml",
            config_file="/path/to/",
            data_set=["cmip6-fs", "obs-fs"],
-           catalogue_backend="duckdb",
            threads=8,
            batch_size=50,
        )
