@@ -4,7 +4,7 @@ Custom index backends
 ---------------------
 
 An *index backend* stores the final, translated metadata records.
-Built‑in backends include a **DuckDB** database (either on disk,
+Built‑in backends include a **JSONLines** data structure (either on disk,
 in memory or on S3) and **MongoDB** via Motor.  You can implement
 additional index backends to suit your needs.
 

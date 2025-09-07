@@ -44,6 +44,12 @@ the modules in your own code.
 Too long; didn't read (TL;DR)
 ------------------------------
 
+.. code-block:: console
+
+    mdc add s3://freva/metadata-crawler/data.yml -c drs-config.toml -ds xces-*
+    mdc solr index s3://feva/metadata-crawler/data.yml --server localhost:8983
+
+
 - **Multi-backend discovery**: POSIX, S3/MinIO, Swift (async REST), Intake
 - **Two-stage pipeline**: *crawl → catalogue* then *catalogue → index*
 - **Schema driven**: strong types (e.g. ``string``, ``datetime[2]``,
@@ -53,7 +59,7 @@ Too long; didn't read (TL;DR)
   dataset attributes/vars
 - **Special rules**: conditionals and method/function calls (e.g. CMIP6 realm,
   time aggregation)
-- **Index backends**: JSONLines, DuckDB, Apache Solr, MongoDB
+- **Index backends**: JSONLines (intake), Apache Solr, MongoDB
 - **Support of dataset versions**: Dataset versions are stored separately.
   Data containing *all* dataset versions and the *latest* versions only.
 
@@ -91,7 +97,7 @@ Harvest metadata into a catalogue
 This reads dataset definitions from ``drs_config.toml`` and writes harvested
 metadata into a temporary **catalogue** file. You can specify one or
 more dataset names via ``--dataset`` or explicit paths via ``--data-object``.
-Catalogue formats include JSONLines (gzipped) or DuckDB.
+Catalogue formats include JSONLines (gzipped).
 
 Index catalogue entries
 ^^^^^^^^^^^^^^^^^^^^^^^^
