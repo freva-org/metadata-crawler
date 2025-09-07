@@ -248,10 +248,9 @@ deps = git-python
        packaging
        tomli
        requests
-commands = python3 release.py tag freva_deployment
-[testenv:build]
-deps = -e .
-       pyinstaller
-       cryptography
-commands = pyinstaller --clean --noconfirm deploy-freva.spec
+allowlist_externals = rm
+                      curl
+commands_pre = curl -H 'Cache-Control: no-cache' -Ls -o bump.py https://raw.githubusercontent.com/freva-org/freva-admin/main/release.py
+commands = python3 bump.py tag metadata-crawler
+commands_post = rm bump.py
        """
