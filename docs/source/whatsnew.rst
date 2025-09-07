@@ -3,7 +3,7 @@ What's new
 
 This document highlights major changes and additions across releases.
 
-v2509.0.0
+v2509.0.1
 ----------
 
 * Initial release of the documentation.
