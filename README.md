@@ -49,14 +49,14 @@ Configuration is **TOML** with inheritance, templating, and computed rules.
 ```console
 
    # 1) Crawl → write catalogue
-   mdc crawl \
+   mdc add \
      cat.yaml \
      --config-file drs_config.toml \
      --dataset cmip6-fs,obs-fs \
      --threads 4 --batch-size 100
 
    # 2) Index from catalogue → Solr (or Mongo)
-   mdc soler index \
+   mdc solr index \
      cat.yaml \
      --server localhot:8983
 
