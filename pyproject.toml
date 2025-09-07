@@ -23,7 +23,7 @@ classifiers = [
 ]
 dynamic = ["version"]
 description="Crawl, extract and push climate metadata for indexing."
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
         "aiohttp",
         "appdirs",
