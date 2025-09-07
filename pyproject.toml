@@ -100,10 +100,10 @@ tests = [
 ]
 
 [project.urls]
-Documentation = "https://github.com/freva-org/freva-admin"
-Issues = "https://github.com/freva-org/freva-admin/issues"
-Source = "https://github.com/freva-org/freva-admin"
-Home = "https://github.com/freva-org/freva-admin"
+Documentation = "https://metadata-crawler.readthedocs.io"
+Issues = "https://github.com/freva-org/metadata-crawler/issues"
+Source = "https://github.com/freva-org/metadata-crawler"
+Home = "https://github.com/freva-org/metadata-crawler"
 
 [project.scripts]
 metadata-crawler = "metadata_crawler.cli:cli"
