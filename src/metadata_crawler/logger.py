@@ -11,7 +11,7 @@ import appdirs
 from rich.console import Console
 from rich.logging import RichHandler
 
-THIS_NAME = "data-crawler"
+THIS_NAME = "metadata-crawler"
 
 logging.basicConfig(
     level=logging.WARNING,
@@ -24,7 +24,7 @@ logging.config.dictConfig(
         # keep existing handlers
         "disable_existing_loggers": False,
         "root": {
-            "level": "WARNING",
+            "level": "CRITICAL",
             "handlers": ["default"],
         },
         "formatters": {
@@ -36,15 +36,11 @@ logging.config.dictConfig(
             "default": {
                 "class": "logging.StreamHandler",
                 "formatter": "standard",
-                "level": "WARNING",
+                "level": "CRITICAL",
             },
         },
     }
 )
-
-logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
-logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
-logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
 
 
 class Logger(logging.Logger):
@@ -60,7 +56,7 @@ class Logger(logging.Logger):
     ) -> None:
         """Instantiate this logger only once and for all."""
         level = level or int(
-            cast(str, os.getenv("MDC_LOG_LEVEL", str(logging.WARNING)))
+            cast(str, os.getenv("MDC_LOG_LEVEL", str(logging.CRITICAL)))
         )
         name = name or THIS_NAME
         logger_format = logging.Formatter(self.logfmt, self.datefmt)
@@ -110,11 +106,12 @@ logger = Logger()
 
 
 def add_file_handle(
-    suffix: Optional[str], log_level: int = logging.CRITICAL
+    suffix: Optional[str],
+    log_level: int = logging.CRITICAL,
 ) -> None:
     """Add a file log handle to the logger."""
     base_name = f"{THIS_NAME}-{suffix}" if suffix else THIS_NAME
-    log_dir = Path(appdirs.user_log_dir(THIS_NAME))
+    log_dir = Path(os.getenv("MDC_LOG_DIR", appdirs.user_log_dir(THIS_NAME)))
     log_dir.mkdir(exist_ok=True, parents=True)
     logger_file_handle = RotatingFileHandler(
         log_dir / f"{base_name}.log",
