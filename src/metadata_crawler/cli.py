@@ -34,7 +34,6 @@ from .api.metadata_stores import CatalogueBackends, IndexName
 from .backends.intake import IntakePath
 from .logger import (
     THIS_NAME,
-    add_file_handle,
     apply_verbosity,
     logger,
 )
@@ -494,7 +493,6 @@ class ArgParse:
                 "apply_func",
                 "verbose",
                 "version",
-                "log_suffix",
                 "storage_option",
                 "shadow",
             )
@@ -509,7 +507,6 @@ class ArgParse:
             self.kwargs["shadow"] = _flatten(args.shadow)
         self.kwargs["storage_options"] = so
         self.verbose = args.verbose
-        add_file_handle(args.log_suffix)
         self.kwargs["verbosity"] = self.verbose
         return args
 
@@ -519,7 +516,9 @@ def _run(
     **kwargs: KwargValue,
 ) -> None:
     """Apply the parsed method."""
-    old_level = apply_verbosity(getattr(parser, "verbose", 0))
+    old_level = apply_verbosity(
+        getattr(parser, "verbose", 0), suffix=getattr(parser, "log_suffix", None)
+    )
     try:
         parser.apply_func(**kwargs)
     except Exception as error:
