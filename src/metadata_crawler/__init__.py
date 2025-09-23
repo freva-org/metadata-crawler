@@ -53,6 +53,7 @@ def index(
     *catalogue_files: Union[Path, str, List[str], List[Path]],
     batch_size: int = 2500,
     verbosity: int = 0,
+    log_suffix: Optional[str] = None,
     **kwargs: Any,
 ) -> None:
     """Index metadata in the indexing system.
@@ -68,6 +69,8 @@ def index(
         If the index system supports batch-sizes, the size of the batches.
     verbosity:
         Set the verbosity level.
+    log_suffix:
+        Add a suffix to the log file output.
 
     Other Parameters
     ^^^^^^^^^^^^^^^^
@@ -94,6 +97,7 @@ def index(
             *catalogue_files,
             batch_size=batch_size,
             verbosity=verbosity,
+            log_suffix=log_suffix,
             **kwargs,
         )
     )
@@ -103,6 +107,7 @@ def delete(
     index_system: str,
     batch_size: int = 2500,
     verbosity: int = 0,
+    log_suffix: Optional[str] = None,
     **kwargs: Any,
 ) -> None:
     """Delete metadata from the indexing system.
@@ -116,6 +121,8 @@ def delete(
         If the index system supports batch-sizes, the size of the batches.
     verbosity:
         Set the verbosity of the system.
+    log_suffix:
+        Add a suffix to the log file output.
 
     Other Parameters
     ^^^^^^^^^^^^^^^^
@@ -135,7 +142,11 @@ def delete(
             facets=[("project", "CMIP6"), ("institute", "MPI-M")],
         )
     """
-    uvloop.run(async_delete(index_system, batch_size=batch_size, **kwargs))
+    uvloop.run(
+        async_delete(
+            index_system, batch_size=batch_size, log_suffix=log_suffix, **kwargs
+        )
+    )
 
 
 def add(
@@ -155,6 +166,7 @@ def add(
     all_versions: str = IndexName().all,
     n_procs: Optional[int] = None,
     verbosity: int = 0,
+    log_suffix: Optional[str] = None,
     password: bool = False,
     fail_under: int = -1,
     **kwargs: Any,
@@ -204,6 +216,8 @@ def add(
         Set the number of parallel processes for collecting.
     verbosity:
         Set the verbosity of the system.
+    log_suffix:
+        Add a suffix to the log file output.
     fail_under:
          Fail if less than X of the discovered files could be indexed.
 
@@ -242,6 +256,7 @@ def add(
             n_procs=n_procs,
             storage_options=storage_options,
             verbosity=verbosity,
+            log_suffix=log_suffix,
             fail_under=fail_under,
             **kwargs,
         )
