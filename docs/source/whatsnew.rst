@@ -3,6 +3,11 @@ What's new
 
 This document highlights major changes and additions across releases.
 
+v2509.0.2
+----------
+* Improved logging.
+
+
 v2509.0.1
 ----------
 
