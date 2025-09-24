@@ -71,11 +71,9 @@ class S3Path(PathTemplate):
         self, path: Union[str, Path, pathlib.Path]
     ) -> AsyncIterator[str]:
         """Retrieve sub directories of directory."""
-        path = str(path)
         client = await self._get_client()
-        for _content in await client._lsdir(path):
-            if _content.get("type", "") == "directory":
-                yield f'{_content.get("name", "")}'
+        for _content in await client._ls(str(path)):
+            yield _content
 
     async def rglob(
         self, path: str | Path | pathlib.Path, glob_pattern: str = "*"
