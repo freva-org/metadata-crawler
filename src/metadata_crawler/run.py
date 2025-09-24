@@ -86,14 +86,19 @@ async def async_call(
     batch_size: int = 2500,
     catalogue_files: Optional[Sequence[Union[Path, str]]] = None,
     verbosity: int = 0,
+    log_suffix: Optional[str] = None,
     *args: Any,
     **kwargs: Any,
 ) -> None:
-    """Index metadata."""
+    """Add / Delete metadata from index."""
     env = cast(os._Environ[str], os.environ.copy())
-    old_level = apply_verbosity(verbosity)
+    old_level = apply_verbosity(verbosity, suffix=log_suffix)
     try:
+        os.environ["MDC_LOG_INIT"] = "1"
         os.environ["MDC_LOG_LEVEL"] = str(get_level_from_verbosity(verbosity))
+        os.environ["MDC_LOG_SUFFIX"] = (
+            log_suffix or os.getenv("MDC_LOG_SUFFIX") or ""
+        )
         backends = load_plugins("metadata_crawler.ingester")
         try:
             cls = backends[index_system]
@@ -127,6 +132,7 @@ async def async_index(
     *catalogue_files: Union[Path, str, List[str], List[Path]],
     batch_size: int = 2500,
     verbosity: int = 0,
+    log_suffix: Optional[str] = None,
     **kwargs: Any,
 ) -> None:
     """Index metadata in the indexing system.
@@ -142,6 +148,8 @@ async def async_index(
         If the index system supports batch-sizes, the size of the batches.
     verbosity:
         Set the verbosity of the system.
+    log_suffix:
+        Add a suffix to the log file output.
 
     Other Parameters
     ^^^^^^^^^^^^^^^^
@@ -168,6 +176,7 @@ async def async_index(
         "index",
         batch_size=batch_size,
         verbosity=verbosity,
+        log_suffix=log_suffix,
         **kwargs,
     )
 
@@ -176,6 +185,7 @@ async def async_delete(
     index_system: str,
     batch_size: int = 2500,
     verbosity: int = 0,
+    log_suffix: Optional[str] = None,
     **kwargs: Any,
 ) -> None:
     """Delete metadata from the indexing system.
@@ -188,6 +198,8 @@ async def async_delete(
         If the index system supports batch-sizes, the size of the batches.
     verbosity:
         Set the verbosity of the system.
+    log_suffix:
+        Add a suffix to the log file output.
 
     Other Parameters
     ^^^^^^^^^^^^^^^^^
@@ -212,6 +224,7 @@ async def async_delete(
         "delete",
         batch_size=batch_size,
         verbosity=verbosity,
+        log_suffix=log_suffix,
         **kwargs,
     )
 
@@ -236,6 +249,7 @@ async def async_add(
     password: bool = False,
     n_procs: Optional[int] = None,
     verbosity: int = 0,
+    log_suffix: Optional[str] = None,
     fail_under: int = -1,
     **kwargs: Any,
 ) -> None:
@@ -282,6 +296,8 @@ async def async_add(
         Set the number of parallel processes for collecting.
     verbosity:
         Set the verbosity of the system.
+    log_suffix:
+        Add a suffix to the log file output.
     fail_under:
         Fail if less than X of the discovered files could be indexed.
 
@@ -305,9 +321,13 @@ async def async_add(
 
     """
     env = cast(os._Environ[str], os.environ.copy())
-    old_level = apply_verbosity(verbosity)
+    old_level = apply_verbosity(verbosity, suffix=log_suffix)
     try:
+        os.environ["MDC_LOG_INIT"] = "1"
         os.environ["MDC_LOG_LEVEL"] = str(get_level_from_verbosity(verbosity))
+        os.environ["MDC_LOG_SUFFIX"] = (
+            log_suffix or os.getenv("MDC_LOG_SUFFIX") or ""
+        )
         config_file = config_file or os.environ.get(
             "EVALUATION_SYSTEM_CONFIG_DIR"
         )

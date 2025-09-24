@@ -179,7 +179,6 @@ def test_config_subcommand_prints_text(
 ) -> None:
     # Patch config + logging
     monkeypatch.setattr(mc_cli, "get_config", lambda _cfg: FakeConfig({"x": 1}))
-    monkeypatch.setattr(mc_cli, "add_file_handle", lambda suffix: None)
     monkeypatch.setattr(mc_cli, "load_plugins", lambda ep: {})
 
     # Run full CLI entrypoint
@@ -193,7 +192,6 @@ def test_config_subcommand_prints_json(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(mc_cli, "get_config", lambda _cfg: FakeConfig({"x": 1}))
-    monkeypatch.setattr(mc_cli, "add_file_handle", lambda suffix: None)
     monkeypatch.setattr(mc_cli, "load_plugins", lambda ep: {})
 
     mc_cli.cli(["config", "-c", "conf.toml", "--json"])
@@ -223,7 +221,6 @@ def test_walk_intake_invokes_async_walk(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(mc_cli, "IntakePath", fake_ctor)  # class replacement
     monkeypatch.setattr(mc_cli.asyncio, "run", fake_run)
     monkeypatch.setattr(mc_cli, "load_plugins", lambda ep: {})
-    monkeypatch.setattr(mc_cli, "add_file_handle", lambda suffix: None)
 
     mc_cli.cli(["walk-intake", "s3://bucket/catalog.yaml", "-s", "anon", "true"])
 
@@ -251,7 +248,6 @@ def test_plugin_index_and_delete_wiring(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(
         mc_cli, "load_plugins", lambda ep: {"dummy": DummyIngester}
     )
-    monkeypatch.setattr(mc_cli, "add_file_handle", lambda suffix: None)
 
     # Build CLI with plugin subcommands
     parser = mc_cli.ArgParse()

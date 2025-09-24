@@ -11,7 +11,7 @@ import appdirs
 from rich.console import Console
 from rich.logging import RichHandler
 
-THIS_NAME = "data-crawler"
+THIS_NAME = "metadata-crawler"
 
 logging.basicConfig(
     level=logging.WARNING,
@@ -24,7 +24,7 @@ logging.config.dictConfig(
         # keep existing handlers
         "disable_existing_loggers": False,
         "root": {
-            "level": "WARNING",
+            "level": "CRITICAL",
             "handlers": ["default"],
         },
         "formatters": {
@@ -36,15 +36,11 @@ logging.config.dictConfig(
             "default": {
                 "class": "logging.StreamHandler",
                 "formatter": "standard",
-                "level": "WARNING",
+                "level": "CRITICAL",
             },
         },
     }
 )
-
-logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
-logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
-logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
 
 
 class Logger(logging.Logger):
@@ -56,11 +52,14 @@ class Logger(logging.Logger):
     no_debug: list[str] = ["watchfiles", "httpcore", "pymongo", "pika"]
 
     def __init__(
-        self, name: Optional[str] = None, level: Optional[int] = None
+        self,
+        name: Optional[str] = None,
+        level: Optional[int] = None,
+        suffix: Optional[str] = None,
     ) -> None:
         """Instantiate this logger only once and for all."""
-        level = level or int(
-            cast(str, os.getenv("MDC_LOG_LEVEL", str(logging.WARNING)))
+        self.level = level or int(
+            cast(str, os.getenv("MDC_LOG_LEVEL", str(logging.CRITICAL)))
         )
         name = name or THIS_NAME
         logger_format = logging.Formatter(self.logfmt, self.datefmt)
@@ -78,11 +77,16 @@ class Logger(logging.Logger):
             ),
         )
         self._logger_stream_handle.setFormatter(logger_format)
-        self._logger_stream_handle.setLevel(level)
-        super().__init__(name, level)
+        self._logger_stream_handle.setLevel(self.level)
+        super().__init__(name, self.level)
 
         self.propagate = False
         self.handlers = [self._logger_stream_handle]
+        (
+            self.add_file_handle(suffix=suffix)
+            if os.getenv("MDC_LOG_INIT", "0") == "1"
+            else None
+        )
 
     def set_level(self, level: int) -> None:
         """Set the logger level to level."""
@@ -92,7 +96,7 @@ class Logger(logging.Logger):
                 log_level = min(level, logging.CRITICAL)
             handler.setLevel(log_level)
         self.setLevel(level)
-        logger.level = level
+        self.level = level
 
     def error(
         self,
@@ -105,28 +109,30 @@ class Logger(logging.Logger):
             kwargs.setdefault("exc_info", True)
         self._log(logging.ERROR, msg, args, **kwargs)
 
+    def add_file_handle(
+        self,
+        suffix: Optional[str] = None,
+        level: int = logging.CRITICAL,
+    ) -> None:
+        """Add a file log handle to the logger."""
+        suffix = suffix or os.getenv("MDC_LOG_SUFFIX", "")
+        base_name = f"{THIS_NAME}-{suffix}" if suffix else THIS_NAME
+        log_dir = Path(os.getenv("MDC_LOG_DIR", appdirs.user_log_dir(THIS_NAME)))
+        log_dir.mkdir(exist_ok=True, parents=True)
+        logger_file_handle = RotatingFileHandler(
+            log_dir / f"{base_name}.log",
+            mode="a",
+            maxBytes=5 * 1024**2,
+            backupCount=5,
+            encoding="utf-8",
+            delay=False,
+        )
+        logger_file_handle.setFormatter(self.file_format)
+        logger_file_handle.setLevel(self.level)
+        self.addHandler(logger_file_handle)
+
 
 logger = Logger()
-
-
-def add_file_handle(
-    suffix: Optional[str], log_level: int = logging.CRITICAL
-) -> None:
-    """Add a file log handle to the logger."""
-    base_name = f"{THIS_NAME}-{suffix}" if suffix else THIS_NAME
-    log_dir = Path(appdirs.user_log_dir(THIS_NAME))
-    log_dir.mkdir(exist_ok=True, parents=True)
-    logger_file_handle = RotatingFileHandler(
-        log_dir / f"{base_name}.log",
-        mode="a",
-        maxBytes=5 * 1024**2,
-        backupCount=5,
-        encoding="utf-8",
-        delay=False,
-    )
-    logger_file_handle.setFormatter(logger.file_format)
-    logger_file_handle.setLevel(min(log_level, logging.CRITICAL))
-    logger.addHandler(logger_file_handle)
 
 
 def get_level_from_verbosity(verbosity: int) -> int:
@@ -134,9 +140,14 @@ def get_level_from_verbosity(verbosity: int) -> int:
     return max(logging.CRITICAL - 10 * verbosity, -1)
 
 
-def apply_verbosity(level: int) -> int:
+def apply_verbosity(
+    level: Optional[int] = None, suffix: Optional[str] = None
+) -> int:
     """Set the logging level of the handlers to a certain level."""
+    level = level or logger.level
     old_level = logger.level
     level = get_level_from_verbosity(level)
     logger.set_level(level)
+    logger.add_file_handle(suffix, level)
+
     return old_level
