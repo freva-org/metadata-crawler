@@ -230,11 +230,13 @@ deps = .
        flake8
        codespell
        pydocstyle
+       bandit[toml]
 commands =
     python3 -m isort --check --profile black -t py313 -l 79 src
     python3 -m flake8 src --count --max-complexity=10 --ignore=E203,F405,F403,E704,W503,C901 --max-line-length=88 --statistics --show-source
     codespell {posargs: --quiet-level=2} src/metadata_crawler
     python3 -m pydocstyle src/metadata_crawler
+    bandit -r src/metadata_crawler --skip B110 --severity-level medium --confidence-level high
 [testenv:types]
 deps = .
        mypy
