@@ -2,9 +2,11 @@
 
 [![License](https://img.shields.io/badge/License-BSD-purple.svg)](LICENSE)
 [![PyPI](https://img.shields.io/pypi/pyversions/metadata-crawler.svg)](https://pypi.org/project/metadata-crawler/)
+[![Conda Version](https://img.shields.io/conda/vn/conda-forge/metadata-crawler.svg)](https://anaconda.org/conda-forge/metadata-crawler)
 [![Docs](https://readthedocs.org/projects/metadata-crawler/badge/?version=latest)](https://metadata-crawler.readthedocs.io/en/latest/?badge=latest)
 [![Tests](https://github.com/freva-org/metadata-crawler/actions/workflows/ci_job.yml/badge.svg)](https://github.com/freva-org/metadata-crawler/actions)
 [![Test-Coverage](https://codecov.io/gh/freva-org/metadata-crawler/graph/badge.svg?token=W2YziDnh2N)](https://codecov.io/gh/freva-org/metadata-crawler)
+
 
 Harvest, normalise, and index climate / earth-system metadata from **POSIX**,
 **S3/MinIO**, and **OpenStack Swift** using configurable **DRS dialects**
