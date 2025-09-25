@@ -6,7 +6,8 @@ This document highlights major changes and additions across releases.
 v2509.0.2
 ----------
 * Improved logging.
-
+* Fix S3 "flat directory bug".
+* Drop dataset versioning if crawl path if past version position.
 
 v2509.0.1
 ----------

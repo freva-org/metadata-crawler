@@ -27,6 +27,53 @@ def test_crawl_s3_obs(
     assert len(cat.latest.read()) > 0
 
 
+def test_crawl_s3_dir(
+    drs_config_path: Path,
+    storage_options: Dict[str, str],
+) -> None:
+    """Test crawling a flat directory."""
+    cat_file = "s3://test/metadata_crawler/tests/data-flat.yml"
+    inp_dir = (
+        "s3://test/data/obs/observations/grid/CPC/CPC/cmorph/"
+        "30min/atmos/30min/r1i1p1/v20210618/pr"
+    )
+    add(
+        cat_file,
+        drs_config_path,
+        data_store_prefix="s3://test/metadata_crawler/tests/metadata",
+        batch_size=3,
+        n_procs=1,
+        data_object=[inp_dir],
+        storage_options=storage_options,
+    )
+    cat = intake.open_catalog(cat_file, storage_options=storage_options)
+    assert len(cat.latest.read()) > 0
+
+
+def test_crawl_s3_single_file(
+    drs_config_path: Path,
+    storage_options: Dict[str, str],
+) -> None:
+    """Test crawling a flat directory."""
+    cat_file = "s3://test/metadata_crawler/tests/data-flat.yml"
+    inp_file = (
+        "s3://test/data/obs/observations/grid/CPC/CPC/cmorph"
+        "/30min/atmos/30min/r1i1p1/v20210618/pr"
+        "/pr_30min_CPC_cmorph_r1i1p1_201609020000-201609020030.nc"
+    )
+    add(
+        cat_file,
+        drs_config_path,
+        data_store_prefix="s3://test/metadata_crawler/tests/metadata",
+        batch_size=3,
+        n_procs=1,
+        data_object=[inp_file],
+        storage_options=storage_options,
+    )
+    cat = intake.open_catalog(cat_file, storage_options=storage_options)
+    assert len(cat.latest.read()) > 0
+
+
 def test_crawl_s3_cmip6(
     drs_config_path: Path, storage_options: Dict[str, str]
 ) -> None:
