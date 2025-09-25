@@ -15,6 +15,7 @@ from typing import (
     Dict,
     Iterator,
     Optional,
+    Tuple,
     Type,
     Union,
     cast,
@@ -33,7 +34,7 @@ from .utils import (
     print_performance,
 )
 
-ScanItem = tuple[str, str, bool]
+ScanItem = Tuple[str, str, bool, bool]
 
 
 class DataCollector:
@@ -138,6 +139,7 @@ class DataCollector:
         drs_type: str,
         search_dir: str,
         iterable: bool = True,
+        is_versioned: bool = True,
     ) -> None:
         if iterable:
             try:
@@ -161,7 +163,7 @@ class DataCollector:
                 await self.ingest_queue.put(
                     _inp, drs_type, name=self.index_name.all
                 )
-                if rank == 0:
+                if rank == 0 or is_versioned is False:
                     await self.ingest_queue.put(
                         _inp, drs_type, name=self.index_name.latest
                     )
@@ -176,16 +178,22 @@ class DataCollector:
             if item is None:  # sentinel -> exit
                 # do not task_done() for sentinel
                 break
-            drs_type, path, iterable = item
+            drs_type, path, iterable, is_versioned = item
             try:
-                await self._ingest_dir(drs_type, path, iterable=iterable)
+                await self._ingest_dir(
+                    drs_type, path, iterable=iterable, is_versioned=is_versioned
+                )
             except Exception as error:
                 logger.error(error)
             finally:
                 self._scan_queue.task_done()
 
     async def _iter_content(
-        self, drs_type: str, inp_dir: str, pos: int = 0
+        self,
+        drs_type: str,
+        inp_dir: str,
+        pos: int = 0,
+        is_versioned: bool = True,
     ) -> None:
         """Walk recursively until files or the version level is reached."""
         store = self.config.datasets[drs_type].backend
@@ -203,7 +211,6 @@ class DataCollector:
 
         iterable = False if suffix == ".zarr" else iterable
         op: Optional[Callable[..., Coroutine[Any, Any, None]]] = None
-
         if is_file and suffix in self.config.suffixes:
             op = self._ingest_dir
         elif pos <= 0 or suffix == ".zarr":
@@ -211,13 +218,17 @@ class DataCollector:
 
         if op is not None:
             # enqueue the heavy scan; workers will run _ingest_dir concurrently
-            await self._scan_queue.put((drs_type, inp_dir, iterable))
+            await self._scan_queue.put(
+                (drs_type, inp_dir, iterable, is_versioned)
+            )
             return
 
         # otherwise, recurse sequentially (cheap) — no task per directory
         try:
             async for sub in store.iterdir(inp_dir):
-                await self._iter_content(drs_type, sub, pos - 1)
+                await self._iter_content(
+                    drs_type, sub, pos - 1, is_versioned=is_versioned
+                )
         except Exception as error:
             logger.error(error)
 
@@ -242,7 +253,9 @@ class DataCollector:
                 pos = self.config.max_directory_tree_level(
                     path, drs_type=drs_type
                 )
-                await self._iter_content(drs_type, path, pos)
+                await self._iter_content(
+                    drs_type, path, pos, is_versioned=pos > 0
+                )
 
             # wait until all queued scan items are processed
             await self._scan_queue.join()
