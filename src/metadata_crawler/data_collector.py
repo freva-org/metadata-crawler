@@ -253,6 +253,13 @@ class DataCollector:
                 pos = self.config.max_directory_tree_level(
                     path, drs_type=drs_type
                 )
+                if pos < 0:
+                    logger.warning(
+                        "Can't define latest version of versioned dataset."
+                        " This might lead to unexpected results. Try adjusting"
+                        " your search path."
+                    )
+
                 await self._iter_content(
                     drs_type, path, pos, is_versioned=pos > 0
                 )
