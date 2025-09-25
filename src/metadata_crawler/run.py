@@ -336,7 +336,7 @@ async def async_add(
                 "You must give a config file/directory"
             )
         st = time.time()
-        passwd = ""
+        passwd: Optional[str] = None
         if password:  # pragma: no cover
             passwd = Prompt.ask(
                 "[b]Enter the password", password=True

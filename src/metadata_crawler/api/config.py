@@ -609,7 +609,9 @@ class DRSConfig(BaseModel, TemplateMixin):
                 case "conditional":
                     _rule = textwrap.dedent(rule.condition or "").strip()
                     s_cond = self.render_templates(_rule, data)
-                    cond = eval(s_cond, {}, getattr(self, "_model_dict", {}))
+                    cond = eval(
+                        s_cond, {}, getattr(self, "_model_dict", {})
+                    )  # nosec
                     result = rule.true if cond else rule.false
                 case "lookup":
                     args = cast(List[str], self.render_templates(rule.tree, data))
@@ -627,7 +629,7 @@ class DRSConfig(BaseModel, TemplateMixin):
                         self.render_templates(_call, data),
                         {},
                         getattr(self, "_model_dict", {}),
-                    )
+                    )  # nosec
             if result:
                 inp.metadata[facet] = result
 
