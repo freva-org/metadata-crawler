@@ -112,9 +112,9 @@ class SolrIndex(BaseIndex):
 
         return metadata
 
-    async def _index_core(self, server: str, core: str) -> None:
+    async def _index_core(self, server: str, core: str, suffix: str) -> None:
         """Index data to a solr core."""
-        url = await self.solr_url(server, core)
+        url = await self.solr_url(server, core + suffix)
         async for chunk in self.get_metadata(core):
             async with aiohttp.ClientSession(
                 timeout=self.timeout, raise_for_status=True
@@ -155,9 +155,10 @@ class SolrIndex(BaseIndex):
         ] = None,
     ) -> None:
         """Add metadata to the apache solr metadata server."""
-        index_suffix = index_suffix or ""
         async with asyncio.TaskGroup() as tg:
             for core in self.index_names:
                 tg.create_task(
-                    self._index_core(server or "", core + index_suffix)
+                    self._index_core(
+                        server or "", core, suffix=index_suffix or ""
+                    )
                 )
