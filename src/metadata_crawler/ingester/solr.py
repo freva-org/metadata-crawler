@@ -145,8 +145,19 @@ class SolrIndex(BaseIndex):
                 type=str,
             ),
         ] = None,
+        index_suffix: Annotated[
+            Optional[str],
+            cli_parameter(
+                "--index-suffix",
+                help="Suffix for the latest and all version collections.",
+                type=str,
+            ),
+        ] = None,
     ) -> None:
         """Add metadata to the apache solr metadata server."""
+        index_suffix = index_suffix or ""
         async with asyncio.TaskGroup() as tg:
             for core in self.index_names:
-                tg.create_task(self._index_core(server or "", core))
+                tg.create_task(
+                    self._index_core(server or "", core + index_suffix)
+                )

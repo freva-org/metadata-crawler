@@ -119,12 +119,23 @@ class MongoIndex(BaseIndex):
                 default="metadata",
             ),
         ] = "metadata",
+        index_suffix: Annotated[
+            Optional[str],
+            cli_parameter(
+                "--index-suffix",
+                help="Suffix for the latest and all version collections.",
+                type=str,
+            ),
+        ] = None,
     ) -> None:
         """Add metadata to the mongoDB metadata server."""
         db = await self._prep_db_connection(database, url or "")
+        index_suffix = index_suffix or ""
         async with asyncio.TaskGroup() as tg:
             for collection in self.index_names:
-                tg.create_task(self._index_collection(db, collection))
+                tg.create_task(
+                    self._index_collection(db, collection + index_suffix)
+                )
 
     async def close(self) -> None:
         """Close the mongoDB connection."""
