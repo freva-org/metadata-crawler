@@ -156,19 +156,12 @@ class SolrIndex(BaseIndex):
         - Bounded queue so tasks don't pile up.
         - Constant number of worker tasks (not O(batches)).
         """
-        # Build update URL WITHOUT ?commit=true
         base_url = await self.solr_url(server, core + suffix)
         update_url = base_url.split("?", 1)[0]  # guard
-        # e.g. http://host:8983/solr/<core>/update/json
 
-        # Tunables
-        http_workers: int = getattr(
-            self, "http_concurrency", 8
-        )  # concurrent POSTs
-        queue_max: int = getattr(self, "queue_max", 64)  # backpressure buffer
-        encode_workers: int = getattr(
-            self, "max_workers", 4
-        )  # threadpool for JSON encode
+        http_workers: int = 8
+        queue_max: int = 64
+        encode_workers: int = 4
 
         timeout = aiohttp.ClientTimeout(
             connect=10, sock_connect=10, sock_read=180, total=None
@@ -185,19 +178,11 @@ class SolrIndex(BaseIndex):
         SENTINEL: Optional[bytes] = None
 
         async def producer() -> None:
-            # Feed batches into the queue; backpressure kicks in at maxsize
-            nitt = 0
-
             async for batch in self.get_metadata(core):
-                # Encode JSON off the loop
                 body = await loop.run_in_executor(
                     cpu_pool, self._encode_payload, batch
                 )
                 await q.put(body)
-                nitt += 1
-                if nitt > 10:
-                    break
-            # Signal completion to workers
             for _ in range(http_workers):
                 await q.put(SENTINEL)
 
@@ -217,21 +202,15 @@ class SolrIndex(BaseIndex):
         async with aiohttp.ClientSession(
             timeout=timeout, connector=connector, raise_for_status=True
         ) as session:
-            # Start workers (constant number of tasks)
             consumers = [
                 asyncio.create_task(consumer(i, session))
                 for i in range(http_workers)
             ]
-            # Run producer in parallel; it will block when q is full (backpressure)
             prod_task = asyncio.create_task(producer())
-
-            # Wait until producer finished and queue drained
             await prod_task
             await q.join()
-            # Ensure workers exit
             await asyncio.gather(*consumers)
 
-        # Single final hard commit (empty array body is fine)
         commit_url = f"{update_url}?commit=true"
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(
