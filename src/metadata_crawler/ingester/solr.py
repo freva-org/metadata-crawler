@@ -5,9 +5,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from typing import Annotated, Any, Dict, List, Optional
+import time
+from concurrent.futures import ThreadPoolExecutor
+from typing import Annotated, Any, Dict, List, Optional, cast
 
 import aiohttp
+import orjson
 
 from ..api.cli import cli_function, cli_parameter
 from ..api.index import BaseIndex
@@ -112,22 +115,134 @@ class SolrIndex(BaseIndex):
 
         return metadata
 
+    def _encode_payload(self, chunk: List[Dict[str, Any]]) -> bytes:
+        """CPU-bound: convert docs and JSON-encode off the event loop."""
+        return orjson.dumps([self._convert(x) for x in chunk])
+
+    async def _post_chunk(
+        self,
+        session: aiohttp.ClientSession,
+        url: str,
+        body: bytes,
+    ) -> None:
+        """POST one batch with minimal overhead and simple retries."""
+        status = 500
+        t0 = time.perf_counter()
+        try:
+            async with session.post(
+                url, data=body, headers={"Content-Type": "application/json"}
+            ) as resp:
+                status = resp.status
+                await resp.read()
+
+        except Exception as error:
+            logger.log(
+                logging.WARNING,
+                error,
+                exc_info=logger.level < logging.INFO,
+            )
+            return
+        logger.debug(
+            "POST %s -> %i (index time: %.3f)",
+            url,
+            status,
+            time.perf_counter() - t0,
+        )
+
     async def _index_core(self, server: str, core: str, suffix: str) -> None:
-        """Index data to a solr core."""
-        url = await self.solr_url(server, core + suffix)
-        async for chunk in self.get_metadata(core):
-            async with aiohttp.ClientSession(
-                timeout=self.timeout, raise_for_status=True
-            ) as session:
+        """Zero-copy-ish, backpressured, bounded-concurrency indexer.
+
+        - No per-batch commit.
+        - Bounded queue so tasks don't pile up.
+        - Constant number of worker tasks (not O(batches)).
+        """
+        # Build update URL WITHOUT ?commit=true
+        base_url = await self.solr_url(server, core + suffix)
+        update_url = base_url.split("?", 1)[0]  # guard
+        # e.g. http://host:8983/solr/<core>/update/json
+
+        # Tunables
+        http_workers: int = getattr(
+            self, "http_concurrency", 8
+        )  # concurrent POSTs
+        queue_max: int = getattr(self, "queue_max", 64)  # backpressure buffer
+        encode_workers: int = getattr(
+            self, "max_workers", 4
+        )  # threadpool for JSON encode
+
+        timeout = aiohttp.ClientTimeout(
+            connect=10, sock_connect=10, sock_read=180, total=None
+        )
+        connector = aiohttp.TCPConnector(
+            limit_per_host=http_workers,
+            ttl_dns_cache=300,
+            enable_cleanup_closed=True,
+        )
+
+        loop = asyncio.get_running_loop()
+        cpu_pool = ThreadPoolExecutor(max_workers=encode_workers)
+        q: asyncio.Queue[Optional[bytes]] = asyncio.Queue(maxsize=queue_max)
+        SENTINEL: Optional[bytes] = None
+
+        async def producer() -> None:
+            # Feed batches into the queue; backpressure kicks in at maxsize
+            nitt = 0
+
+            async for batch in self.get_metadata(core):
+                # Encode JSON off the loop
+                body = await loop.run_in_executor(
+                    cpu_pool, self._encode_payload, batch
+                )
+                await q.put(body)
+                nitt += 1
+                if nitt > 10:
+                    break
+            # Signal completion to workers
+            for _ in range(http_workers):
+                await q.put(SENTINEL)
+
+        async def consumer(
+            worker_id: int, session: aiohttp.ClientSession
+        ) -> None:
+            while True:
+                body = await q.get()
+                if body is SENTINEL:
+                    q.task_done()
+                    break
                 try:
-                    payload = list(map(self._convert, chunk))
-                    async with session.post(url, json=payload) as resp:
-                        logger.debug(await resp.text())
-                except Exception as error:
-                    logger.log(
-                        logging.WARNING,
-                        error,
-                        exc_info=logger.level < logging.INFO,
+                    await self._post_chunk(session, update_url, cast(bytes, body))
+                finally:
+                    q.task_done()
+
+        async with aiohttp.ClientSession(
+            timeout=timeout, connector=connector, raise_for_status=True
+        ) as session:
+            # Start workers (constant number of tasks)
+            consumers = [
+                asyncio.create_task(consumer(i, session))
+                for i in range(http_workers)
+            ]
+            # Run producer in parallel; it will block when q is full (backpressure)
+            prod_task = asyncio.create_task(producer())
+
+            # Wait until producer finished and queue drained
+            await prod_task
+            await q.join()
+            # Ensure workers exit
+            await asyncio.gather(*consumers)
+
+        # Single final hard commit (empty array body is fine)
+        commit_url = f"{update_url}?commit=true"
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(
+                commit_url,
+                data=b"[]",
+                headers={"Content-Type": "application/json"},
+            ) as resp:
+                if resp.status >= 400:
+                    text = await resp.text()
+                    logger.warning(
+                        "COMMIT %s -> %i: %s", commit_url, resp.status, text
                     )
 
     @cli_function(
