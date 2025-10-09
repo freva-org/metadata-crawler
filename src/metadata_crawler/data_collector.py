@@ -250,7 +250,7 @@ class DataCollector:
 
             # produce scan items by walking roots sequentially
             for drs_type, path in self.search_objects:  # <- property is sync
-                pos = self.config.max_directory_tree_level(
+                pos, is_versioned = self.config.max_directory_tree_level(
                     path, drs_type=drs_type
                 )
                 if pos < 0:
@@ -261,7 +261,7 @@ class DataCollector:
                     )
 
                 await self._iter_content(
-                    drs_type, path, pos, is_versioned=pos > 0
+                    drs_type, path, pos, is_versioned=is_versioned
                 )
 
             # wait until all queued scan items are processed
