@@ -144,7 +144,7 @@ def apply_verbosity(
     level: Optional[int] = None, suffix: Optional[str] = None
 ) -> int:
     """Set the logging level of the handlers to a certain level."""
-    level = level or logger.level
+    level = logger.level if level is None else level
     old_level = logger.level
     level = get_level_from_verbosity(level)
     logger.set_level(level)
