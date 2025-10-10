@@ -688,6 +688,7 @@ class DRSConfig(BaseModel, TemplateMixin):
         version = cast(
             str, self.dialect[standard].facets.get("version", "version")
         )
+        is_versioned = True
         try:
             version_idx = self.dialect[standard].path_specs.dir_parts.index(
                 version
@@ -695,11 +696,12 @@ class DRSConfig(BaseModel, TemplateMixin):
         except ValueError:
             # No version given
             version_idx = len(self.dialect[standard].path_specs.dir_parts)
+            is_versioned = False
         if root_path == search_dir:
             current_pos = 0
         else:
             current_pos = len(search_dir.relative_to(root_path).parts)
-        return version_idx - current_pos
+        return version_idx - current_pos, is_versioned
 
     def is_complete(self, data: Dict[str, Any], standard: str) -> bool:
         """Check if all metadata that can be collected was collected."""

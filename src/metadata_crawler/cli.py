@@ -47,7 +47,9 @@ KwargValue = Union[
 
 
 def walk_catalogue(
-    path: str, storage_options: Optional[Dict[str, Any]] = None, **kwargs: Any
+    path: str,
+    storage_options: Optional[Dict[str, Any]] = None,
+    **kwargs: Any,
 ) -> int:
     """Recursively traverse an intake catalogue.
 
@@ -357,6 +359,13 @@ class ArgParse:
             ),
             action="append",
             nargs=2,
+        )
+        parser.add_argument(
+            "-v",
+            "--verbose",
+            action="count",
+            default=self.verbose,
+            help="Increase the verbosity level.",
         )
         parser.set_defaults(apply_func=walk_catalogue)
 

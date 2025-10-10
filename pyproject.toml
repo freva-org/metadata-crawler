@@ -41,7 +41,7 @@ dependencies = [
         "orjson",
         "pyarrow",
         "h5netcdf",
-        "pydantic",
+        "pydantic<2.12",
         "pyarrow",
         "rich",
         "rich-argparse",
