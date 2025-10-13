@@ -63,7 +63,7 @@ dir_parts = [
     "realm", "cmor_table", "ensemble", "version", "variable",
 ]
 file_parts = [
-    "instrument", "experiment", "ensemble", "fs_time"
+    "instrument", "experiment", "ensemble", "time"
 ]
 [obs-fs-missing]
 root_path = "./data/observations"
