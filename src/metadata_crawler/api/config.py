@@ -17,6 +17,7 @@ from typing import (
     List,
     Literal,
     Optional,
+    Tuple,
     Union,
     cast,
 )
@@ -668,7 +669,7 @@ class DRSConfig(BaseModel, TemplateMixin):
 
     def max_directory_tree_level(
         self, search_dir: str | Path, drs_type: str
-    ) -> int:
+    ) -> Tuple[int, bool]:
         """Get the maximum level for descending into directories.
 
         When searching for files in a directory we can only traverse the directory
