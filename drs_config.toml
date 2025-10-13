@@ -63,7 +63,7 @@ dir_parts = [
     "realm", "cmor_table", "ensemble", "version", "variable",
 ]
 file_parts = [
-    "instrument", "experiment", "ensemble", "time"
+    "instrument", "experiment", "ensemble", "fs_time"
 ]
 [obs-fs-missing]
 root_path = "./data/observations"
@@ -73,9 +73,6 @@ project = "observations"
 bbox = [0, 360, -60, 60]
 level_type = "2d"
 model = "sat"
-
-
-
 
 #[foo]
 #root_path = "./data/observations"
