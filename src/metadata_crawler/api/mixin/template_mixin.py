@@ -6,7 +6,7 @@ from typing import Any, Dict, Mapping, Optional
 
 from jinja2 import Environment, Template, Undefined
 
-ENV = Environment(undefined=Undefined, autoescape=False)
+ENV = Environment(undefined=Undefined, autoescape=True)
 
 
 @lru_cache(maxsize=1024)
