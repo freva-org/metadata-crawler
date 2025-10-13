@@ -32,6 +32,7 @@ import rich.console
 import rich.spinner
 from dateutil.parser import isoparse
 from rich.live import Live
+from rich.progress import Progress, TaskID
 
 from .logger import logger
 
@@ -328,6 +329,63 @@ def timedelta_to_str(seconds: Union[int, float]) -> str:
         if num > 0:
             out.append(f"{num} {letter}")
     return " ".join(out[::-1])
+
+
+class IndexProgress:
+    """A helper that displays the progress of index Tasks."""
+
+    def __init__(self, total: int = 0) -> None:
+        self._interactive = bool(
+            int(os.getenv("MDC_INTERACTIVE", str(int(Console.is_terminal))))
+        )
+        self._log_interval = int(os.getenv("MDC_LOG_INTERVAL", "30"))
+        self.text = "Indexing: "
+        self._done = 0
+        self._task: TaskID = TaskID(0)
+        self._total = total
+        self._start = time.time()
+        self._progress = Progress()
+        self._last_printed_percent: float = -1.0
+
+    def start(self) -> None:
+        """Start the progress bar."""
+        if self._interactive:
+            self._task = self._progress.add_task(
+                f"[green] {self.text}", total=self._total or None
+            )
+            self._progress.start()
+
+    def stop(self) -> None:
+        """Stop the progress bar."""
+        if self._interactive:
+            self._progress.stop()
+        else:
+            self._text_update()
+
+    def _text_update(self, bar_width: int = 40) -> None:
+        filled = int((self._last_printed_percent / 100) * bar_width)
+        bar = (
+            "#" * filled + "-" * (bar_width - filled)
+            if self._total > 0
+            else str(self._done)
+        )
+        elapsed = timedelta(seconds=int(time.time() - self._start))
+        print(
+            f"{self.text} [{bar}] {self._last_printed_percent}% ({elapsed})",
+            flush=True,
+        )
+
+    def update(self, inc: int) -> None:
+        """Update the status progress bar by an increment."""
+        self._done += inc
+        frac = self._done / max(self._total, 1)
+        pct = frac * 100
+
+        if self._interactive:
+            self._progress.update(self._task, advance=inc)
+        elif pct > self._last_printed_percent:
+            self._last_printed_percent = pct
+            self._text_update()
 
 
 @daemon

@@ -722,6 +722,7 @@ class CatalogueWriter:
                     "latest": self.index_name.latest,
                     "all": self.index_name.all,
                 },
+                "indexed_objects": self.ingested_objects,
                 "schema": {
                     k: json.loads(s.model_dump_json())
                     for k, s in self.store.schema.items()

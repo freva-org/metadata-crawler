@@ -1,10 +1,12 @@
 """test ingesting."""
 
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Dict, List
 
 import intake
+import mock
 import requests
 from pymongo import MongoClient
 
@@ -31,13 +33,14 @@ def test_ingest_solr(
         )
         cat = intake.open_catalog(cat_file, storage_options=storage_options)
         lens.append(len(cat.latest.read()))
-    index(
-        "solr",
-        *cat_files,
-        server=solr_server,
-        storage_options=storage_options,
-        batch_size=1,
-    )
+    with mock.patch.dict(os.environ, {"MDC_INTERACTIVE": "1"}, clear=True):
+        index(
+            "solr",
+            *cat_files,
+            server=solr_server,
+            storage_options=storage_options,
+            batch_size=1,
+        )
     res = requests.get(
         f"{solr_server}/solr/latest/select", params={"q": "*:*", "rows": 0}
     )
