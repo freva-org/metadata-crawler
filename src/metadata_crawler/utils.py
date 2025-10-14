@@ -334,21 +334,31 @@ def timedelta_to_str(seconds: Union[int, float]) -> str:
 class IndexProgress:
     """A helper that displays the progress of index Tasks."""
 
-    def __init__(self, total: int = 0) -> None:
-        self._interactive = bool(
-            int(os.getenv("MDC_INTERACTIVE", str(int(Console.is_terminal))))
-        )
+    def __init__(
+        self,
+        total: int = 0,
+        interactive: Optional[bool] = None,
+        text: str = "Indexing: ",
+    ) -> None:
+        if interactive is None:
+            self._interactive = bool(
+                int(os.getenv("MDC_INTERACTIVE", str(int(Console.is_terminal))))
+            )
+        else:
+            self._interactive = interactive
         self._log_interval = int(os.getenv("MDC_LOG_INTERVAL", "30"))
-        self.text = "Indexing: "
+        self.text = text
         self._done = 0
         self._task: TaskID = TaskID(0)
         self._total = total
-        self._start = time.time()
+        self._start = self._last_log = time.time()
         self._progress = Progress()
         self._last_printed_percent: float = -1.0
 
     def start(self) -> None:
         """Start the progress bar."""
+        self._start = self._last_log = time.time()
+
         if self._interactive:
             self._task = self._progress.add_task(
                 f"[green] {self.text}", total=self._total or None
@@ -363,27 +373,30 @@ class IndexProgress:
             self._text_update()
 
     def _text_update(self, bar_width: int = 40) -> None:
-        filled = int((self._last_printed_percent / 100) * bar_width)
-        bar = (
-            "#" * filled + "-" * (bar_width - filled)
-            if self._total > 0
-            else str(self._done)
-        )
         elapsed = timedelta(seconds=int(time.time() - self._start))
-        print(
-            f"{self.text} [{bar}] {self._last_printed_percent}% ({elapsed})",
-            flush=True,
-        )
+        log_interval = timedelta(seconds=int(time.time() - self._last_log))
+        if self._total > 0:
+            filled = int((self._last_printed_percent / 100) * bar_width)
+            bar = "#" * filled + "-" * (bar_width - filled)
+            text = f"{self.text} [{bar}] {self._last_printed_percent:>6,.02f}%"
+        else:
+            text = f"{self.text} [{self._done:>12,}]"
+        if log_interval.total_seconds() >= self._log_interval:
+            print(f"{text} ({elapsed})", flush=True)
+            self._last_log = time.time()
 
     def update(self, inc: int) -> None:
         """Update the status progress bar by an increment."""
         self._done += inc
+
+        if self._interactive is True:
+            desc = f"{self.text} [{self._done:>10d}]" if self._done == 0 else None
+            self._progress.update(self._task, advance=inc, description=desc)
+            return
+
         frac = self._done / max(self._total, 1)
         pct = frac * 100
-
-        if self._interactive:
-            self._progress.update(self._task, advance=inc)
-        elif pct > self._last_printed_percent:
+        if pct > self._last_printed_percent or self._total == 0:
             self._last_printed_percent = pct
             self._text_update()
 

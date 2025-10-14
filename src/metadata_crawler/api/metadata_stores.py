@@ -473,10 +473,7 @@ class CatalogueReader:
     ) -> None:
         catalogue_file = str(catalogue_file)
         storage_options = storage_options or {}
-        fs, _ = IndexStore.get_fs(catalogue_file, **storage_options)
-        path = fs.unstrip_protocol(catalogue_file)
-        with fs.open(path) as stream:
-            cat = yaml.safe_load(stream.read())
+        cat = self.load_catalogue(catalogue_file, **storage_options)
         _schema_json = cat["metadata"]["schema"]
         schema = {s["key"]: SchemaField(**s) for k, s in _schema_json.items()}
         index_name = IndexName(**cat["metadata"]["index_names"])
@@ -492,6 +489,14 @@ class CatalogueReader:
             batch_size=batch_size,
             storage_options=storage_options,
         )
+
+    @staticmethod
+    def load_catalogue(path: Union[str, Path], **storage_options: Any) -> Any:
+        """Load a intake yaml catalogue (remote or local)."""
+        fs, _ = IndexStore.get_fs(str(path), **storage_options)
+        cat_path = fs.unstrip_protocol(path)
+        with fs.open(cat_path) as stream:
+            return yaml.safe_load(stream.read())
 
 
 class QueueConsumer:

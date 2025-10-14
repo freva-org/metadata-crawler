@@ -13,7 +13,11 @@ import yaml
 from rich.prompt import Prompt
 
 from .api.config import CrawlerSettings, DRSConfig, strip_protocol
-from .api.metadata_stores import CatalogueBackendType, IndexName
+from .api.metadata_stores import (
+    CatalogueBackendType,
+    CatalogueReader,
+    IndexName,
+)
 from .data_collector import DataCollector
 from .logger import apply_verbosity, get_level_from_verbosity, logger
 from .utils import (
@@ -51,12 +55,14 @@ def _match(match: str, items: Collection[str]) -> List[str]:
     return out
 
 
-def _get_num_of_indexed_objects(catalogue_files: FilesArg) -> int:
+def _get_num_of_indexed_objects(
+    catalogue_files: FilesArg, storage_options: Optional[Dict[str, Any]] = None
+) -> int:
     num_objects = 0
+    storage_options = storage_options or {}
     for cat_file in _norm_files(catalogue_files):
         try:
-            with open(cat_file) as stream:
-                cat = yaml.safe_load(stream.read())
+            cat = CatalogueReader.load_catalogue(cat_file, **storage_options)
             num_objects += cat.get("metadata", {}).get("indexed_objects", 0)
         except (FileNotFoundError, IsADirectoryError, yaml.parser.ParserError):
             pass
@@ -198,7 +204,10 @@ async def async_index(
         batch_size=batch_size,
         verbosity=verbosity,
         log_suffix=log_suffix,
-        num_objects=_get_num_of_indexed_objects(kwargs["catalogue_files"]),
+        num_objects=_get_num_of_indexed_objects(
+            kwargs["catalogue_files"],
+            storage_options=kwargs.get("storage_options"),
+        ),
         **kwargs,
     )
 
