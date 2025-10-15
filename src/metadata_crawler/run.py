@@ -9,15 +9,21 @@ from types import NoneType
 from typing import Any, Collection, Dict, List, Optional, Sequence, Union, cast
 
 import tomlkit
+import yaml
 from rich.prompt import Prompt
 
 from .api.config import CrawlerSettings, DRSConfig, strip_protocol
-from .api.metadata_stores import CatalogueBackendType, IndexName
+from .api.metadata_stores import (
+    CatalogueBackendType,
+    CatalogueReader,
+    IndexName,
+)
 from .data_collector import DataCollector
 from .logger import apply_verbosity, get_level_from_verbosity, logger
 from .utils import (
     Console,
     EmptyCrawl,
+    IndexProgress,
     MetadataCrawlerException,
     find_closest,
     load_plugins,
@@ -47,6 +53,20 @@ def _match(match: str, items: Collection[str]) -> List[str]:
         msg = find_closest(f"No such dataset: {match}", match, items)
         raise MetadataCrawlerException(msg) from None
     return out
+
+
+def _get_num_of_indexed_objects(
+    catalogue_files: FilesArg, storage_options: Optional[Dict[str, Any]] = None
+) -> int:
+    num_objects = 0
+    storage_options = storage_options or {}
+    for cat_file in _norm_files(catalogue_files):
+        try:
+            cat = CatalogueReader.load_catalogue(cat_file, **storage_options)
+            num_objects += cat.get("metadata", {}).get("indexed_objects", 0)
+        except (FileNotFoundError, IsADirectoryError, yaml.parser.ParserError):
+            pass
+    return num_objects
 
 
 def _get_search(
@@ -87,13 +107,16 @@ async def async_call(
     catalogue_files: Optional[Sequence[Union[Path, str]]] = None,
     verbosity: int = 0,
     log_suffix: Optional[str] = None,
+    num_objects: int = 0,
     *args: Any,
     **kwargs: Any,
 ) -> None:
     """Add / Delete metadata from index."""
     env = cast(os._Environ[str], os.environ.copy())
     old_level = apply_verbosity(verbosity, suffix=log_suffix)
+
     try:
+        progress = IndexProgress(total=num_objects)
         os.environ["MDC_LOG_INIT"] = "1"
         os.environ["MDC_LOG_LEVEL"] = str(get_level_from_verbosity(verbosity))
         os.environ["MDC_LOG_SUFFIX"] = (
@@ -112,18 +135,22 @@ async def async_call(
         flat_files = flat_files or [""]
         futures = []
         storage_options = kwargs.pop("storage_options", {})
+        progress.start()
         for cf in flat_files:
             obj = cls(
                 batch_size=batch_size,
                 catalogue_file=cf or None,
                 storage_options=storage_options,
+                progress=progress,
             )
             func = getattr(obj, method)
             future = _event_loop.create_task(func(**kwargs))
             futures.append(future)
         await asyncio.gather(*futures)
+
     finally:
         os.environ = env
+        progress.stop()
         logger.set_level(old_level)
 
 
@@ -177,6 +204,10 @@ async def async_index(
         batch_size=batch_size,
         verbosity=verbosity,
         log_suffix=log_suffix,
+        num_objects=_get_num_of_indexed_objects(
+            kwargs["catalogue_files"],
+            storage_options=kwargs.get("storage_options"),
+        ),
         **kwargs,
     )
 

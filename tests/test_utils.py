@@ -2,12 +2,31 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from datetime import datetime, timedelta
+from typing import Optional
 
+import mock
 import pytest
 
-from metadata_crawler.utils import convert_str_to_timestamp
+from metadata_crawler.utils import IndexProgress, convert_str_to_timestamp
+
+
+@pytest.mark.parametrize("interactive", [None, True, False])
+@pytest.mark.parametrize("total", [10, 0])
+def test_progess_bar(interactive: Optional[bool], total: int) -> None:
+    """Test the interacitve progess bar."""
+    max_it = 10
+    with mock.patch.dict(os.environ, {"MDC_LOG_INTERVAL": "0"}, clear=True):
+        p = IndexProgress(interactive=interactive, total=total)
+        try:
+            p.start()
+            for i in range(max_it):
+                p.update(1)
+        finally:
+            p.stop()
+        assert p._done == max_it
 
 
 def test_empty_string_returns_alternative() -> None:

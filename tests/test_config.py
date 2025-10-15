@@ -188,8 +188,8 @@ def test_reading_data_attributes(
         dataset.to_netcdf(nc_file, engine="h5netcdf")
         assert p.read_attr("tas.grid_label", nc_file) == "gn"
         assert p.read_attr("product", nc_file) == "foo"
-        assert p.read_attr("product", nc_file, engine="netcdf4") == "foo"
-        assert p.read_attr("tas.grid_label", nc_file, engine="netcdf4") == "gn"
+        assert p.read_attr("product", nc_file, engine="h5netcdf") == "foo"
+        assert p.read_attr("tas.grid_label", nc_file, engine="h5netcdf") == "gn"
 
     assert p.read_attr("product", zarr_data) == "foo"
     assert p.read_attr("tas.grid_label", zarr_data) == "gn"

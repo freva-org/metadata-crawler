@@ -16,7 +16,7 @@ from typing import (
 )
 
 from ..logger import logger
-from ..utils import Console
+from ..utils import Console, IndexProgress
 from .config import SchemaField
 from .metadata_stores import CatalogueReader, IndexStore
 
@@ -40,6 +40,9 @@ class BaseIndex:
     batch_size:
         The amount for metadata that should be gathered `before` ingesting
         it into the catalogue.
+    progress:
+        Optional rich progress object that should display the progress of the
+        tasks.
 
     Attributes
     ^^^^^^^^^^
@@ -50,9 +53,11 @@ class BaseIndex:
         catalogue_file: Optional[Union[str, Path]] = None,
         batch_size: int = 2500,
         storage_options: Optional[Dict[str, Any]] = None,
+        progress: Optional[IndexProgress] = None,
         **kwargs: Any,
     ) -> None:
         self._store: Optional[IndexStore] = None
+        self.progress = progress or IndexProgress(total=-1)
         if catalogue_file is not None:
             _reader = CatalogueReader(
                 catalogue_file=catalogue_file or "",
@@ -92,6 +97,7 @@ class BaseIndex:
             logger.info("Indexing %s", index_name)
             async for batch in self._store.read(index_name):
                 yield batch
+                self.progress.update(len(batch))
                 num_items += len(batch)
             msg = f"Indexed {num_items:10,.0f} items for index {index_name}"
             Console.print(msg) if Console.is_terminal else print(msg)
