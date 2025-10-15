@@ -149,7 +149,9 @@ class SolrIndex(BaseIndex):
             time.perf_counter() - t0,
         )
 
-    async def _index_core(self, server: str, core: str, suffix: str) -> None:
+    async def _index_core(
+        self, server: str, core: str, suffix: str, http_workers: int = 8
+    ) -> None:
         """Zero-copy-ish, backpressured, bounded-concurrency indexer.
 
         - No per-batch commit.
@@ -159,8 +161,7 @@ class SolrIndex(BaseIndex):
         base_url = await self.solr_url(server, core + suffix)
         update_url = base_url.split("?", 1)[0]  # guard
 
-        http_workers: int = 8
-        queue_max: int = 64
+        queue_max: int = 128
         encode_workers: int = 4
 
         timeout = aiohttp.ClientTimeout(
@@ -247,12 +248,21 @@ class SolrIndex(BaseIndex):
                 type=str,
             ),
         ] = None,
+        http_workers: Annotated[
+            int,
+            cli_parameter(
+                "--http-workers", help="Number of ingestion threads.", type=int
+            ),
+        ] = 8,
     ) -> None:
         """Add metadata to the apache solr metadata server."""
         async with asyncio.TaskGroup() as tg:
             for core in self.index_names:
                 tg.create_task(
                     self._index_core(
-                        server or "", core, suffix=index_suffix or ""
+                        server or "",
+                        core,
+                        suffix=index_suffix or "",
+                        http_workers=http_workers,
                     )
                 )

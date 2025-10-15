@@ -399,8 +399,8 @@ class ArgParse:
                     "-b",
                     "--batch-size",
                     type=int,
-                    default=25_000,
-                    help="Set the batch size for ingestion.",
+                    default=5_000,
+                    help="Set the batch size for indexing.",
                 )
                 parser.add_argument(
                     "--storage_option",
