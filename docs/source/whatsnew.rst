@@ -5,9 +5,13 @@ This document highlights major changes and additions across releases.
 
 v2509.0.2
 ----------
+* Display progressbar for ingestion.
 * Improved logging.
 * Fix S3 "flat directory bug".
 * Drop dataset versioning if crawl path if past version position.
+* Fix "time" bug.
+* Add an optional index suffix for solr cores and mongo collections.
+* Add Multi threaded solr indexing.
 
 v2509.0.1
 ----------
