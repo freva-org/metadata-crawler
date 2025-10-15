@@ -78,6 +78,7 @@ multi_valued = true
 key         = "time"
 type        = "daterange"
 multi_valued = false
+default     = "fx"
 
 [drs_settings.index_schema.grid_label]
 key         = "grid_label"

@@ -286,7 +286,6 @@ class PathSpecs(BaseModel):
                     f"- needs: {len(self.file_parts)} has: {len(file_parts)})"
                 )
             )
-        _parts.setdefault("time", "fx")
         data.update({k: v for (k, v) in _parts.items() if k not in data})
         data.pop("_", None)
         return data
