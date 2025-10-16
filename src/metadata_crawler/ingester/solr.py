@@ -220,7 +220,10 @@ class SolrIndex(BaseIndex):
         exc_tb: Optional[TracebackType],
     ) -> None:
 
-        self.producer_queue.shutdown()
+        try:
+            self.producer_queue.shutdown()
+        except AttributeError:  # pragma: no cover
+            pass  # prgama: no cover
         self.cpu_pool.shutdown()
 
     @cli_function(
