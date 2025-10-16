@@ -3,6 +3,10 @@ What's new
 
 This document highlights major changes and additions across releases.
 
+v2510.0.0
+---------
+* Restructure solr ingest.
+
 v2509.0.2
 ----------
 * Display progressbar for ingestion.
