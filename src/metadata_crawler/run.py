@@ -1,6 +1,5 @@
 """Apply the metadata collector."""
 
-import asyncio
 import os
 import time
 from fnmatch import fnmatch
@@ -131,22 +130,18 @@ async def async_call(
             )
             raise ValueError(msg) from None
         flat_files = _norm_files(catalogue_files)
-        _event_loop = asyncio.get_event_loop()
         flat_files = flat_files or [""]
-        futures = []
         storage_options = kwargs.pop("storage_options", {})
         progress.start()
         for cf in flat_files:
-            obj = cls(
+            async with cls(
                 batch_size=batch_size,
                 catalogue_file=cf or None,
                 storage_options=storage_options,
                 progress=progress,
-            )
-            func = getattr(obj, method)
-            future = _event_loop.create_task(func(**kwargs))
-            futures.append(future)
-        await asyncio.gather(*futures)
+            ) as obj:
+                func = getattr(obj, method)
+                await func(**kwargs)
 
     finally:
         os.environ = env

@@ -7,7 +7,8 @@ import logging
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Annotated, Any, Dict, List, Optional, cast
+from types import TracebackType
+from typing import Annotated, Any, Dict, List, Optional, Tuple, Type, cast
 
 import aiohttp
 import orjson
@@ -21,9 +22,26 @@ from ..logger import logger
 class SolrIndex(BaseIndex):
     """Ingest metadata into an apache solr server."""
 
+    senteniel: Optional[bytes] = None
+
     def __post_init__(self) -> None:
-        self.timeout = aiohttp.ClientTimeout(total=50)
+        self.timeout = aiohttp.ClientTimeout(
+            connect=10, sock_connect=10, sock_read=180, total=None
+        )
+        self.semaphore = asyncio.Event()
+        self.max_http_workers: int = 0
+        queue_max: int = 128
+        encode_workers: int = 4
         self._uri: str = ""
+        self.cpu_pool = ThreadPoolExecutor(max_workers=encode_workers)
+        self.producer_queue: asyncio.Queue[Tuple[str, Optional[bytes]]] = (
+            asyncio.Queue(maxsize=queue_max)
+        )
+        self.connector = aiohttp.TCPConnector(
+            ttl_dns_cache=300,
+            use_dns_cache=True,
+            enable_cleanup_closed=True,
+        )
 
     async def solr_url(self, server: str, core: str) -> str:
         """Construct the solr url from a given solr core."""
@@ -149,8 +167,25 @@ class SolrIndex(BaseIndex):
             time.perf_counter() - t0,
         )
 
+    async def consumer(self, session: aiohttp.ClientSession) -> None:
+        """Consume the metadata read by the porducers."""
+        while True:
+            update_url, body = await self.producer_queue.get()
+            if body is self.senteniel:
+                self.producer_queue.task_done()
+                break
+            try:
+                await self._post_chunk(session, update_url, cast(bytes, body))
+            finally:
+                self.producer_queue.task_done()
+
     async def _index_core(
-        self, server: str, core: str, suffix: str, http_workers: int = 8
+        self,
+        session: aiohttp.ClientSession,
+        server: str,
+        core: str,
+        suffix: str,
+        http_workers: int = 8,
     ) -> None:
         """Zero-copy-ish, backpressured, bounded-concurrency indexer.
 
@@ -160,70 +195,33 @@ class SolrIndex(BaseIndex):
         """
         base_url = await self.solr_url(server, core + suffix)
         update_url = base_url.split("?", 1)[0]  # guard
-
-        queue_max: int = 128
-        encode_workers: int = 4
-
-        timeout = aiohttp.ClientTimeout(
-            connect=10, sock_connect=10, sock_read=180, total=None
-        )
-        connector = aiohttp.TCPConnector(
-            limit_per_host=http_workers,
-            ttl_dns_cache=300,
-            enable_cleanup_closed=True,
-        )
-
         loop = asyncio.get_running_loop()
-        cpu_pool = ThreadPoolExecutor(max_workers=encode_workers)
-        q: asyncio.Queue[Optional[bytes]] = asyncio.Queue(maxsize=queue_max)
-        SENTINEL: Optional[bytes] = None
-
-        async def producer() -> None:
-            async for batch in self.get_metadata(core):
-                body = await loop.run_in_executor(
-                    cpu_pool, self._encode_payload, batch
-                )
-                await q.put(body)
-            for _ in range(http_workers):
-                await q.put(SENTINEL)
-
-        async def consumer(
-            worker_id: int, session: aiohttp.ClientSession
-        ) -> None:
-            while True:
-                body = await q.get()
-                if body is SENTINEL:
-                    q.task_done()
-                    break
-                try:
-                    await self._post_chunk(session, update_url, cast(bytes, body))
-                finally:
-                    q.task_done()
-
-        async with aiohttp.ClientSession(
-            timeout=timeout, connector=connector, raise_for_status=True
-        ) as session:
-            consumers = [
-                asyncio.create_task(consumer(i, session))
-                for i in range(http_workers)
-            ]
-            prod_task = asyncio.create_task(producer())
-            await prod_task
-            await q.join()
-            await asyncio.gather(*consumers)
-
+        async for batch in self.get_metadata(core):
+            body = await loop.run_in_executor(
+                self.cpu_pool, self._encode_payload, batch
+            )
+            await self.producer_queue.put((update_url, body))
         commit_url = f"{update_url}?commit=true"
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(
-                commit_url,
-                data=b"[]",
-                headers={"Content-Type": "application/json"},
-            ) as resp:
-                if resp.status >= 400:
-                    text = await resp.text()
-                    logger.warning(
-                        "COMMIT %s -> %i: %s", commit_url, resp.status, text
-                    )
+        async with session.post(
+            commit_url,
+            data=b"[]",
+            headers={"Content-Type": "application/json"},
+        ) as resp:
+            if resp.status >= 400:
+                text = await resp.text()
+                logger.warning(
+                    "COMMIT %s -> %i: %s", commit_url, resp.status, text
+                )
+
+    async def __aexit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
+
+        self.producer_queue.shutdown()
+        self.cpu_pool.shutdown()
 
     @cli_function(
         help="Add metadata to the apache solr metadata server.",
@@ -256,13 +254,25 @@ class SolrIndex(BaseIndex):
         ] = 8,
     ) -> None:
         """Add metadata to the apache solr metadata server."""
-        async with asyncio.TaskGroup() as tg:
-            for core in self.index_names:
-                tg.create_task(
-                    self._index_core(
-                        server or "",
-                        core,
-                        suffix=index_suffix or "",
-                        http_workers=http_workers,
+        async with aiohttp.ClientSession(
+            timeout=self.timeout, connector=self.connector, raise_for_status=True
+        ) as session:
+            consumers = [
+                asyncio.create_task(self.consumer(session))
+                for _ in range(http_workers)
+            ]
+            async with asyncio.TaskGroup() as tg:
+                for core in self.index_names:
+                    tg.create_task(
+                        self._index_core(
+                            session,
+                            server or "",
+                            core,
+                            suffix=index_suffix or "",
+                            http_workers=http_workers,
+                        )
                     )
-                )
+            for _ in range(http_workers):
+                await self.producer_queue.put(("", self.senteniel))
+            await self.producer_queue.join()
+            await asyncio.gather(*consumers)

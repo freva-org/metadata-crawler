@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import abc
 from pathlib import Path
+from types import TracebackType
 from typing import (
     Any,
     AsyncIterator,
     Dict,
     List,
     Optional,
+    Self,
     Tuple,
+    Type,
     Union,
     cast,
 )
@@ -68,6 +71,16 @@ class BaseIndex:
         self.__post_init__()
 
     def __post_init__(self) -> None: ...
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None: ...
 
     @property
     def index_schema(self) -> Dict[str, SchemaField]:
