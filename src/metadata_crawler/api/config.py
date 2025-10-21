@@ -256,23 +256,31 @@ class CrawlerSettings(BaseModel):
 class PathSpecs(BaseModel):
     """Implementation of the Directory reference syntax."""
 
-    dir_parts: List[str] = Field(default_factory=list)
-    file_parts: List[str] = Field(default_factory=list)
+    dir_parts: Optional[List[str]] = None
+    file_parts: Optional[List[str]] = None
     file_sep: str = "_"
 
-    def get_metadata_from_path(self, rel_path: Path) -> Dict[str, Any]:
-        """Read path encoded metadata from path specs."""
+    def _get_metadata_from_dir(
+        self, data: Dict[str, Any], rel_path: Path
+    ) -> None:
         dir_parts = rel_path.parent.parts
-        file_parts = rel_path.name.split(self.file_sep)
-        if len(dir_parts) == len(self.dir_parts):
-            data: Dict[str, Any] = dict(zip(self.dir_parts, dir_parts))
-        else:
+        if self.dir_parts and len(dir_parts) == len(self.dir_parts):
+            _parts = dict(zip(self.dir_parts, dir_parts))
+        elif self.dir_parts:
             raise MetadataCrawlerException(
                 (
                     f"Number of dir parts for {rel_path.parent} do not match "
                     f"- needs: {len(self.dir_parts)} has: {len(dir_parts)}"
                 )
             ) from None
+        data.update({k: v for (k, v) in _parts.items() if k not in data})
+
+    def _get_metadata_from_filename(
+        self, data: Dict[str, Any], rel_path: Path
+    ) -> None:
+        if self.file_parts is None:
+            return
+        file_parts = rel_path.name.split(self.file_sep)
         if len(file_parts) == len(self.file_parts):
             _parts = dict(zip(self.file_parts, file_parts))
         elif (
@@ -287,6 +295,12 @@ class PathSpecs(BaseModel):
                 )
             )
         data.update({k: v for (k, v) in _parts.items() if k not in data})
+
+    def get_metadata_from_path(self, rel_path: Path) -> Dict[str, Any]:
+        """Read path encoded metadata from path specs."""
+        data: Dict[str, Any] = {}
+        self._get_metadata_from_dir(data, rel_path)
+        self._get_metadata_from_filename(data, rel_path)
         data.pop("_", None)
         return data
 
@@ -689,13 +703,12 @@ class DRSConfig(BaseModel, TemplateMixin):
             str, self.dialect[standard].facets.get("version", "version")
         )
         is_versioned = True
+        dir_parts = self.dialect[standard].path_specs.dir_parts or []
         try:
-            version_idx = self.dialect[standard].path_specs.dir_parts.index(
-                version
-            )
+            version_idx = dir_parts.index(version)
         except ValueError:
             # No version given
-            version_idx = len(self.dialect[standard].path_specs.dir_parts)
+            version_idx = len(dir_parts)
             is_versioned = False
         if root_path == search_dir:
             current_pos = 0
