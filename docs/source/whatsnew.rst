@@ -6,6 +6,7 @@ This document highlights major changes and additions across releases.
 v2510.0.0
 ---------
 * Restructure solr ingest.
+* Make directory and filename parts in path specs optional.
 
 v2509.0.2
 ----------
