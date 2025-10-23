@@ -264,8 +264,15 @@ class PathSpecs(BaseModel):
         self, data: Dict[str, Any], rel_path: Path
     ) -> None:
         dir_parts = rel_path.parent.parts
+
         if self.dir_parts and len(dir_parts) == len(self.dir_parts):
-            _parts = dict(zip(self.dir_parts, dir_parts))
+            data.update(
+                {
+                    k: v
+                    for (k, v) in zip(self.dir_parts, dir_parts)
+                    if k not in data
+                }
+            )
         elif self.dir_parts:
             raise MetadataCrawlerException(
                 (
@@ -273,7 +280,6 @@ class PathSpecs(BaseModel):
                     f"- needs: {len(self.dir_parts)} has: {len(dir_parts)}"
                 )
             ) from None
-        data.update({k: v for (k, v) in _parts.items() if k not in data})
 
     def _get_metadata_from_filename(
         self, data: Dict[str, Any], rel_path: Path
@@ -281,6 +287,7 @@ class PathSpecs(BaseModel):
         if self.file_parts is None:
             return
         file_parts = rel_path.name.split(self.file_sep)
+        _parts: Dict[str, str] = {}
         if len(file_parts) == len(self.file_parts):
             _parts = dict(zip(self.file_parts, file_parts))
         elif (

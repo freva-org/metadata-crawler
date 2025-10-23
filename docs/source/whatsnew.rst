@@ -3,6 +3,10 @@ What's new
 
 This document highlights major changes and additions across releases.
 
+v2510.0.1
+---------
+* Bug fixing
+
 v2510.0.0
 ---------
 * Restructure solr ingest.
