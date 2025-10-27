@@ -420,7 +420,7 @@ class DataSpecs(BaseModel):
 class Datasets(BaseModel):
     """Definition of datasets that should be crawled."""
 
-    __pydantic_extra__: Dict[str, str] = Field(init=False)
+    __pydantic_extra__: Dict[str, Any] = Field(init=False)
     model_config = ConfigDict(extra="allow")
     root_path: str | Path
     drs_format: str = "freva"
