@@ -1,11 +1,13 @@
 [nextgems_cat]
 root_path = "test_intake.json"
+solr_server = ["foo"]
 drs_format = "nextgems"
 fs_type = "intake"
 
 [nextgems_cycle3]
 root_path = "data/intake/work/bm1235"
 drs_format = "nextgems_cycle3"
+solr_server = ["foo"]
 fs_type = "posix"
 [nextgems_cycle3.defaults]
 project = "nextgems"
