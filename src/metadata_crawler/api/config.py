@@ -43,6 +43,7 @@ from ..utils import (
     convert_str_to_timestamp,
     load_plugins,
 )
+from ..utils.cftime_utils import infer_cmor_like_time_frequency
 from .mixin import TemplateMixin
 from .storage_backend import Metadata, MetadataType
 
@@ -161,7 +162,7 @@ class VarAttrRule(BaseModel):
 class StatRule(BaseModel):
     """How to apply statistics."""
 
-    stat: Literal["min", "max", "minmax", "range", "bbox"]
+    stat: Literal["min", "max", "minmax", "range", "bbox", "timedelta"]
     var: Optional[str] = None  # for numeric stats on a single var
     coords: Optional[Union[List[str], str]] = None  # for time range, etc.
     lat: Optional[str] = None  # convenience keys for bbox
@@ -407,6 +408,11 @@ class DataSpecs(BaseModel):
                             out[facet] = arr.max()
                         else:
                             out[facet] = [arr.min(), arr.max()]
+                case "timedelta":
+                    coord = coords[0] if coords else None
+                    out[facet] = infer_cmor_like_time_frequency(
+                        dset, rule.var or coord
+                    )
 
     def extract_from_data(self, dset: xarray.Dataset) -> Dict[str, Any]:
         """Extract metadata from the data."""

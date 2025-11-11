@@ -63,7 +63,7 @@ contains three subsections:
 
 * ``stats`` - Extract numeric statistics from variables or coordinate
   arrays.  Each entry specifies a ``stat`` type (``min``, ``max``,
-  ``minmax``, ``range``, or ``bbox``), the target facet, and
+  ``minmax``, ``range``, ``bbox`` or ``timedelta``), the target facet, and
   variables or coordinate names.  ``range`` returns start and end
   values (useful for time coordinates); ``bbox`` computes the
   bounding box from latitude and longitude variables.
@@ -76,6 +76,19 @@ contains three subsections:
      stat   = "range"
      coord  = "time"
      default = ["1970-01-01", "1970-01-01"]
+
+Infer the time frquency according to CMOR specifications.
+
+.. admonition:: TOML CONFIG
+
+  .. code-block:: toml
+
+     [drs_settings.dialect.cmip6.data_specs.stats.time_frequency]
+     stat   = "timedelta"
+     var  = "time"
+     default = "fx"
+
+
 
 When ``sources`` includes ``data`` the crawler opens the dataset with
 ``xarray`` and applies these rules after path parsing.  A cache

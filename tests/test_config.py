@@ -47,6 +47,7 @@ time = {stat = "minmax", var = "time"}
 min = {stat = "min", var = "tas" }
 max = {stat = "max", var = "tas" }
 nan = {stat = "min", var = "foo", default = 0}
+freq = {stat = "timedelta", var = "time"}
 time_range = {stat = "range", coords = "time" }
 [drs_settings.dialect.bar.special.model]
 type = "call"
