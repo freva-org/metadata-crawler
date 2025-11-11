@@ -34,7 +34,7 @@ from dateutil.parser import isoparse
 from rich.live import Live
 from rich.progress import Progress, TaskID
 
-from .logger import logger
+from ..logger import logger
 
 T = TypeVar("T")
 U = TypeVar("U")
