@@ -49,9 +49,10 @@ class SolrIndex(BaseIndex):
             scheme, _, server = server.rpartition("://")
             scheme = scheme or "http"
             solr_server, _, solr_port = server.partition(":")
-            solr_port = solr_port or "8983"
             solr_server = solr_server or "localhost"
-            self._uri = f"{scheme}://{solr_server}:{solr_port}/solr"
+            uri = f"{scheme}://{solr_server}"
+            uri = f"{uri}:{solr_port}" if solr_port else uri
+            self._uri = f"{uri}/solr"
         return f"{self._uri}/{core}/update/json?commit=true"
 
     @cli_function(
