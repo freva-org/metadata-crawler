@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import numpy as np
 import pandas as pd
@@ -16,11 +16,11 @@ def _seconds_from_timedelta(delta: Any) -> float:
         delta = delta.to_numpy()
 
     if isinstance(delta, np.timedelta64):
-        return delta.astype("timedelta64[ns]").astype("int64") / 1e9
+        return cast(float, delta.astype("timedelta64[ns]").astype("int64") / 1e9)
     if isinstance(delta, dt.timedelta):
         return delta.total_seconds()
     if isinstance(delta, pd.Timedelta):
-        return delta.total_seconds()
+        return cast(float, delta.total_seconds())
 
     try:
         return float(delta)
@@ -118,7 +118,7 @@ def _find_time_coord(
         std_name = coord.attrs.get("standard_name", "").lower()
         axis = coord.attrs.get("axis", "")
         if std_name == "time" or axis == "T":
-            return coord
+            return cast(xr.DataArray, coord)
 
     # 4) Any coord whose dim is named "time"
     time_like_coords: list[xr.DataArray] = []
@@ -129,11 +129,12 @@ def _find_time_coord(
         return time_like_coords[0]
 
     # 5) As last resort: any variable (coord or not) that looks time-like
-    for var in ds.variables.values():
-        if any(dim.lower() == "time" for dim in var.dims):
+    for vname in ds.variables:
+        var = ds[vname]
+        if any(str(dim).lower() == "time" for dim in var.dims):
             # Require datetime-like or object (for cftime) to avoid bogus matches
             if np.issubdtype(var.dtype, np.datetime64) or var.dtype == "O":
-                return var
+                return ds[vname]
 
     return None
 
