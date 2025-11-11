@@ -129,6 +129,19 @@ dict scope. Useful for string composition or referencing config data structures.
        type = "call"
        call = "'{{ driving_model }}-{{ rcm_name }}-{{ rcm_version }}'"
 
+Can you also mix python calls and Jinja2 templating. For example can you
+instruct the special rule to assign the ``realm`` facet to a lookup value
+that is based on the ``type`` value which was already collected.
+
+.. admonition:: TOML CONFIG
+
+    .. code-block:: toml
+
+       [drs_settings.dialect.cordex.special.realm]
+       type = "call"
+       call = "'dict(fc='forecast', an='analysis', re='reanalysis').get('{{ type }}', '{{ type }}')"
+
+
 You may also reference config structures as nested dicts in the expression,
 for example:
 

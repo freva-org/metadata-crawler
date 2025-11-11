@@ -3,6 +3,11 @@ What's new
 
 This document highlights major changes and additions across releases.
 
+v2510.1.0
+---------
+* Do not set default port for solr indexing.
+* Add inferring CMOR style time-frequency from dataspecs.
+
 v2510.0.2
 ---------
 * Allow any type of additional keys.
