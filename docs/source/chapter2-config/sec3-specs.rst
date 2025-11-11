@@ -77,7 +77,7 @@ contains three subsections:
      coord  = "time"
      default = ["1970-01-01", "1970-01-01"]
 
-Infer the time frquency according to CMOR specifications.
+Infer the time frequency according to CMOR specifications:
 
 .. admonition:: TOML CONFIG
 
