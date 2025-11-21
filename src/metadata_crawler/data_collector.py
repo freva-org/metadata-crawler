@@ -143,18 +143,22 @@ class DataCollector:
     ) -> None:
         if iterable:
             try:
-                sub_dirs = self.config.datasets[drs_type].backend.iterdir(
+                _sub_dirs = self.config.datasets[drs_type].backend.iterdir(
                     search_dir
                 )
             except Exception as error:
                 logger.error(error)
                 return
         else:
-            sub_dirs = cast(
+            _sub_dirs = cast(
                 AsyncIterator[str], create_async_iterator([search_dir])
             )
         rank = 0
-        async for _dir in sub_dirs:
+        sub_dirs = []
+        async for _dir in _sub_dirs:
+            sub_dirs.append(_dir)
+        sub_dirs.sort(reverse=True)
+        for _dir in sub_dirs:
             async for _inp in self.config.datasets[drs_type].backend.rglob(
                 _dir, self.config.datasets[drs_type].glob_pattern
             ):

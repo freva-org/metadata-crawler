@@ -288,7 +288,7 @@ calling the ``create-cordex.sh`` script in the ``dev-env`` folder:
 
 ```console
 ./dev-env/create-cordex.sh
-python dev-env/benchmark.py --max-files 20000
+python dev-env/benchmark.py --num-files 20000
 ```
 
 

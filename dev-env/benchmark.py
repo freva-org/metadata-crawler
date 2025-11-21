@@ -48,6 +48,7 @@ def run_workload(
             verbosity=0,
             catalogue_backend="jsonlines",
             data_store_prefix="benchmark",
+            fail_under=-1,
         )
     finally:
         os.environ = env
