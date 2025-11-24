@@ -3,6 +3,10 @@ What's new
 
 This document highlights major changes and additions across releases.
 
+v2510.1.1
+---------
+* Fix bug for determining latest versions.
+
 v2510.1.0
 ---------
 * Do not set default port for solr indexing.
