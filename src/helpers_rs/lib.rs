@@ -35,6 +35,7 @@
 //! the `_helper` initializer.
 
 mod posix_backend;
+pub mod utils;
 
 use pyo3::prelude::*;
 

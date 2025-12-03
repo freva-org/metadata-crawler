@@ -8,9 +8,22 @@ name = "_helper"
 crate-type = ["cdylib"]
 path = "src/helpers_rs/lib.rs"
 
+exclude = [
+    "/.tox/**",
+    "/dist/**",
+    "/build/**",
+    "/coverage_report/**",
+    "/dev-env/**",
+    "/data/**",
+    "/docs/**",
+]
+
+
 [dependencies]
 pyo3 = { version = "0.20", features = ["extension-module", "abi3-py311"] }
 pyo3-asyncio = { version = "0.20", features = ["attributes", "tokio-runtime"] }
 tokio = { version = "1.48", features = ["rt-multi-thread", "macros", "fs"] }
 walkdir = "2.5"
 globset = "0.4"
+once_cell = "1.21"
+tempfile = "3"

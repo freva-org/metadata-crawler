@@ -27,14 +27,18 @@
 
 #![allow(unsafe_op_in_unsafe_fn)]
 
-use globset::{GlobBuilder, GlobMatcher};
+
 use pyo3::prelude::*;
 use pyo3::{wrap_pyfunction};
 use pyo3_asyncio::tokio::future_into_py;
+use crate::utils::{get_glob_matcher};
 use std::path::PathBuf;
 use tokio::fs;
 use tokio::task;
 use walkdir::WalkDir;
+
+
+
 
 /// Asynchronously check whether a given filesystem path is a directory.
 ///
@@ -141,7 +145,6 @@ pub fn iterdir(py: Python<'_>, path: String) -> PyResult<&PyAny> {
         Ok(entries)
     })
 }
-
 /// Recursively search a directory tree for files matching a glob pattern.
 ///
 /// Parameters
@@ -150,30 +153,16 @@ pub fn iterdir(py: Python<'_>, path: String) -> PyResult<&PyAny> {
 ///     The root path from which to start the recursive search.
 /// glob_pattern : str, optional
 ///     A glob pattern matching file names (default: ``"*"``).
+///     Simple patterns like ``"*.nc"`` are treated like Python's
+///     ``Path.rglob``, i.e. they match anywhere in the subtree.
 /// suffixes : list[str] or None, optional
 ///     If provided, only matching files with these suffixes are returned.
-///     If ``None``, no suffix filtering is applied.
+///     If `None`, no suffix filtering is applied.
 ///
 /// Returns
 /// -------
 /// list[str]
-///     A list of POSIX filesystem paths matching the pattern and suffix filters.
-///
-/// Behavior
-/// --------
-/// * If ``path`` refers to a file, it is returned immediately.
-/// * If ``path`` refers to a directory, the function walks the entire subtree.
-/// * Hidden files are included.
-/// * Broken symlinks are ignored.
-///
-/// Notes
-/// -----
-/// The filesystem traversal is performed using the ``walkdir`` crate inside
-/// a Tokio worker thread, making the call async-friendly without blocking
-/// Python's event loop.
-///
-/// This function is intended as a high-performance backend replacement for
-/// Python's ``pathlib.Path.rglob()`` in the metadata crawler.
+///     A list of filesystem paths matching the pattern and suffix filters.
 #[pyfunction]
 #[pyo3(signature = (path, glob_pattern=None, suffixes=None))]
 pub fn rglob(
@@ -184,17 +173,25 @@ pub fn rglob(
 ) -> PyResult<&PyAny> {
     future_into_py(py, async move {
         let root = PathBuf::from(&path);
-        let pattern = glob_pattern.unwrap_or_else(|| "*".to_string());
+
+        // Normalize suffixes to lowercase ".ext" form
         let suffixes: Vec<String> = suffixes
             .unwrap_or_default()
             .into_iter()
             .map(|s| s.to_lowercase())
             .collect();
 
+        // Raw pattern from Python (or default "*")
+        let raw_pattern = glob_pattern.unwrap_or_else(|| "*".to_string());
+
+        // Look up or build a cached matcher
+        let matcher = get_glob_matcher(&raw_pattern);
+
         let results = task::spawn_blocking(move || {
             let p = root.as_path();
             let mut out: Vec<String> = Vec::new();
 
+            // If root is a single file or .zarr "directory", just return it
             let is_file = p.is_file();
             let is_zarr = p
                 .extension()
@@ -207,16 +204,6 @@ pub fn rglob(
                 return out;
             }
 
-            let matcher: Option<GlobMatcher> = if pattern == "*" {
-                None
-            } else {
-                GlobBuilder::new(&pattern)
-                    .literal_separator(true)
-                    .build()
-                    .ok()
-                    .map(|g| g.compile_matcher())
-            };
-
             for entry in WalkDir::new(p).into_iter().flatten() {
                 let entry_path = entry.path();
 
@@ -224,19 +211,23 @@ pub fn rglob(
                     continue;
                 }
 
-                if let Some(m) = &matcher {
+                // Glob filtering against path *relative* to root
+                if let Some(m) = matcher.as_ref() {
                     let rel = entry_path.strip_prefix(p).unwrap_or(entry_path);
-                    if !m.is_match(rel) {
+                    let rel_str = rel.to_string_lossy();
+                    if !m.is_match(rel_str.as_ref()) {
                         continue;
                     }
                 }
 
+                // Suffix filtering: match ".ext" against provided suffixes
                 if let Some(ext) = entry_path.extension().and_then(|e| e.to_str()) {
-                    let with_dot = format!(".{}", ext.to_lowercase());
-                    if !suffixes.is_empty() && !suffixes.contains(&with_dot) {
+                    let dot_ext = format!(".{}", ext.to_lowercase());
+                    if !suffixes.is_empty() && !suffixes.contains(&dot_ext) {
                         continue;
                     }
-                } else {
+                } else if !suffixes.is_empty() {
+                    // If suffixes are specified and there is no extension, skip
                     continue;
                 }
 
@@ -251,6 +242,9 @@ pub fn rglob(
         Ok(results)
     })
 }
+
+
+
 
 pub fn register(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(is_dir, m)?)?;

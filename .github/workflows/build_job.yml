@@ -14,70 +14,23 @@ permissions:
       - "v*.*.*"
 
 jobs:
-  release-type-determination:
-    name: Determine if tag is pre-released or not
-    runs-on: ubuntu-latest
-    outputs:
-      is_prerelease: ${{ steps.check-prerelease.outputs.is_prerelease }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Get tag
-        id: get-tag
-        run: |
-          echo "tag=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
-
-      - name: Check if tag is a pre-release
-        id: check-prerelease
-        run: |
-          TAG="${{ steps.get-tag.outputs.tag }}"
-          IS_PRERELEASE="false"
-          if [[ "$TAG" == *"-dev"* || "$TAG" == *"-beta"* || "$TAG" == *"-alpha"* ]]; then
-            echo "ghcr.io/freva-org/freva-rest-api-dev" > image.txt
-            IS_PRERELEASE="true"
-          else
-            echo "ghcr.io/freva-org/freva-rest-api" > image.txt
-          fi
-          echo "${{ steps.get-tag.outputs.tag }}" > tag.txt
-          echo "$IS_PRERELEASE" > is_prerelease.txt
-          echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
-
-      - name: Upload Outputs
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-metadata
-          path: |
-            image.txt
-            tag.txt
-            is_prerelease.txt
 
   pypi:
-    name: Create Pip package
-    needs: [release-type-determination]
-    if: needs.release-type-determination.outputs.is_prerelease == 'false'
+    name: Build and publish wheels (Linux x86_64)
     runs-on: ubuntu-latest
     steps:
-      -
-        name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
-      -
-        name: Setup Python
-        uses: actions/setup-python@v4
+
+      - uses: PyO3/maturin-action@v1
         with:
-          python-version: "3.x"
-      -
-        name: Install flit
-        run: python -m pip install flit
-      -
-        name: Building freva-client 📦 with flit
-        run: flit build
-        working-directory: .
-      -
-        name: publish distribution 📦 to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+          command: build
+          args: --release -o dist
+          manylinux: auto
+          target: x86_64
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
           skip-existing: true
