@@ -5,13 +5,12 @@ from typing import Tuple, Union
 from urllib.parse import urlsplit
 
 import fsspec
-from anyio import Path as aPath
 
 
 class PathMixin:
     """Class that defines typical Path operations."""
 
-    async def suffix(self, path: Union[str, Path, aPath]) -> str:
+    async def suffix(self, path: Union[str, Path]) -> str:
         """Get the suffix of a given input path.
 
         Parameters

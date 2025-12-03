@@ -27,7 +27,6 @@ requires-python = ">=3.11"
 dependencies = [
         "aiohttp",
         "appdirs",
-        "anyio",
         "ciso8601",
         "fsspec",
         "diskcache",
@@ -121,7 +120,7 @@ s3 = "metadata_crawler.backends.s3:S3Path"
 intake = "metadata_crawler.backends.intake:IntakePath"
 
 [package-data]
-metadata_crawler = ["py.typed", "*.toml"]
+metadata_crawler = ["py.typed", "*.toml", "_helper.pyi", "__init__.pyi"]
 
 [tool.maturin]
 bindings = "pyo3"
