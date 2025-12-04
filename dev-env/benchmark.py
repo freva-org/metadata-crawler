@@ -36,7 +36,7 @@ def run_workload(
 
     env = os.environ.copy()
     config_file = Path(
-        config_file or Path(__file__).parent.parent / "drs_config.toml"
+        config_file or Path(__file__).parent.parent / "benchmark-config.toml"
     )
     try:
         os.environ["MDC_MAX_FILES"] = str(num_files)
