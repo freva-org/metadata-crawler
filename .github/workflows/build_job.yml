@@ -41,8 +41,7 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         if: github.event_name == 'workflow_dispatch'
         with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
-          skip-existing: true
+          password: ${{ secrets.TEST_PYPI_TOKEN }}
           verbose: true
           packages-dir: dist
           repository-url: https://test.pypi.org/legacy/
