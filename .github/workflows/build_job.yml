@@ -53,6 +53,11 @@ jobs:
     needs: build
 
     steps:
+      - name: Enable long paths for Git on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: git config --system core.longpaths true
+
       - name: Download built wheels
         uses: actions/download-artifact@v4
         with:
