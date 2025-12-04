@@ -19,7 +19,6 @@ from typing import (
 
 import h5netcdf
 import xarray as xr
-from anyio import Path
 from pydantic import BaseModel, Field
 
 from .mixin import LookupMixin, PathMixin, TemplateMixin
@@ -173,12 +172,12 @@ class PathTemplate(
             return dset[var].attrs[attr]
 
     @abc.abstractmethod
-    async def is_dir(self, path: Union[str, Path, pathlib.Path]) -> bool:
+    async def is_dir(self, path: Union[str, pathlib.Path]) -> bool:
         """Check if a given path is a directory object on the storage system.
 
         Parameters
         ^^^^^^^^^^
-        path : str, asyncio.Path, pathlib.Path
+        path : str, pathlib.Path
             Path of the object store
 
         Returns
@@ -187,7 +186,7 @@ class PathTemplate(
         """
 
     @abc.abstractmethod
-    async def is_file(self, path: Union[str, Path, pathlib.Path]) -> bool:
+    async def is_file(self, path: Union[str, pathlib.Path]) -> bool:
         """Check if a given path is a file object on the storage system.
 
         Parameters
@@ -205,7 +204,7 @@ class PathTemplate(
     @abc.abstractmethod
     async def iterdir(
         self,
-        path: Union[str, Path, pathlib.Path],
+        path: Union[str, pathlib.Path],
     ) -> AsyncIterator[str]:
         """Get all sub directories from a given path.
 
@@ -223,7 +222,7 @@ class PathTemplate(
 
     @abc.abstractmethod
     async def rglob(
-        self, path: Union[str, Path, pathlib.Path], glob_pattern: str = "*"
+        self, path: Union[str, pathlib.Path], glob_pattern: str = "*"
     ) -> AsyncIterator[MetadataType]:
         """Search recursively for paths matching a given glob pattern.
 
@@ -240,12 +239,12 @@ class PathTemplate(
         """
         yield MetadataType(path="", metadata={})  # pragma: no cover
 
-    def fs_type(self, path: Union[str, Path, pathlib.Path]) -> str:
+    def fs_type(self, path: Union[str, pathlib.Path]) -> str:
         """Define the file system type."""
         return self._fs_type or ""
 
     @abc.abstractmethod
-    def path(self, path: Union[str, Path, pathlib.Path]) -> str:
+    def path(self, path: Union[str, pathlib.Path]) -> str:
         """Get the full path (including any schemas/netlocs).
 
         Parameters
@@ -261,7 +260,7 @@ class PathTemplate(
         ...  # pragma: no cover
 
     @abc.abstractmethod
-    def uri(self, path: Union[str, Path, pathlib.Path]) -> str:
+    def uri(self, path: Union[str, pathlib.Path]) -> str:
         """Get the uri of the object store.
 
         Parameters

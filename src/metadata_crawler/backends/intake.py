@@ -17,7 +17,6 @@ from urllib.parse import unquote, urlparse
 import fsspec
 import intake
 import pandas as pd
-from anyio import Path
 
 from ..api.storage_backend import Metadata, MetadataType, PathTemplate
 from ..logger import logger
@@ -28,11 +27,11 @@ class IntakePath(PathTemplate):
 
     _fs_type = None
 
-    async def is_file(self, path: str | Path | pathlib.Path) -> bool:
+    async def is_file(self, path: Union[str, pathlib.Path]) -> bool:
         """Check if a given path is a file."""
         return True
 
-    async def is_dir(self, path: str | Path | pathlib.Path) -> bool:
+    async def is_dir(self, path: Union[str, pathlib.Path]) -> bool:
         """Check if a given path is a directory."""
         return False
 
@@ -112,13 +111,13 @@ class IntakePath(PathTemplate):
 
     async def iterdir(
         self,
-        path: Union[str, Path, pathlib.Path],
+        path: Union[str, pathlib.Path],
     ) -> AsyncIterator[str]:
         """Get all sub directories from a given path.
 
         Parameter
         ---------
-        path : str, asyncio.Path, pathlib.Path
+        path : str, pathlib.Path
             Path of the object store
 
         Yields
@@ -147,7 +146,7 @@ class IntakePath(PathTemplate):
         return esmcat
 
     async def rglob(
-        self, path: str | Path | pathlib.Path, glob_pattern: str = "*"
+        self, path: Union[str, pathlib.Path], glob_pattern: str = "*"
     ) -> AsyncIterator[MetadataType]:
         """Go through catalogue path."""
         path = str(path)
@@ -168,12 +167,12 @@ class IntakePath(PathTemplate):
             ):
                 yield md
 
-    def path(self, path: Union[str, Path, pathlib.Path]) -> str:
+    def path(self, path: Union[str, pathlib.Path]) -> str:
         """Get the full path (including any schemas/netlocs).
 
         Parameters
         ----------
-        path: str, asyncio.Path, pathlib.Path
+        path: str, pathlib.Path
             Path of the object store
 
         Returns
@@ -183,12 +182,12 @@ class IntakePath(PathTemplate):
         """
         return str(path)
 
-    def uri(self, path: Union[str, Path, pathlib.Path]) -> str:
+    def uri(self, path: Union[str, pathlib.Path]) -> str:
         """Get the uri of the object store.
 
         Parameters
         ----------
-        path: str, asyncio.Path, pathlib.Path
+        path: str, pathlib.Path
             Path of the object store
 
         Returns
@@ -200,7 +199,7 @@ class IntakePath(PathTemplate):
         fs_type = fs_type or "file"
         return f"{fs_type}://{path}"
 
-    def fs_type(self, path: Union[str, Path, pathlib.Path]) -> str:
+    def fs_type(self, path: Union[str, pathlib.Path]) -> str:
         """Define the file system type."""
         fs_type, _ = fsspec.core.split_protocol(str(path))
         return fs_type or "posix"

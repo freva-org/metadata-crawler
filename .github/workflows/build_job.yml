@@ -1,85 +1,94 @@
-name: Creating pypi release.
+name: Build and publish to PyPI
 run-name: ${{ github.actor }} is preparing the next release
 
-permissions:
-  pull-requests: write
-  contents: write
-  packages: write
-
-
-"on":
-  workflow_dispatch:
+on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch: {}
 
 jobs:
-  release-type-determination:
-    name: Determine if tag is pre-released or not
-    runs-on: ubuntu-latest
-    outputs:
-      is_prerelease: ${{ steps.check-prerelease.outputs.is_prerelease }}
+  build:
+    name: Build wheels
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64
+            manylinux: auto
+
+          - os: macos-14
+            target: aarch64-apple-darwin
+            manylinux: off
+
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            manylinux: off
+
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            manylinux: 2014
+
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Enable long paths for Git on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: git config --system core.longpaths true
 
-      - name: Get tag
-        id: get-tag
-        run: |
-          echo "tag=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
-
-      - name: Check if tag is a pre-release
-        id: check-prerelease
-        run: |
-          TAG="${{ steps.get-tag.outputs.tag }}"
-          IS_PRERELEASE="false"
-          if [[ "$TAG" == *"-dev"* || "$TAG" == *"-beta"* || "$TAG" == *"-alpha"* ]]; then
-            echo "ghcr.io/freva-org/freva-rest-api-dev" > image.txt
-            IS_PRERELEASE="true"
-          else
-            echo "ghcr.io/freva-org/freva-rest-api" > image.txt
-          fi
-          echo "${{ steps.get-tag.outputs.tag }}" > tag.txt
-          echo "$IS_PRERELEASE" > is_prerelease.txt
-          echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
-
-      - name: Upload Outputs
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-metadata
-          path: |
-            image.txt
-            tag.txt
-            is_prerelease.txt
-
-  pypi:
-    name: Create Pip package
-    needs: [release-type-determination]
-    if: needs.release-type-determination.outputs.is_prerelease == 'false'
-    runs-on: ubuntu-latest
-    steps:
-      -
-        name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
-      -
-        name: Setup Python
-        uses: actions/setup-python@v4
+
+      - name: Set up Python "3.X"
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
-      -
-        name: Install flit
-        run: python -m pip install flit
-      -
-        name: Building freva-client 📦 with flit
-        run: flit build
-        working-directory: .
-      -
-        name: publish distribution 📦 to PyPI
+          python-version: "3.13"
+
+      - name: Build wheels with maturin
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          args: --release --sdist -o dist
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux }}
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}-${{ matrix.target }}
+          path: dist
+
+  publish:
+    name: Publish wheels to PyPI
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Download built wheels
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      # Real PyPI for tagged pushes
+      - name: Publish to PyPI
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
           skip-existing: true
           verbose: true
           packages-dir: dist
+
+      # TestPyPI for manual workflow_dispatch runs
+      - name: Publish to TestPyPI
+        if: github.event_name == 'workflow_dispatch'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.TEST_PYPI_TOKEN }}
+          verbose: true
+          packages-dir: dist
+          repository-url: https://test.pypi.org/legacy/

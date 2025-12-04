@@ -112,7 +112,7 @@ def main(argv=None):
     parser.add_argument(
         "--dataset",
         type=str,
-        default="cordex-benchmark",
+        default="cordex-benchmark-fs",
         help="The dataset that is tests.",
     )
     args = parser.parse_args(argv)
