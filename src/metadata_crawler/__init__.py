@@ -31,7 +31,7 @@ __all__ = [
 ]
 
 
-def get_config(config: Optional[Union[Path, str]] = None) -> ConfigMerger:
+def get_config(*config: Union[Path, str]) -> ConfigMerger:
     """Get a drs config file merged with the default config.
 
     The method is helpful to inspect all possible configurations and their
@@ -44,8 +44,8 @@ def get_config(config: Optional[Union[Path, str]] = None) -> ConfigMerger:
         Path to a user defined config file that is going to be merged with
         the default config.
     """
-    _ = DRSConfig.load(config)
-    return ConfigMerger(config)
+    _ = DRSConfig.load(*config)
+    return ConfigMerger(*config)
 
 
 def index(
@@ -150,10 +150,8 @@ def delete(
 
 
 def add(
+    *config_files: Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument],
     store: Optional[Union[str, Path]] = None,
-    config_file: Optional[
-        Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument]
-    ] = None,
     data_object: Optional[Union[str, List[str]]] = None,
     data_set: Optional[Union[str, List[str]]] = None,
     data_store_prefix: str = "metadata",
@@ -173,13 +171,21 @@ def add(
 ) -> None:
     """Harvest metadata from storage systems and add them to an intake catalogue.
 
+    .. versionchanged:: 2511.0.0
+
+       The catalogue argument has been rearanged and is now a keyword
+       argument: ``add("data.yaml", "drs-config.toml")`` becomes
+       ``add("drs-config.toml", store="data.yaml")``. If the ``store`` keyword
+       is omitted the output catalogue will be interpreted as config file.
+
     Parameters
     ^^^^^^^^^^
 
-    store:
-        Path to the intake catalogue.
-    config_file:
+    config_files:
         Path to the drs-config file / loaded configuration.
+    store:
+        Path to the intake catalogue where the collected metadata will be
+        stored.
     data_ojbect:
         Instead of defining datasets that are to be crawled you can crawl
         data based on their directories. The directories must be a root dirs
@@ -234,15 +240,15 @@ def add(
     .. code-block:: python
 
         add(
-            "my-data.yaml",
             "~/data/drs-config.toml",
+            store="my-data.yaml",
             data_set=["cmip6", "cordex"],
         )
     """
     uvloop.run(
         async_add(
+            *config_files,
             store=store,
-            config_file=config_file,
             data_object=data_object,
             data_set=data_set,
             batch_size=batch_size,

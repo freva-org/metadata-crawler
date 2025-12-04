@@ -37,7 +37,7 @@ The dialect definition typically consists of several components:
      with arguments referencing other facets and data attributes for lookup.
   - ``call`` rules evaluate an arbitrary expression using the
     ``drs_config`` entries and the already retrieved ``metadata``.
-  See :doc:`sec4-special` for more information.
+    See :doc:`sec4-special` for more information.
 * **domains** – For CORDEX, a table mapping domain codes (e.g.
   ``EUR-11``) to bounding boxes; used by the ``bbox`` special rule.
 * **data_specs** – (see :doc:`sec3-specs`) define rules for reading

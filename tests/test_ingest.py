@@ -25,8 +25,8 @@ def test_ingest_solr(
         cat_file = f"s3://test/metadata_crawler/tests/solr-{ds}.yml"
         cat_files.append(cat_file)
         add(
-            cat_file,
             drs_config_path,
+            store=cat_file,
             data_store_prefix=f"s3://test/metadata_crawler/tests/solrdata-{ds}",
             data_set=[f"obs-{ds}"],
             storage_options=storage_options,
@@ -61,8 +61,8 @@ def test_ingest_mongo(
             cat_file = Path(temp_dir) / f"mongo-{ds}.yml"
             cat_files.append(cat_file)
             add(
-                cat_file,
                 drs_config_path,
+                store=cat_file,
                 data_store_prefix=f"{ds}-mongodata",
                 data_set=[f"obs-{ds}"],
                 catalogue_backend="jsonlines",

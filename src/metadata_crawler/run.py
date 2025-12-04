@@ -11,7 +11,7 @@ import tomlkit
 import yaml
 from rich.prompt import Prompt
 
-from .api.config import CrawlerSettings, DRSConfig, strip_protocol
+from .api.config import CrawlerSettings, Datasets, DRSConfig, strip_protocol
 from .api.metadata_stores import (
     CatalogueBackendType,
     CatalogueReader,
@@ -69,14 +69,13 @@ def _get_num_of_indexed_objects(
 
 
 def _get_search(
-    config_file: Union[str, Path, Dict[str, Any], tomlkit.TOMLDocument],
+    config: Dict[str, Datasets],
     search_dirs: Optional[List[str]] = None,
     datasets: Optional[List[str]] = None,
 ) -> list[CrawlerSettings]:
     _search_items = []
     search_dirs = search_dirs or []
     datasets = datasets or []
-    config = DRSConfig.load(config_file).datasets
     if not datasets and not search_dirs:
         return [
             CrawlerSettings(name=k, search_path=cfg.root_path)
@@ -256,11 +255,9 @@ async def async_delete(
 
 
 async def async_add(
+    *config_files: Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument],
     store: Optional[
         Union[str, Path, Dict[str, Any], tomlkit.TOMLDocument]
-    ] = None,
-    config_file: Optional[
-        Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument]
     ] = None,
     data_object: Optional[Union[str, List[str]]] = None,
     data_set: Optional[Union[List[str], str]] = None,
@@ -281,13 +278,20 @@ async def async_add(
 ) -> None:
     """Harvest metadata from storage systems and add them to an intake catalogue.
 
+    .. versionchanged:: 2511.0.0
+
+       The catalogue argument has been rearanged and is now a keyword
+       argument: ``async_add("data.yaml", "drs-config.toml")`` becomes
+       ``async_add("drs-config.toml", store="data.yaml")``. If the ``store`` keyword
+       is omitted the output catalogue will be interpreted as config file.
+
     Parameters
     ^^^^^^^^^^
 
+    config_files:
+        Path to the drs-config file / loaded configuration.
     store:
         Path to the intake catalogue.
-    config_file:
-        Path to the drs-config file / loaded configuration.
     data_objects:
         Instead of defining datasets that are to be crawled you can crawl
         data based on their directories. The directories must be a root dirs
@@ -340,8 +344,8 @@ async def async_add(
      .. code-block:: python
 
         await async_add(
-            store="my-data.yaml",
-             config_file="~/data/drs-config.toml",
+             "~/data/drs-config.toml",
+             store="my-data.yaml",
              data_set=["cmip6", "cordex"],
         )
 
@@ -354,10 +358,10 @@ async def async_add(
         os.environ["MDC_LOG_SUFFIX"] = (
             log_suffix or os.getenv("MDC_LOG_SUFFIX") or ""
         )
-        config_file = config_file or os.environ.get(
-            "EVALUATION_SYSTEM_CONFIG_DIR"
+        config_files = config_files or (
+            os.environ.get("EVALUATION_SYSTEM_CONFIG_DIR", ""),
         )
-        if not config_file:
+        if not all(config_files):
             raise MetadataCrawlerException(
                 "You must give a config file/directory"
             )
@@ -380,11 +384,12 @@ async def async_add(
             if isinstance(data_set, (NoneType, list))
             else [str(data_set)]
         )
+        cfg = DRSConfig.load(*config_files)
         async with DataCollector(
-            config_file,
+            cfg,
             store,
             IndexName(latest=latest_version, all=all_versions),
-            *_get_search(config_file, data_object, data_set),
+            *_get_search(cfg.datasets, data_object, data_set),
             batch_size=batch_size,
             comp_level=comp_level,
             backend=catalogue_backend,

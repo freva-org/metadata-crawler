@@ -36,7 +36,6 @@ from typing import (
 
 import fsspec
 import orjson
-import tomlkit
 import yaml
 
 import metadata_crawler
@@ -504,11 +503,11 @@ class QueueConsumer:
 
     def __init__(
         self,
-        config: Optional[Union[str, Path]],
+        config: Dict[str, Any],
         num_objects: "sharedctypes.Synchronized[Any]",
         writer_queue: WriterQueueType,
     ) -> None:
-        self.config = DRSConfig.load(config)
+        self.config = DRSConfig(**config)
         self._writer_queue = writer_queue
         self.num_objects = num_objects
 
@@ -530,7 +529,7 @@ class QueueConsumer:
         cls,
         queue: ConsumerQueueType,
         writer_queue: WriterQueueType,
-        config: Optional[Union[str, Path]],
+        config: Dict[str, Any],
         num_objects: "sharedctypes.Synchronized[Any]",
         batch_size: int,
         poison_pill: int,
@@ -574,12 +573,14 @@ class CatalogueWriter:
         Path the to intake catalogue that should be created.
     index_name:
         Names of the metadata indexes.
+    config:
+        Metadata Config class
     data_store_prefix:
         Prefix of the path/url where the metadata is stored.
     batch_size:
         Size of the metadata chunks that should be added to the data store.
-    index_schema:
-        Schema of the metadata
+    n_procs:
+        Number of processes collecting metadata
     storage_options:
         Set additional storage options for adding metadata to the metadata store
     shadow:
@@ -591,18 +592,17 @@ class CatalogueWriter:
         self,
         yaml_path: str,
         index_name: IndexName,
+        config: DRSConfig,
+        *,
         data_store_prefix: str = "metadata",
         backend: str = "jsonlines",
         batch_size: int = 25_000,
-        config: Optional[
-            Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument]
-        ] = None,
         n_procs: Optional[int] = None,
         storage_options: Optional[Dict[str, Any]] = None,
         shadow: Optional[Union[str, List[str]]] = None,
         **kwargs: Any,
     ) -> None:
-        self.config = DRSConfig.load(config)
+        self.config = config
         storage_options = storage_options or {}
         self.fs, _ = IndexStore.get_fs(yaml_path, **storage_options)
         self.path = self.fs.unstrip_protocol(yaml_path)
@@ -636,7 +636,7 @@ class CatalogueWriter:
                 args=(
                     self.queue,
                     self.store.queue,
-                    config,
+                    getattr(self.config, "_model_dict", {}),
                     self.num_objects,
                     batch_size_per_proc,
                     self._poison_pill,

@@ -99,10 +99,10 @@ def _process_storage_option(option: str) -> Union[str, bool, int, float]:
 
 
 def display_config(
-    config: Optional[Union[Path, str]], json: bool = False, **kwargs: Any
+    *config: Union[Path, str], json: bool = False, **kwargs: Any
 ) -> None:
     """Display the config file."""
-    cfg = get_config(config)
+    cfg = get_config(*config)
     if json is False:
         print(cfg.dumps())
     else:
@@ -163,8 +163,9 @@ class ArgParse:
         parser.add_argument(
             "-c",
             "--config",
-            help="Path to the config_file",
+            help="Path(s) to the config_file(s)",
             type=Path,
+            action="append",
         )
         parser.add_argument(
             "--json", help="Print in json format.", action="store_true"
@@ -216,8 +217,9 @@ class ArgParse:
             "--config-file",
             "--config-dir",
             type=Path,
-            help="Directory holding the metadata and server settings.",
-            default=os.environ.get("EVALUATION_SYSTEM_CONFIG_DIR"),
+            help="Path(s) to the metadata config file(s)",
+            action="append",
+            default=(os.environ.get("EVALUATION_SYSTEM_CONFIG_DIR"),),
         )
         parser.add_argument(
             "-b",
@@ -528,8 +530,9 @@ def _run(
     old_level = apply_verbosity(
         getattr(parser, "verbose", 0), suffix=getattr(parser, "log_suffix", None)
     )
+    cfg_files = cast(Tuple[Path, ...], kwargs.pop("config_file", ()))
     try:
-        parser.apply_func(**kwargs)
+        parser.apply_func(*cfg_files, **kwargs)
     except Exception as error:
         exception_handler(error)
     finally:

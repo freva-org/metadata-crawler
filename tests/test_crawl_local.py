@@ -18,8 +18,8 @@ def test_crawl_local_obs(
     """Test crawling the local observations."""
     _lens = []
     add(
-        cat_file,
         drs_config_path,
+        store=cat_file,
         n_procs=1,
         batch_size=3,
         catalogue_backend="jsonlines",
@@ -28,8 +28,8 @@ def test_crawl_local_obs(
     assert cat_file.exists()
     _lens.append(len(intake.open_catalog(cat_file).latest.read()))
     add(
-        cat_file,
         drs_config_path,
+        store=cat_file,
         n_procs=1,
         batch_size=3,
         data_set=["obs-fs"],
@@ -45,8 +45,8 @@ def test_crawl_local_obs(
 def test_crawl_cordex(drs_config_path: Path, cat_file: Path) -> None:
     """Test for domain specs in cordex."""
     add(
-        cat_file,
         drs_config_path.parent,
+        store=cat_file,
         data_set="cordex-fs",
     )
     assert cat_file.exists()
@@ -67,8 +67,8 @@ def test_crawl_local_cmip6(
     _data_dir = data_dir / "model" / "global" / "cmip6"
     _lens = []
     add(
-        cat_file,
         drs_config_path,
+        store=cat_file,
         n_procs=10,
         batch_size=20_000,
         data_object=[_data_dir],
@@ -76,8 +76,8 @@ def test_crawl_local_cmip6(
     assert cat_file.exists()
     _lens.append(len(intake.open_catalog(cat_file).latest.read()))
     add(
-        cat_file,
         drs_config_path,
+        store=cat_file,
         n_procs=1,
         batch_size=3,
         data_set=["cmip6-fs"],
@@ -93,15 +93,15 @@ def test_crawl_empty_set(drs_config_path: Path, cat_file: Path) -> None:
     """Test the behaviour of crawling non existing data(sets)."""
 
     with pytest.raises(MetadataCrawlerException):
-        add("foo.yml", "foo.toml")
+        add("foo.toml", store="foo.yaml")
     with pytest.raises(MetadataCrawlerException):
-        add("foo.yml", drs_config_path, data_set=["zzz"])
+        add(drs_config_path, data_set=["zzz"], store="foo.yaml")
     with pytest.raises(MetadataCrawlerException):
-        add("foo.yml", drs_config_path, data_set=["nextgems_zarr"])
+        add(drs_config_path, store="foo.yaml", data_set=["nextgems_zarr"])
     with pytest.raises(MetadataCrawlerException):
-        add("foo.yml", drs_config_path, data_object=["/foo"])
+        add(drs_config_path, store="foo.yaml", data_object=["/foo"])
     with pytest.raises(EmptyCrawl):
-        add(cat_file, drs_config_path, data_set=["fool"])
+        add(drs_config_path, data_set=["fool"], store="foo.yam")
 
 
 def test_crawl_single_files(
@@ -109,8 +109,8 @@ def test_crawl_single_files(
 ) -> None:
     """Test if we can ingest a single file."""
     add(
-        cat_file,
         drs_config_path,
+        store=cat_file,
         data_store_prefix=str(drs_config_path.parent / "foo"),
         verbosity=5,
         data_object=[
@@ -143,8 +143,8 @@ def test_crawl_single_files(
         "atmoce_y.fesom.2020_cropped_restricted_compressed.nc",
     )
     add(
-        cat_file,
         drs_config_path,
+        sotre=cat_file,
         data_object=[_file],
         verbosity=5,
     )
@@ -156,8 +156,8 @@ def test_crawl_thresh_fail(drs_config_path: Path, cat_file: Path) -> None:
     """Test if we can't crawl under a certain threshold."""
     with pytest.raises(EmptyCrawl):
         add(
-            cat_file,
             drs_config_path,
+            store=cat_file,
             data_set=["obs-fs-missing"],
             catalogue_backend="jsonlines",
             fail_under=10,
