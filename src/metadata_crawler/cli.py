@@ -530,7 +530,9 @@ def _run(
     old_level = apply_verbosity(
         getattr(parser, "verbose", 0), suffix=getattr(parser, "log_suffix", None)
     )
-    cfg_files = cast(Tuple[Path, ...], kwargs.pop("config_file", ()))
+    cfg_files = cast(
+        Tuple[Path, ...], kwargs.pop("config_file", kwargs.pop("config", ()))
+    )
     try:
         parser.apply_func(*cfg_files, **kwargs)
     except Exception as error:

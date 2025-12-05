@@ -186,7 +186,6 @@ class ConfigMerger:
         self._system_doc = tomlkit.parse(system_path.read_text(encoding="utf-8"))
         _configs: List[str] = []
         for user_path in user_paths:
-            print(user_path)
             if isinstance(user_path, (str, Path)) and os.path.isdir(user_path):
                 _configs.append(
                     (
