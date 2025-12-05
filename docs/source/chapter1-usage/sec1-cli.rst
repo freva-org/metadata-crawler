@@ -16,28 +16,36 @@ some examples.
 Basic crawling
 ^^^^^^^^^^^^^^
 
-To harvest a directory of files into a JSON lines catalog:
+To harvest a directory of files into a JSON lines catalog (multiple config
+files are supported since `v2511.0.0`):
 
 .. code-block:: console
 
    mdc add \
         /tmp/cat.yml \
-       -c /path/to/drs_config.toml \
+       -c /path/to/drs_config-1.toml \
+       -c /path/to/drs_config-1.toml \
        --catalogue-backend jsonlines \
        --threads 4 \
        --batch-size 100 \
        --data-object /path/to/data
 
 Alternatively you can provide one or more dataset names defined in
-your DRS configuration instead of explicit file paths:
+your DRS configuration instead of explicit file paths
+(glob pattern for config files are also supported since `v2511.0.0`):
 
 .. code-block:: console
 
    metadata-crawler add \
        /tmp/catalog.yaml \
-       -c /path/to/drs_config.toml \
+       -c /path/to/drs_*.toml \
        --data-set cmip6-fs obs-fs
 
+
+.. versionchanged:: 2511.0.0
+
+    The ``metadata-crawler add`` sub commands support multiple config files
+    and glob pattern of config files.
 
 Indexing
 ^^^^^^^^

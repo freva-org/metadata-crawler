@@ -15,8 +15,8 @@ def test_crawl_s3_obs(
     """Test crawling s3."""
     cat_file = "s3://test/metadata_crawler/tests/data.yml"
     add(
-        cat_file,
         drs_config_path,
+        store=cat_file,
         data_store_prefix="s3://test/metadata_crawler/tests/metadata",
         batch_size=3,
         n_procs=1,
@@ -38,8 +38,8 @@ def test_crawl_s3_dir(
         "30min/atmos/30min/r1i1p1/v20210618/pr"
     )
     add(
-        cat_file,
         drs_config_path,
+        store=cat_file,
         data_store_prefix="s3://test/metadata_crawler/tests/metadata",
         batch_size=3,
         n_procs=1,
@@ -62,8 +62,8 @@ def test_crawl_s3_single_file(
         "/pr_30min_CPC_cmorph_r1i1p1_201609020000-201609020030.nc"
     )
     add(
-        cat_file,
         drs_config_path,
+        store=cat_file,
         data_store_prefix="s3://test/metadata_crawler/tests/metadata",
         batch_size=3,
         n_procs=1,
@@ -80,8 +80,8 @@ def test_crawl_s3_cmip6(
     cat_file = "s3://test/metadata_crawler/tests/cmip6-s3.yml"
 
     add(
-        cat_file,
         drs_config_path,
+        store=cat_file,
         data_store_prefix="s3://test/metadata_crawler/tests/cmip6-s3",
         batch_size=3,
         n_procs=1,
@@ -106,9 +106,9 @@ def test_crawl_single_s3_file(
         "ua_Amon_ACCESS-CM2_amip_r1i1p1f1_gn_197001-201512.nc"
     )
     add(
-        cat_file,
         drs_config_path,
         n_procs=1,
+        store=cat_file,
         batch_size=3,
         data_object=[file],
     )
@@ -121,9 +121,9 @@ def test_crawl_s3_zarr(drs_config_path: Path, cat_file: Path) -> None:
     """Zarr stores are directories but are treated as files."""
 
     add(
-        cat_file,
         drs_config_path,
         data_set=["nextgems-s3"],
+        store=cat_file,
         n_procs=1,
         batch_size=3,
     )

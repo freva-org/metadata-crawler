@@ -1,0 +1,3 @@
+[cordex-benchmark]
+root_path = "./data/cordex-tree/"
+drs_format = "cordex"

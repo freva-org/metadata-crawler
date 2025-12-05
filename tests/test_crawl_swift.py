@@ -1,7 +1,6 @@
 """Test crawling swift stores."""
 
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
 import intake
 import pytest
@@ -17,8 +16,8 @@ def test_crawl_obs(
     """Test crawling swift obs."""
 
     add(
-        cat_file,
         drs_config_path,
+        store=cat_file,
         batch_size=3,
         n_procs=1,
         data_set=["obs-swift"],
@@ -35,8 +34,8 @@ def test_crawl_cmip6(
 ) -> None:
 
     add(
-        cat_file,
         drs_config_path,
+        store=cat_file,
         batch_size=3,
         n_procs=1,
         data_set=["cmip6-swift"],
@@ -59,8 +58,8 @@ def test_crawl_single_file(
         "ua_Amon_ACCESS-CM2_amip_r1i1p1f1_gn_197001-201512.nc"
     )
     add(
-        cat_file,
         drs_config_path,
+        store=cat_file,
         n_procs=1,
         batch_size=3,
         data_object=[file],
@@ -74,8 +73,8 @@ def test_crawl_zarr(drs_config_path: Path, cat_file: Path) -> None:
     """Zarr stores are directories but are treated as files."""
 
     add(
-        cat_file,
         drs_config_path,
+        store=cat_file,
         data_set=["nextgems-swift"],
         n_procs=1,
         batch_size=3,

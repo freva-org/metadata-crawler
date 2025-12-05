@@ -42,8 +42,8 @@ class DataCollector:
 
     Parameters
     ----------
-    config_file:
-        Path to the drs-config file / loaded configuration.
+    config:
+        Metadata-crawler config module.
     *search_objects:
         Paths of the search directories. e.g. `root_path` attr in drs_config
     uri: str
@@ -56,7 +56,7 @@ class DataCollector:
 
     def __init__(
         self,
-        config_file: Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument],
+        config: DRSConfig,
         metadata_store: Optional[
             Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument]
         ],
@@ -69,7 +69,7 @@ class DataCollector:
             raise MetadataCrawlerException("You have to give search directories")
         self._num_files: Counter = Value("i", 0)
         self.index_name = index_name
-        self.config = DRSConfig.load(config_file)
+        self.config = config
         kwargs.setdefault("scan_concurrency", os.getenv("SCAN_CONCURRENCY", "64"))
         self._scan_concurrency: int = int(kwargs.pop("scan_concurrency", 64))
         self._scan_queue: asyncio.Queue[Optional[ScanItem]] = asyncio.Queue(
@@ -79,7 +79,7 @@ class DataCollector:
         self.ingest_queue = CatalogueWriter(
             str(metadata_store or "metadata.yaml"),
             index_name=index_name,
-            config=config_file,
+            config=self.config,
             **kwargs,
         )
         self.ingest_queue.run_consumer()
