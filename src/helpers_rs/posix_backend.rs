@@ -27,18 +27,14 @@
 
 #![allow(unsafe_op_in_unsafe_fn)]
 
-
+use crate::utils::get_glob_matcher;
 use pyo3::prelude::*;
-use pyo3::{wrap_pyfunction};
+use pyo3::wrap_pyfunction;
 use pyo3_asyncio::tokio::future_into_py;
-use crate::utils::{get_glob_matcher};
 use std::path::PathBuf;
 use tokio::fs;
 use tokio::task;
 use walkdir::WalkDir;
-
-
-
 
 /// Asynchronously check whether a given filesystem path is a directory.
 ///
@@ -91,7 +87,6 @@ pub fn is_file(py: Python<'_>, path: String) -> PyResult<&PyAny> {
     })
 }
 
-
 /// Asynchronously list the immediate entries inside a directory.
 ///
 /// Parameters
@@ -130,7 +125,7 @@ pub fn iterdir(py: Python<'_>, path: String) -> PyResult<&PyAny> {
             return Ok(vec![path]);
         }
 
-        let entries = task::spawn_blocking(move || {
+        let join_results = task::spawn_blocking(move || {
             let mut out = Vec::new();
             if let Ok(read_dir) = std::fs::read_dir(&pathbuf) {
                 for entry in read_dir.flatten() {
@@ -139,8 +134,15 @@ pub fn iterdir(py: Python<'_>, path: String) -> PyResult<&PyAny> {
             }
             out
         })
-        .await
-        .unwrap();
+        .await;
+        let entries = match join_results {
+            Ok(entries) => entries,
+            Err(e) => {
+                return Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
+                    "Error in rglob file-walker thread: {e}"
+                )));
+            }
+        };
 
         Ok(entries)
     })
@@ -187,7 +189,7 @@ pub fn rglob(
         // Look up or build a cached matcher
         let matcher = get_glob_matcher(&raw_pattern);
 
-        let results = task::spawn_blocking(move || {
+        let join_results = task::spawn_blocking(move || {
             let p = root.as_path();
             let mut out: Vec<String> = Vec::new();
 
@@ -236,15 +238,19 @@ pub fn rglob(
 
             out
         })
-        .await
-        .unwrap();
+        .await;
+        let results = match join_results {
+            Ok(results) => results,
+            Err(e) => {
+                return Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
+                    "Error in rglob file-walker thread: {e}"
+                )));
+            }
+        };
 
         Ok(results)
     })
 }
-
-
-
 
 pub fn register(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(is_dir, m)?)?;
