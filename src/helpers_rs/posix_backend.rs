@@ -108,7 +108,7 @@ pub fn is_file(py: Python<'_>, path: String) -> PyResult<&PyAny> {
 /// --------
 /// * If the path is a directory, returns its first-level children.
 /// * If the path is a file, the result contains only the path itself.
-/// * If the path does not exist, an empty list is returned.
+/// * If the path does not exist or the user is lacking permissions to read it, an empty list is returned.
 ///
 /// Notes
 /// -----
