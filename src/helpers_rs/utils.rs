@@ -57,8 +57,13 @@ pub fn get_glob_matcher(raw_pattern: &str) -> Option<Arc<GlobMatcher>> {
     let matcher = Arc::new(glob.compile_matcher());
 
     // Insert into cache
-    let mut cache = GLOB_CACHE.write().unwrap();
-    let entry = cache.entry(norm).or_insert_with(|| matcher.clone());
+    let entry = {
+        if let Ok(mut cache) = GLOB_CACHE.write() {
+            cache.entry(norm).or_insert_with(|| matcher).clone()
+        } else {
+            matcher
+        }
+    };
 
     Some(entry.clone())
 }
