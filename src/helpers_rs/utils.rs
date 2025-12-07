@@ -41,9 +41,10 @@ pub fn get_glob_matcher(raw_pattern: &str) -> Option<Arc<GlobMatcher>> {
 
     // Fast path: read lock
     {
-        let cache = GLOB_CACHE.read().unwrap();
-        if let Some(m) = cache.get(&norm) {
-            return Some(m.clone());
+        if let Ok(cache) = GLOB_CACHE.read() {
+            if let Some(m) = cache.get(&norm) {
+                return Some(m.clone());
+            }
         }
     }
 
