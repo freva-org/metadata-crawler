@@ -2,12 +2,6 @@
 name = "metadata_crawler"
 version = "2511.0.0"
 edition = "2024"
-
-[lib]
-name = "_helper"
-crate-type = ["cdylib"]
-path = "src/helpers_rs/lib.rs"
-
 exclude = [
     "/.tox/**",
     "/dist/**",
@@ -17,6 +11,12 @@ exclude = [
     "/data/**",
     "/docs/**",
 ]
+
+
+[lib]
+name = "_helper"
+crate-type = ["cdylib"]
+path = "src/helpers_rs/lib.rs"
 
 
 [dependencies]

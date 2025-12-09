@@ -231,19 +231,27 @@ commands =
            make -C docs clean
            make -C docs html
 [testenv:lint]
-deps = .
-       black
+deps = black
        isort
        flake8
        codespell
        pydocstyle
        bandit[toml]
+skip_install = true
+allowlist_externals =
+    codespell
+    cargo
+setenv =
+    CARGO_TARGET_DIR = {toxworkdir}/cargo-target
 commands =
+    ; --- Python linting -----
     python3 -m isort --check --profile black -t py313 -l 79 src
     python3 -m flake8 src --count --max-complexity=10 --ignore=E203,F405,F403,E704,W503,C901 --max-line-length=88 --statistics --show-source
     codespell {posargs: --quiet-level=2} src/metadata_crawler
     python3 -m pydocstyle src/metadata_crawler
     bandit -r src/metadata_crawler --skip B110 --severity-level medium --confidence-level high
+    ; --- Rust linting -----
+    cargo fmt -p metadata_crawler -- --check
 [testenv:types]
 deps = .
        mypy
