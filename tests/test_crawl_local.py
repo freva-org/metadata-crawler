@@ -144,7 +144,7 @@ def test_crawl_single_files(
     )
     add(
         drs_config_path,
-        sotre=cat_file,
+        store=cat_file,
         data_object=[_file],
         verbosity=5,
     )
