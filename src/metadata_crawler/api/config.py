@@ -222,7 +222,7 @@ class ConfigMerger:
                     elif not os.path.exists(path_or_cfg):
                         _configs.append(str(user_path_or_config))
             else:
-                _configs.append(tomlkit.dumps(user_paths_or_config))
+                _configs.append(tomlkit.dumps(user_path_or_config))
         for _config in _configs:
             try:
                 self._user_doc = tomlkit.parse(_config)
