@@ -132,6 +132,18 @@ def test_get_search():
         index("foo", conf)
 
 
+def test_mulit_config(drs_config_path: Path) -> None:
+    """Test mulit config."""
+    glob_files = drs_config_path.parent / "*config.toml"
+    conf = Template(CONFIG).render(
+        vars="{var = '{vars}', attr = 'short_name', default = '__name__' }",
+    )
+    cfg = DRSConfig.load(glob_files, conf)
+    assert "nextgems_cycle3" in cfg.datasets
+    assert "cordex-benchmark" in cfg.datasets
+    assert "bar" in cfg.datasets
+
+
 def test_benchmark_settings(drs_config_path: Path, cat_file: Path) -> None:
     """Test some benchmark settings."""
     env = os.environ.copy()
