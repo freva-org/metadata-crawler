@@ -506,10 +506,12 @@ class QueueConsumer:
         config: Dict[str, Any],
         num_objects: "sharedctypes.Synchronized[Any]",
         writer_queue: WriterQueueType,
+        silent: bool = False,
     ) -> None:
         self.config = DRSConfig(**config)
         self._writer_queue = writer_queue
         self.num_objects = num_objects
+        self._silent = silent
 
     def _flush_batch(
         self,
@@ -518,8 +520,9 @@ class QueueConsumer:
         logger.info("Ingesting %i items", len(batch))
         try:
             self._writer_queue.put(batch.copy())
-            with self.num_objects.get_lock():
-                self.num_objects.value += len(batch)
+            if self._silent is False:
+                with self.num_objects.get_lock():
+                    self.num_objects.value += len(batch)
         except Exception as error:  # pragma: no cover
             logger.error(error)  # pragma: no cover
         batch.clear()
@@ -533,9 +536,10 @@ class QueueConsumer:
         num_objects: "sharedctypes.Synchronized[Any]",
         batch_size: int,
         poison_pill: int,
+        silent: bool = False,
     ) -> None:
         """Set up a consumer task waiting for incoming data to be ingested."""
-        this = cls(config, num_objects, writer_queue)
+        this = cls(config, num_objects, writer_queue, silent=silent)
         this_worker = os.getpid()
         logger.info("Adding %i consumer to consumers.", this_worker)
         batch: List[Tuple[str, Dict[str, Any]]] = []
@@ -607,6 +611,7 @@ class CatalogueWriter:
         self.fs, _ = IndexStore.get_fs(yaml_path, **storage_options)
         self.path = self.fs.unstrip_protocol(yaml_path)
         scheme, _, _ = data_store_prefix.rpartition("://")
+        self.silent = bool(int(os.getenv("MDC_SILENT", "0")))
         self.backend = backend
         if not scheme and not os.path.isabs(data_store_prefix):
             data_store_prefix = os.path.join(
@@ -641,6 +646,7 @@ class CatalogueWriter:
                     batch_size_per_proc,
                     self._poison_pill,
                 ),
+                kwargs={"silent": self.silent},
             )
             for i in range(n_procs)
         ]

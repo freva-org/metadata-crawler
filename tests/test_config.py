@@ -132,15 +132,15 @@ def test_get_search():
         index("foo", conf)
 
 
-def test_mulit_config(drs_config_path: Path) -> None:
-    """Test mulit config."""
+def test_multi_config(drs_config_path: Path) -> None:
+    """Test multi config."""
     glob_files = drs_config_path.parent / "*config.toml"
     conf = Template(CONFIG).render(
         vars="{var = '{vars}', attr = 'short_name', default = '__name__' }",
     )
     cfg = DRSConfig.load(glob_files, conf)
     assert "nextgems_cycle3" in cfg.datasets
-    assert "cordex-benchmark" in cfg.datasets
+    assert "cordex-benchmark-fs" in cfg.datasets
     assert "bar" in cfg.datasets
 
 
@@ -149,14 +149,16 @@ def test_benchmark_settings(drs_config_path: Path, cat_file: Path) -> None:
     env = os.environ.copy()
     glob_files = drs_config_path.parent / "*config.toml"
     with mock.patch.dict(os.environ, {"MDC_MAX_FILES": "5"}, clear=False):
-        add(
-            glob_files,
-            store=cat_file,
-            n_procs=1,
-            batch_size=3,
-            catalogue_backend="jsonlines",
-            data_set=["obs-fs"],
-        )
+        with mock.patch.dict(os.environ, {"MDC_SILENT": "1"}, clear=False):
+            add(
+                glob_files,
+                drs_config_path,
+                n_procs=1,
+                batch_size=3,
+                store=cat_file,
+                catalogue_backend="jsonlines",
+                data_set=["obs-fs"],
+            )
     os.environ = env
     assert cat_file.exists()
     len(intake.open_catalog(cat_file).latest.read()) < 10

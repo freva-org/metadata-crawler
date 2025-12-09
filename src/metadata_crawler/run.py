@@ -417,8 +417,11 @@ async def async_add(
         if (
             files_discovered >= fail_under and num_files < fail_under
         ) or files_discovered == 0:
-            await data_col.ingest_queue.delete()
-            raise EmptyCrawl("Could not fulfill discovery threshold!") from None
+            if data_col.ingest_queue.silent is False:
+                await data_col.ingest_queue.delete()
+                raise EmptyCrawl(
+                    "Could not fulfill discovery threshold!"
+                ) from None
     finally:
         os.environ = env
         logger.set_level(old_level)

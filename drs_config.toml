@@ -107,6 +107,35 @@ drs_format = "cordex"
 domain = "EUR-11"
 time_frequency = "mon"
 
+[drs_settings.dialect.cordex.path_specs]
+dir_parts  = [
+    "project",
+    "product1",
+    "domain",
+    "institution",
+    "driving_model",
+    "experiment",
+    "ensemble",
+    "rcm_name",
+    "rcm_version",
+    "time_frequency",
+    "variable",
+    "version"
+]
+file_parts = [
+    "variable",
+    "domain",
+    "driving_model",
+    "experiment",
+    "ensemble",
+    "rcm_name",
+    "rcm_version",
+    "time_frequency",
+    "time"
+]
+file_sep = "_"
+
+
 [obs-swift]
 root_path = "/observations"
 fs_type = "swift"

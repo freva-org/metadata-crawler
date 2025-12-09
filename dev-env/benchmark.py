@@ -41,13 +41,13 @@ def run_workload(
     try:
         os.environ["MDC_MAX_FILES"] = str(num_files)
         add(
-            "data.yml",
-            config_file=config_file,
+            config_file,
+            store="data.yml",
             batch_size=2_000,
             data_set=[data_set],
             verbosity=0,
             catalogue_backend="jsonlines",
-            data_store_prefix="benchmark",
+            data_store_prefix="benchmark-fs",
             fail_under=-1,
         )
     finally:
@@ -112,7 +112,7 @@ def main(argv=None):
     parser.add_argument(
         "--dataset",
         type=str,
-        default="cordex-benchmark",
+        default="cordex-benchmark-fs",
         help="The dataset that is tests.",
     )
     args = parser.parse_args(argv)

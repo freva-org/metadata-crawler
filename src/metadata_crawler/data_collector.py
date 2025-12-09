@@ -141,6 +141,7 @@ class DataCollector:
         iterable: bool = True,
         is_versioned: bool = True,
     ) -> None:
+        silent = self.ingest_queue.silent
         if iterable:
             try:
                 _sub_dirs = self.config.datasets[drs_type].backend.iterdir(
@@ -171,7 +172,8 @@ class DataCollector:
                     await self.ingest_queue.put(
                         _inp, drs_type, name=self.index_name.latest
                     )
-                self._num_files.value += 1
+                if silent is False:
+                    self._num_files.value += 1
             rank += 1
         return None
 
@@ -200,15 +202,13 @@ class DataCollector:
         is_versioned: bool = True,
     ) -> None:
         """Walk recursively until files or the version level is reached."""
-        store = self.config.datasets[drs_type].backend
         if self._test_env():
             return
+        store = self.config.datasets[drs_type].backend
+        suffix = "." + inp_dir.rpartition(".")[-1]
         try:
-            is_file, iterable, suffix = await asyncio.gather(
-                store.is_file(inp_dir),
-                store.is_dir(inp_dir),
-                store.suffix(inp_dir),
-            )
+            is_file = await store.is_file(inp_dir)
+            iterable = await store.is_dir(inp_dir)
         except Exception as error:
             logger.error("Error checking file %s", error)
             return
@@ -238,14 +238,15 @@ class DataCollector:
 
     async def ingest_data(self) -> None:
         """Produce scan tasks and process them with a bounded worker pool."""
-        self._print_status.set()
-        self._num_files.value = 0
-        print_performance(
-            self._print_status,
-            self._num_files,
-            self.ingest_queue.queue,
-            self.ingest_queue.num_objects,
-        )
+        if self.ingest_queue.silent is False:
+            self._print_status.set()
+            self._num_files.value = 0
+            print_performance(
+                self._print_status,
+                self._num_files,
+                self.ingest_queue.queue,
+                self.ingest_queue.num_objects,
+            )
 
         async with asyncio.TaskGroup() as tg:
             # start scan workers
@@ -279,4 +280,5 @@ class DataCollector:
             "%i ingestion tasks have been completed", len(self._search_objects)
         )
         self.ingest_queue.join_all_tasks()
-        self._print_status.clear()
+        if self.ingest_queue.silent is False:
+            self._print_status.clear()

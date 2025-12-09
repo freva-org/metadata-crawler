@@ -1,6 +1,6 @@
 [build-system]
-requires = ["flit_core >=3.2"]
-build-backend = "flit_core.buildapi"
+requires = ["maturin>=1.10,<2.0"]
+build-backend = "maturin"
 
 [project]
 name = "metadata-crawler"
@@ -14,19 +14,19 @@ classifiers = [
                "Intended Audience :: Science/Research",
                "License :: OSI Approved :: BSD License",
                "Operating System :: POSIX :: Linux",
+               "Programming Language :: Rust",
                "Programming Language :: Python :: 3",
                "Programming Language :: Python :: 3.11",
                "Programming Language :: Python :: 3.12",
                "Programming Language :: Python :: 3.13",
                "Programming Language :: Python :: 3.14",
 ]
-dynamic = ["version"]
+version = "2511.0.0"
 description="Crawl, extract and push climate metadata for indexing."
 requires-python = ">=3.11"
 dependencies = [
         "aiohttp",
         "appdirs",
-        "anyio",
         "ciso8601",
         "fsspec",
         "diskcache",
@@ -55,7 +55,7 @@ dependencies = [
         "motor",
 ]
 [project.optional-dependencies]
-dev = ["flit", "tox"]
+dev = ["maturin", "tox"]
 mkdoc = [
   "mkdocs",
   "mkdocs-material",
@@ -120,7 +120,14 @@ s3 = "metadata_crawler.backends.s3:S3Path"
 intake = "metadata_crawler.backends.intake:IntakePath"
 
 [package-data]
-metadata_crawler = ["py.typed", "*.toml"]
+metadata_crawler = ["py.typed", "*.toml", "_helper.pyi", "__init__.pyi"]
+
+[tool.maturin]
+bindings = "pyo3"
+python-source = "src"
+module-name = "metadata_crawler._helper"
+python-packages = ["metadata_crawler"]
+
 
 [tool.pytest.ini_options]
 env = ["MDC_LOG_INTERVAL=1"]
@@ -224,19 +231,27 @@ commands =
            make -C docs clean
            make -C docs html
 [testenv:lint]
-deps = .
-       black
+deps = black
        isort
        flake8
        codespell
        pydocstyle
        bandit[toml]
+skip_install = true
+allowlist_externals =
+    codespell
+    cargo
+setenv =
+    CARGO_TARGET_DIR = {toxworkdir}/cargo-target
 commands =
+    ; --- Python linting -----
     python3 -m isort --check --profile black -t py313 -l 79 src
     python3 -m flake8 src --count --max-complexity=10 --ignore=E203,F405,F403,E704,W503,C901 --max-line-length=88 --statistics --show-source
     codespell {posargs: --quiet-level=2} src/metadata_crawler
     python3 -m pydocstyle src/metadata_crawler
     bandit -r src/metadata_crawler --skip B110 --severity-level medium --confidence-level high
+    ; --- Rust linting -----
+    cargo fmt -p metadata_crawler -- --check
 [testenv:types]
 deps = .
        mypy

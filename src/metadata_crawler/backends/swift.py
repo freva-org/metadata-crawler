@@ -10,7 +10,6 @@ from urllib.parse import SplitResult, urljoin, urlsplit, urlunparse
 
 import aiohttp
 import fsspec
-from anyio import Path
 
 from ..api.storage_backend import MetadataType, PathTemplate
 
@@ -161,7 +160,7 @@ class SwiftPath(PathTemplate):
             return {}
         return {"X-Auth-Token": self.os_auth_token}
 
-    async def is_file(self, path: str | Path | pathlib.Path) -> bool:
+    async def is_file(self, path: Union[str, pathlib.Path]) -> bool:
         """Check if a given path is a file object on the storage system."""
         try:
             data = (await self._read_json(str(path)))[0]
@@ -169,7 +168,7 @@ class SwiftPath(PathTemplate):
             return False
         return self._get_dir_from_path(data) is None
 
-    async def is_dir(self, path: str | Path | pathlib.Path) -> bool:
+    async def is_dir(self, path: Union[str, pathlib.Path]) -> bool:
         """Check if a given path is a directory object on the storage system."""
         try:
             data = (await self._read_json(str(path)))[0]
@@ -177,9 +176,7 @@ class SwiftPath(PathTemplate):
             return False
         return self._get_dir_from_path(data) is not None
 
-    async def iterdir(
-        self, path: Union[str, Path, pathlib.Path]
-    ) -> AsyncIterator[str]:
+    async def iterdir(self, path: Union[str, pathlib.Path]) -> AsyncIterator[str]:
         """Get all sub directories of a directory."""
         try:
             for data in await self._read_json(str(path)):
@@ -196,7 +193,7 @@ class SwiftPath(PathTemplate):
 
     async def rglob(
         self,
-        path: Union[str, Path, pathlib.Path],
+        path: Union[str, pathlib.Path],
         glob_pattern: str = "*",
     ) -> AsyncIterator[MetadataType]:
         """Search recursively for files matching a glob_pattern."""
@@ -261,7 +258,7 @@ class SwiftPath(PathTemplate):
             url,
         )
 
-    def path(self, path: Union[str, Path, pathlib.Path]) -> str:
+    def path(self, path: Union[str, pathlib.Path]) -> str:
         """Get the full path (including any schemas/netlocs).
 
         Parameters
@@ -289,7 +286,7 @@ class SwiftPath(PathTemplate):
         ).geturl()
         return res
 
-    def uri(self, path: Union[str, Path, pathlib.Path]) -> str:
+    def uri(self, path: Union[str, pathlib.Path]) -> str:
         """Get the uri of the object store.
 
         Parameters

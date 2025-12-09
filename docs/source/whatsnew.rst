@@ -12,6 +12,7 @@ v2511.0.0
   and ``async_add("data.yaml", "drs-config.toml")`` become
   ``add("drs-config.toml", store="data.yaml")`` and
   ``async_add("drs-config.toml", store="data.yaml")``.
+* Add rust based posix backend for faster posix fs crawling.
 
 .. warning::
 
