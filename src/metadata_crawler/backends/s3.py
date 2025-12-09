@@ -5,7 +5,6 @@ import pathlib
 from typing import AsyncIterator, Optional, Tuple, Union, cast
 
 import fsspec
-from anyio import Path
 from s3fs import S3FileSystem
 
 from ..api.storage_backend import MetadataType, PathTemplate
@@ -57,19 +56,17 @@ class S3Path(PathTemplate):
             await self._client.set_session()
         return self._client
 
-    async def is_file(self, path: Union[str, Path, pathlib.Path]) -> bool:
+    async def is_file(self, path: Union[str, pathlib.Path]) -> bool:
         """Check if a given path is a file object on the storage system."""
         client = await self._get_client()
         return cast(bool, await client._isfile(str(path)))
 
-    async def is_dir(self, path: str | Path | pathlib.Path) -> bool:
+    async def is_dir(self, path: Union[str, pathlib.Path]) -> bool:
         """Check if a given path is a directory object on the storage system."""
         client = await self._get_client()
         return cast(bool, await client._isdir(str(path)))
 
-    async def iterdir(
-        self, path: Union[str, Path, pathlib.Path]
-    ) -> AsyncIterator[str]:
+    async def iterdir(self, path: Union[str, pathlib.Path]) -> AsyncIterator[str]:
         """Retrieve sub directories of directory."""
         client = await self._get_client()
         path = str(path)
@@ -82,7 +79,7 @@ class S3Path(PathTemplate):
                     yield _content.get("name", "")
 
     async def rglob(
-        self, path: str | Path | pathlib.Path, glob_pattern: str = "*"
+        self, path: Union[str, pathlib.Path], glob_pattern: str = "*"
     ) -> AsyncIterator[MetadataType]:
         """Search recursively for files matching a ``glob_pattern``.
 
@@ -107,12 +104,12 @@ class S3Path(PathTemplate):
                 for content in await client._glob(f"{path}/**/*{suffix}"):
                     yield MetadataType(path=f"/{content}", metadata={})
 
-    def path(self, path: Union[str, Path, pathlib.Path]) -> str:
+    def path(self, path: Union[str, pathlib.Path]) -> str:
         """Get the full path (including any schemas/netlocs).
 
         Parameters
         ^^^^^^^^^^
-        path: str, asyncio.Path, pathlib.Path
+        path: str, pathlib.Path
             Path of the object store
 
         Returns
@@ -124,12 +121,12 @@ class S3Path(PathTemplate):
             str, fsspec.filesystem("s3", **self.storage_options).url(str(path))
         )
 
-    def uri(self, path: Union[str, Path, pathlib.Path]) -> str:
+    def uri(self, path: Union[str, pathlib.Path]) -> str:
         """Get the uri of the object store.
 
         Parameters
         ^^^^^^^^^^
-        path: str, asyncio.Path, pathlib.Path
+        path: str, pathlib.Path
             Path of the object store
 
         Returns
