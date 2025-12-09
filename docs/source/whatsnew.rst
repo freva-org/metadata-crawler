@@ -3,6 +3,10 @@ What's new
 
 This document highlights major changes and additions across releases.
 
+v2511.0.0
+---------
+* Add rust based posix backend for faster posix fs crawling.
+
 v2510.1.1
 ---------
 * Fix bug for determining latest versions.
