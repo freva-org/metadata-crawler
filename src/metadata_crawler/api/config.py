@@ -179,40 +179,50 @@ class ConfigMerger:
     """
 
     def __init__(
-        self, *user_paths: Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument]
+        self,
+        *user_paths_or_config: Union[
+            Path, str, Dict[str, Any], tomlkit.TOMLDocument
+        ],
     ):
         # parse both documents
         system_path = Path(__file__).parent / "drs_config.toml"
         self._system_doc = tomlkit.parse(system_path.read_text(encoding="utf-8"))
         _configs: List[str] = []
-        for user_path in user_paths:
-            if isinstance(user_path, (str, Path)) and os.path.isdir(user_path):
+        for user_path_or_config in user_paths_or_config:
+            if isinstance(user_path_or_config, (str, Path)) and os.path.isdir(
+                user_path_or_config
+            ):
                 _configs.append(
                     (
-                        Path(user_path).expanduser().absolute()
+                        Path(user_path_or_config).expanduser().absolute()
                         / "drs_config.toml"
                     ).read_text(encoding="utf-8")
                 )
-            elif isinstance(user_path, (str, Path)) and os.path.isfile(user_path):
+            elif isinstance(user_path_or_config, (str, Path)) and os.path.isfile(
+                user_path_or_config
+            ):
                 _configs.append(
                     (
-                        Path(user_path)
+                        Path(user_path_or_config)
                         .expanduser()
                         .absolute()
                         .read_text(encoding="utf-8")
                     )
                 )
-            elif isinstance(user_path, (str, Path)):
-                paths = glob.glob(str(user_path), recursive=False) or [
-                    str(user_path)
-                ]
-                for path in paths:
-                    if os.path.isfile(path):
-                        _configs.append(Path(path).read_text(encoding="utf-8"))
-                    else:
-                        _configs.append(str(user_path))
+            elif isinstance(user_path_or_config, (str, Path)):
+                paths_or_cfg = glob.glob(
+                    str(user_path_or_config), recursive=False
+                ) or [str(user_path_or_config)]
+                for path_or_cfg in paths_or_cfg:
+                    if os.path.isfile(path_or_cfg):
+                        _configs.append(
+                            Path(path_or_cfg).read_text(encoding="utf-8")
+                        )
+                    # We have most likely a string representing a config.
+                    elif not os.path.exists(path_or_cfg):
+                        _configs.append(str(user_path_or_config))
             else:
-                _configs.append(tomlkit.dumps(user_path))
+                _configs.append(tomlkit.dumps(user_paths_or_config))
         for _config in _configs:
             try:
                 self._user_doc = tomlkit.parse(_config)
