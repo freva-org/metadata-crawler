@@ -5,7 +5,22 @@ This document highlights major changes and additions across releases.
 
 v2511.0.0
 ---------
+* cli ``add`` call, python ``add`` and ``async_add`` support multiple config
+  input files. Glob pattern are also supported
+* The catalogue argument has been rearanged and is now a keyword
+  argument: of the python funcdions ``add("data.yaml", "drs-config.toml")``
+  and ``async_add("data.yaml", "drs-config.toml")`` become
+  ``add("drs-config.toml", store="data.yaml")`` and
+  ``async_add("drs-config.toml", store="data.yaml")``.
 * Add rust based posix backend for faster posix fs crawling.
+
+.. warning::
+
+    If the ``store`` keywords in :mod:`metadata_crawler.add` and
+    :mod:`metadata_crawler.async_add` are omitted the
+    output catalogue will be interpreted as config file.
+
+
 
 v2510.1.1
 ---------

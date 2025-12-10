@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import glob
 import os
 import re
 import textwrap
@@ -179,37 +180,54 @@ class ConfigMerger:
 
     def __init__(
         self,
-        user_path: Optional[
-            Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument]
-        ] = None,
+        *user_paths_or_config: Union[
+            Path, str, Dict[str, Any], tomlkit.TOMLDocument
+        ],
     ):
         # parse both documents
         system_path = Path(__file__).parent / "drs_config.toml"
         self._system_doc = tomlkit.parse(system_path.read_text(encoding="utf-8"))
-        _config: str = ""
-        if user_path is not None:
-            if isinstance(user_path, (str, Path)) and os.path.isdir(user_path):
-                _config = (
-                    Path(user_path).expanduser().absolute() / "drs_config.toml"
-                ).read_text(encoding="utf-8")
-            elif isinstance(user_path, (str, Path)) and os.path.isfile(user_path):
-                _config = (
-                    Path(user_path)
-                    .expanduser()
-                    .absolute()
-                    .read_text(encoding="utf-8")
+        _configs: List[str] = []
+        for user_path_or_config in user_paths_or_config:
+            if isinstance(user_path_or_config, (str, Path)) and os.path.isdir(
+                user_path_or_config
+            ):
+                _configs.append(
+                    (
+                        Path(user_path_or_config).expanduser().absolute()
+                        / "drs_config.toml"
+                    ).read_text(encoding="utf-8")
                 )
-            elif isinstance(user_path, (str, Path)):
-                _config = str(user_path)
+            elif isinstance(user_path_or_config, (str, Path)) and os.path.isfile(
+                user_path_or_config
+            ):
+                _configs.append(
+                    (
+                        Path(user_path_or_config)
+                        .expanduser()
+                        .absolute()
+                        .read_text(encoding="utf-8")
+                    )
+                )
+            elif isinstance(user_path_or_config, (str, Path)):
+                paths_or_cfg = glob.glob(
+                    str(user_path_or_config), recursive=False
+                ) or [str(user_path_or_config)]
+                for path_or_cfg in paths_or_cfg:
+                    if os.path.isfile(path_or_cfg):
+                        _configs.append(
+                            Path(path_or_cfg).read_text(encoding="utf-8")
+                        )
+                    # We have most likely a string representing a config.
+                    elif not os.path.exists(path_or_cfg):
+                        _configs.append(str(user_path_or_config))
             else:
-                _config = tomlkit.dumps(user_path)
-        if _config:
+                _configs.append(tomlkit.dumps(user_path_or_config))
+        for _config in _configs:
             try:
                 self._user_doc = tomlkit.parse(_config)
             except Exception:
-                raise MetadataCrawlerException(
-                    "Could not load config path."
-                ) from None
+                raise MetadataCrawlerException("Could not load config path.")
             self._merge_tables(self._system_doc, self._user_doc)
 
     def _merge_tables(
@@ -675,12 +693,10 @@ class DRSConfig(BaseModel, TemplateMixin):
     @classmethod
     def load(
         cls,
-        config_path: Optional[
-            Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument]
-        ] = None,
+        *config_paths: Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument],
     ) -> DRSConfig:
         """Load a drs config from file."""
-        cfg = tomli.loads(ConfigMerger(config_path).dumps())
+        cfg = tomli.loads(ConfigMerger(*config_paths).dumps())
         settings = cfg.pop("drs_settings")
         try:
             return cls(datasets=cfg, **settings)

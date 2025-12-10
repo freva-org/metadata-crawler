@@ -35,8 +35,9 @@ stores it in a JSON lines catalog, and indexes it to Apache Solr:
 
    # 1) collect metadata into a catalog
    add(
+       "/path/to/drs_config.toml",
+       "/path/to/second/drs_config.toml",
        store="/tmp/catalog.jsonl",
-       config_fle="/path/to/drs_config.toml",
        data_object=["/path/to/data"],
        catalogue_backend="jsonlines",
        threads=8,
@@ -60,6 +61,15 @@ stores it in a JSON lines catalog, and indexes it to Apache Solr:
        facets=[("project", "CMIP6"), ("institute", "MPI-M")],
    )
 
+.. versionchanged:: 2511.0.0
+
+   The catalogue argument ``store`` of the the :func:`add`
+   has been rearanged and is now a keyword argument:
+   ``add("data.yaml", "drs-config.toml")`` becomes
+   ``add("drs-config.toml", store="data.yaml")``. If the ``store`` keyword
+   is omitted the output catalogue will be interpreted as config file.
+
+
 Asynchronous usage
 ^^^^^^^^^^^^^^^^^^^
 
@@ -78,8 +88,8 @@ other tasks:
    async def main():
        # crawl metadata from one or more data objects or datasets
        await async_add(
+           "/path/to/",
            store="/tmp/catalog.yaml",
-           config_file="/path/to/",
            data_set=["cmip6-fs", "obs-fs"],
            threads=8,
            batch_size=50,
@@ -87,7 +97,8 @@ other tasks:
 
        # index into a MongoDB backend named 'latest'
        await async_index(
-           "mongo" "/tmp/catalog-1.yml",
+           "mongo",
+           "/tmp/catalog-1.yml",
            "/tmp/catalog-2.yml",
            config_file="/path/to/drs_config.toml",
            url="mongodb://localhost:27017",
@@ -106,6 +117,15 @@ other tasks:
 
 
    asyncio.run(main())
+
+.. versionchanged:: 2511.0.0
+
+   The catalogue argument ``store`` of the the :func:`async_add`
+   has been rearanged and is now a keyword argument:
+   ``async_add("data.yaml", "drs-config.toml")`` becomes
+   ``async_add("drs-config.toml", store="data.yaml")``. If the ``store`` keyword
+   is omitted the output catalogue will be interpreted as config file.
+
 
 Library Reference
 -----------------

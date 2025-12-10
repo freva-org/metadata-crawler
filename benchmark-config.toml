@@ -1,0 +1,53 @@
+[cordex-benchmark-fs]
+root_path = "./data/cordex-tree/"
+drs_format = "cordex"
+
+[cordex-benchmark-template]
+root_path = "./data/cordex-tree/"
+drs_format = "cordex-template"
+
+[drs_settings.dialect.cordex-template]
+sources = ["path"]
+defaults = { realm = "atmos" , level_type = "2d" }
+# CORDEX‐specific domain‐to‐bbox map
+[drs_settings.dialect.cordex-template.domains]
+EAS-44   = [63.3574, 175.132, -18.22689, 58.59]
+WAS-22   = [19.83779, 115.2829, -14.89043, 44.70015]
+WAS-44   = [19.86429, 115.5316, -15.23168, 45.25018]
+MED-11   = [-46.80627, 76.06158, 19.63504, 73.41]
+EUR-11I  = [-44.8125, 65.1875, 21.8125, 72.6875]
+EUR-11   = [-44.594, 64.9646, 21.98791, 72.58528]
+AFR-44I  = [-25.25, 60.75, -46.25, 42.75]
+CAS-22   = [10.7899, 140.1774, 18.00188, 69.51006]
+NAM-22   = [-169.51, -24.72, 12.96031, 75.31002]
+ARC-44I  = [-179.75, 179.75, 48.75, 89.75]
+SAM-44   = [-105.7188, -18.71515, -57.68022, 18.49518]
+EUR-44I  = [-44.75, 65.25, 21.75, 72.75]
+AFR-22   = [-24.53, 59.9502, -47.63018, 43.89017]
+EUR-44   = [-44.14069, 64.40398, 22.19937, 72.41994]
+AFR-44   = [-24.64001, 60.27998, -45.76, 42.24]
+SEA-22   = [88.16034, 148.0006, -16.06006, 27.94011]
+ARC-44   = [-180.0, 179.17, 48.56, 90.0]
+WAS-44I  = [19.25, 116.25, -15.75, 45.75]
+AUS-22   = [86.9056, -151.57, -52.46012, 12.51982]
+AUS-44   = [89.24, -157.593, -52.57, 12.2103]
+EAS-22   = [48.54336, -175.70, -1.345726, 62.34015]
+EUR-22   = [-45.38, 66.1712, 21.88545, 71.8702]
+SAM-22   = [-105.55, -17.32, -59.11018, 19.58714]
+CAM-22   = [-124.12, -22.60, -19.54996, 34.8301]
+CEU-3    = [1.62, 18.28, 44.85, 56.24]
+[drs_settings.dialect.cordex-template.special.bbox]
+type = "call"
+call = 'dialect["cordex"]["domains"].get("{{ domain | upper }}", [0, 360, -90, 90])'
+
+[drs_settings.dialect.cordex-template.special.model]
+type = "call"
+call = "'{{ driving_model }}-{{ rcm_name }}-{{ rcm_version }}'"
+
+[drs_settings.dialect.cordex-template.special.product]
+type = "call"
+call = "'{{ domain }}'"
+
+[drs_settings.dialect.cordex-template.special.institute]
+type = "call"
+call = "'{{ institution }}'"

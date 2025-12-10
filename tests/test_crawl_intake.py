@@ -27,8 +27,8 @@ def test_crawl_intake_catalogue(
     with mock.patch.dict(os.environ, {"MDC_INTERACTIVE": "1"}, clear=True):
         inp = data_dir / "intake" / "catalog" / "catalog.yaml"
         add(
-            cat_file,
             drs_config_path,
+            store=cat_file,
             data_object=[inp],
             verbosity=10,
             batch_size=3,
@@ -55,7 +55,6 @@ def test_intake_utils() -> None:
         Path(temp_d.name).write_text(json.dumps({"esmcat": "bar"}))
         assert p._is_esm_catalogue(temp_d.name) is True
         lines = "first" + 30 * "foo\n" + "esmcat"
-        print(lines)
         Path(temp_d.name).write_text(lines)
         assert p._is_esm_catalogue(temp_d.name) is False
     with NamedTemporaryFile(suffix=".foo") as temp_d:

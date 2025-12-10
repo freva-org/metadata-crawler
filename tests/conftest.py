@@ -171,21 +171,23 @@ def storage_options() -> Dict[str, str]:
 @pytest.fixture(scope="session")
 def drs_config_path(data_dir: Path) -> Iterator[Path]:
     """Define the main config path."""
-    config_file = data_dir.parent / "drs_config.toml"
-    assert config_file.is_file()  # Smoke test
-    config = toml.loads(config_file.read_text())
-    for key, cfg in config.items():
-        if not hasattr(cfg, "get"):
-            continue
-        if cfg.get("root_path") and ":" not in cfg["root_path"]:
-            p = Path(cfg["root_path"])
-            if not p.is_absolute():
-                cfg["root_path"] = str((data_dir.parent / p).absolute())
     with TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir) / "drs_config.toml"
-        with temp_path.open("w") as stream:
-            toml.dump(config, stream)
-        yield temp_path
+        for _file in "drs_config.toml", "benchmark-config.toml":
+            config_file = data_dir.parent / _file
+            assert config_file.is_file()  # Smoke test
+            config = toml.loads(config_file.read_text())
+            for key, cfg in config.items():
+                if not hasattr(cfg, "get"):
+                    continue
+                if cfg.get("root_path") and ":" not in cfg["root_path"]:
+                    p = Path(cfg["root_path"])
+                    if not p.is_absolute():
+                        cfg["root_path"] = str((data_dir.parent / p).absolute())
+
+            temp_path = Path(temp_dir) / _file
+            with temp_path.open("w") as stream:
+                toml.dump(config, stream)
+        yield Path(temp_dir) / "drs_config.toml"
 
 
 @pytest.fixture(scope="function")

@@ -36,18 +36,18 @@ def run_workload(
 
     env = os.environ.copy()
     config_file = Path(
-        config_file or Path(__file__).parent.parent / "drs_config.toml"
+        config_file or Path(__file__).parent.parent / "benchmark-config.toml"
     )
     try:
         os.environ["MDC_MAX_FILES"] = str(num_files)
         add(
-            "data.yml",
-            config_file=config_file,
+            config_file,
+            store="data.yml",
             batch_size=2_000,
             data_set=[data_set],
             verbosity=0,
             catalogue_backend="jsonlines",
-            data_store_prefix="benchmark",
+            data_store_prefix="benchmark-fs",
             fail_under=-1,
         )
     finally:

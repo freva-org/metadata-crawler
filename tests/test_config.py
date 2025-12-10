@@ -127,21 +127,35 @@ def test_get_search():
     )
     from metadata_crawler.run import _get_search
 
-    assert len(_get_search(conf)) == 1
+    assert len(_get_search(DRSConfig.load(conf).datasets)) == 1
     with pytest.raises(ValueError):
         index("foo", conf)
+
+
+def test_multi_config(drs_config_path: Path) -> None:
+    """Test multi config."""
+    glob_files = drs_config_path.parent / "*config.toml"
+    conf = Template(CONFIG).render(
+        vars="{var = '{vars}', attr = 'short_name', default = '__name__' }",
+    )
+    cfg = DRSConfig.load(glob_files, conf)
+    assert "nextgems_cycle3" in cfg.datasets
+    assert "cordex-benchmark-fs" in cfg.datasets
+    assert "bar" in cfg.datasets
 
 
 def test_benchmark_settings(drs_config_path: Path, cat_file: Path) -> None:
     """Test some benchmark settings."""
     env = os.environ.copy()
+    glob_files = drs_config_path.parent / "*config.toml"
     with mock.patch.dict(os.environ, {"MDC_MAX_FILES": "5"}, clear=False):
         with mock.patch.dict(os.environ, {"MDC_SILENT": "1"}, clear=False):
             add(
-                cat_file,
+                glob_files,
                 drs_config_path,
                 n_procs=1,
                 batch_size=3,
+                store=cat_file,
                 catalogue_backend="jsonlines",
                 data_set=["obs-fs"],
             )

@@ -17,6 +17,16 @@ exclude = [
 name = "_helper"
 crate-type = ["cdylib"]
 path = "src/helpers_rs/lib.rs"
+exclude = [
+    "/.tox/**",
+    "/dist/**",
+    "/build/**",
+    "/coverage_report/**",
+    "/dev-env/**",
+    "/data/**",
+    "/docs/**",
+]
+
 
 
 [dependencies]
