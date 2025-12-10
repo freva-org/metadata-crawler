@@ -3,7 +3,8 @@ What's new
 
 This document highlights major changes and additions across releases.
 
-v2511.0.0
+
+v2511.1.0
 ---------
 * cli ``add`` call, python ``add`` and ``async_add`` support multiple config
   input files. Glob pattern are also supported
