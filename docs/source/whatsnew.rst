@@ -3,6 +3,9 @@ What's new
 
 This document highlights major changes and additions across releases.
 
+v2511.1.1
+---------
+* windows bug fixing
 
 v2511.1.0
 ---------
