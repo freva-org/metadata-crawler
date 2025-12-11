@@ -21,7 +21,7 @@ classifiers = [
                "Programming Language :: Python :: 3.13",
                "Programming Language :: Python :: 3.14",
 ]
-version = "2511.1.1"
+version = "2511.1.2"
 description="Crawl, extract and push climate metadata for indexing."
 requires-python = ">=3.11"
 dependencies = [
@@ -51,7 +51,7 @@ dependencies = [
         "zarr",
         "xarray",
         "httpx",
-        "uvloop",
+        "uvloop ; sys_platform != 'win32'",
         "motor",
 ]
 [project.optional-dependencies]
