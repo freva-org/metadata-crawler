@@ -24,6 +24,7 @@ from typing import (
     TypeAlias,
     TypeVar,
     Union,
+    cast,
 )
 
 import ciso8601
@@ -38,6 +39,13 @@ from ..logger import logger
 
 T = TypeVar("T")
 U = TypeVar("U")
+
+
+class ContextLike(Protocol):
+    """A multiprocessing context class."""
+
+    def Process(self, *args: Any, **kwargs: Any) -> mctx.Process:  # noqa
+        ...
 
 
 class SimpleQueueLike(Protocol[T]):
@@ -304,14 +312,17 @@ def exception_handler(exception: BaseException) -> None:
 
 def daemon(
     func: Callable[..., Any],
-) -> Callable[..., mctx.ForkProcess]:
+) -> Callable[..., mctx.Process]:
     """Threading decorator.
 
     use @daemon above the function you want to run in the background
     """
 
-    def background_func(*args: Any, **kwargs: Any) -> mctx.ForkProcess:
-        ctx = mp.get_context("fork")
+    def background_func(*args: Any, **kwargs: Any) -> mctx.Process:
+        try:
+            ctx = cast(ContextLike, mp.get_context("fork"))
+        except ValueError:
+            ctx = cast(ContextLike, mp.get_context())  # pragma: no cover
         proc = ctx.Process(target=func, args=args, kwargs=kwargs, daemon=True)
         proc.start()
         return proc
