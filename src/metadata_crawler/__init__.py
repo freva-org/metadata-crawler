@@ -5,7 +5,15 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import tomlkit
-import uvloop
+
+try:
+    import uvloop
+
+    use_uvloop = True
+except ImportError:
+
+    use_uvloop = False  # pragma: no cover
+
 
 from ._version import __version__
 from .api.config import ConfigMerger, DRSConfig
@@ -14,7 +22,11 @@ from .data_collector import DataCollector
 from .logger import logger
 from .run import async_add, async_delete, async_index
 
-asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+if use_uvloop:
+    async_model = uvloop
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+else:
+    async_model = asyncio  # pragma: no cover
 
 __all__ = [
     "logger",
@@ -91,7 +103,7 @@ def index(
             server="localhost:8983",
         )
     """
-    uvloop.run(
+    async_model.run(
         async_index(
             index_system,
             *catalogue_files,
@@ -142,7 +154,7 @@ def delete(
             facets=[("project", "CMIP6"), ("institute", "MPI-M")],
         )
     """
-    uvloop.run(
+    async_model.run(
         async_delete(
             index_system, batch_size=batch_size, log_suffix=log_suffix, **kwargs
         )
@@ -245,7 +257,7 @@ def add(
             data_set=["cmip6", "cordex"],
         )
     """
-    uvloop.run(
+    async_model.run(
         async_add(
             *config_files,
             store=store,
