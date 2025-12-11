@@ -3,6 +3,10 @@ What's new
 
 This document highlights major changes and additions across releases.
 
+v2511.2.1
+---------
+* Bug fixing.
+
 v2511.2.0
 ---------
 * Bug fixing.
