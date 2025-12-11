@@ -1,6 +1,6 @@
 [package]
 name = "metadata_crawler"
-version = "2511.2.0"
+version = "2511.2.1"
 edition = "2024"
 exclude = [
     "/.tox/**",
