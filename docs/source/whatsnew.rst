@@ -3,14 +3,18 @@ What's new
 
 This document highlights major changes and additions across releases.
 
+v2511.2.0
+---------
+* Bug fixing.
+
 v2511.1.2
 ---------
-* do not install uvloop on windows
+* Do not install uvloop on windows.
 
 
 v2511.1.1
 ---------
-* windows bug fixing
+* Windows bug fixing.
 
 v2511.1.0
 ---------

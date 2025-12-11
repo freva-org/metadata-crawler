@@ -166,6 +166,7 @@ class ArgParse:
             help="Path(s) to the config_file(s)",
             type=Path,
             action="append",
+            default=[],
         )
         parser.add_argument(
             "--json", help="Print in json format.", action="store_true"
@@ -219,7 +220,7 @@ class ArgParse:
             type=Path,
             help="Path(s) to the metadata config file(s)",
             action="append",
-            default=(os.environ.get("EVALUATION_SYSTEM_CONFIG_DIR"),),
+            default=os.environ.get("EVALUATION_SYSTEM_CONFIG_DIR"),
         )
         parser.add_argument(
             "-b",
@@ -531,7 +532,7 @@ def _run(
         getattr(parser, "verbose", 0), suffix=getattr(parser, "log_suffix", None)
     )
     cfg_files = cast(
-        Tuple[Path, ...], kwargs.pop("config_file", kwargs.pop("config", ()))
+        Tuple[Path, ...], kwargs.pop("config_file", kwargs.pop("config", []))
     )
     try:
         parser.apply_func(*cfg_files, **kwargs)
