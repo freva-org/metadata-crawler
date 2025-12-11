@@ -35,7 +35,7 @@ jobs:
         uses: actions/setup-python@v5
       - name: Install dependencies
         run: |
-          python3 -m pip --user install tox maturin
+          python3 -m pip install --user tox maturin
       - name: Linting, type checking and docs with tox
         run: tox run-parallel --parallel-no-spinner
 
