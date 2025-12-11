@@ -33,13 +33,13 @@ jobs:
         uses: mamba-org/setup-micromamba@v1
         with:
           micromamba-version: "latest"
-          environment-name: freva
+          environment-name: ci
           cache-environment: true
           cache-downloads: true
           create-args: python>=3.11 tox maturin
-      - name: Linting, type checking and docs with tox
-        run: tox run-parallel --parallel-no-spinner
-        shell: micromamba-shell {0}
+      - name: Linting, type checking and docs with tox (win)
+        if: runner.os == 'Windows'
+        run: micromamba run -n ci tox run-parallel --parallel-no-spinner
 
 
 
