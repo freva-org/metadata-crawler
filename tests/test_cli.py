@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
+from functools import partial
 from typing import (
     Annotated,
     Any,
@@ -46,7 +47,9 @@ class Recorder:
 
 
 class FakeConfig:
-    def __init__(self, doc: Dict[str, Any]) -> None:
+    def __init__(
+        self, doc: Dict[str, Any], perserve_comments: bool = False
+    ) -> None:
         self.merged_doc = doc
 
     def dumps(self) -> str:
@@ -94,6 +97,14 @@ DummyIngester.delete._cli_help = "Delete data"
 # -----------------------------
 
 
+def _get_config(
+    *_cfg: str,
+    preserve_comments: bool = True,
+    result: Optional[Dict[str, Any]] = None,
+) -> FakeConfig:
+    return FakeConfig(result)
+
+
 def test_crawl_parsing_and_dispatch(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -102,7 +113,7 @@ def test_crawl_parsing_and_dispatch(
     # Patch the functions used by the CLI
     monkeypatch.setattr(mc_cli, "add", rec.record("add"))
     monkeypatch.setattr(
-        mc_cli, "get_config", lambda _cfg: FakeConfig({"ok": True})
+        mc_cli, "get_config", partial(_get_config, result={"ok": True})
     )
     monkeypatch.setattr(
         mc_cli, "load_plugins", lambda ep: {}
@@ -178,7 +189,9 @@ def test_config_subcommand_prints_text(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     # Patch config + logging
-    monkeypatch.setattr(mc_cli, "get_config", lambda _cfg: FakeConfig({"x": 1}))
+    monkeypatch.setattr(
+        mc_cli, "get_config", partial(_get_config, result={"x": 1})
+    )
     monkeypatch.setattr(mc_cli, "load_plugins", lambda ep: {})
 
     # Run full CLI entrypoint
@@ -191,7 +204,9 @@ def test_config_subcommand_prints_text(
 def test_config_subcommand_prints_json(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(mc_cli, "get_config", lambda _cfg: FakeConfig({"x": 1}))
+    monkeypatch.setattr(
+        mc_cli, "get_config", partial(_get_config, result={"x": 1})
+    )
     monkeypatch.setattr(mc_cli, "load_plugins", lambda ep: {})
 
     mc_cli.cli(["config", "-c", "conf.toml", "--json"])

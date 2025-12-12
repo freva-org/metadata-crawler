@@ -2,9 +2,10 @@
 
 import asyncio
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from types import ModuleType
+from typing import Any, Dict, List, Literal, Optional, Union, cast, overload
 
-import tomlkit
+from tomlkit import TOMLDocument
 
 try:
     import uvloop
@@ -21,6 +22,8 @@ from .api.metadata_stores import CatalogueBackendType, IndexName
 from .data_collector import DataCollector
 from .logger import logger
 from .run import async_add, async_delete, async_index
+
+async_model: ModuleType
 
 if use_uvloop:
     async_model = uvloop
@@ -39,11 +42,28 @@ __all__ = [
     "async_index",
     "async_delete",
     "async_add",
-    "get_config",
 ]
 
 
-def get_config(*config: Union[Path, str]) -> ConfigMerger:
+@overload
+def get_config(
+    *, preserve_comments: Literal[True] = ...
+) -> ConfigMerger[TOMLDocument]: ...  # noqa
+
+
+@overload
+def get_config(
+    *, preserve_comments: Literal[False]
+) -> ConfigMerger[Dict[str, Any]]: ...  # noqa
+
+
+@overload
+def get_config(*, preserve_comments: bool) -> ConfigMerger[Any]: ...  # noqa
+
+
+def get_config(
+    *config: Union[Path, str], preserve_comments: bool = True
+) -> ConfigMerger[Any]:
     """Get a drs config file merged with the default config.
 
     The method is helpful to inspect all possible configurations and their
@@ -55,9 +75,14 @@ def get_config(*config: Union[Path, str]) -> ConfigMerger:
     config:
         Path to a user defined config file that is going to be merged with
         the default config.
+    preserve_comments:
+        Preserve the comments in a config file.
     """
-    _ = DRSConfig.load(*config)
-    return ConfigMerger(*config)
+    cfg = ConfigMerger(*config, preserve_comments=preserve_comments)
+    doc = cast(Dict[str, Any], cfg.merged_doc)
+    datasets = {k: v for k, v in doc.items() if k != "drs_settings"}
+    _ = DRSConfig(datasets=datasets, **doc["drs_settings"])
+    return cfg
 
 
 def index(
@@ -162,7 +187,7 @@ def delete(
 
 
 def add(
-    *config_files: Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument],
+    *config_files: Union[Path, str, Dict[str, Any], TOMLDocument],
     store: Optional[Union[str, Path]] = None,
     data_object: Optional[Union[str, List[str]]] = None,
     data_set: Optional[Union[str, List[str]]] = None,
