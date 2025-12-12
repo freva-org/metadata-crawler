@@ -186,12 +186,12 @@ class ConfigMerger(Generic[DocT]):
 
     @overload
     def __init__(
-        self, *user_paths_or_config, preserve_comments: Literal[True] = True
+        self, *, preserve_comments: Literal[True] = True
     ) -> None: ...
 
     @overload
     def __init__(
-        self, *user_paths_or_config, preserve_comments: Literal[False]
+        self, *, preserve_comments: Literal[False]
     ) -> None: ...
 
     def __init__(
