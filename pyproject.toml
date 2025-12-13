@@ -45,7 +45,7 @@ dependencies = [
         "pyarrow",
         "rich",
         "rich-argparse",
-        "toml",
+        "rtoml",
         "tomlkit",
         "typing_extensions",
         "zarr",

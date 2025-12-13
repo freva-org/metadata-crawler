@@ -6,7 +6,6 @@ import glob
 import os
 import re
 import textwrap
-import tomllib
 from copy import deepcopy
 from datetime import datetime
 from enum import Enum, StrEnum
@@ -29,7 +28,7 @@ from typing import (
 from urllib.parse import urlsplit
 from warnings import catch_warnings
 
-import toml
+import rtoml
 import tomlkit
 import xarray
 from pydantic import (
@@ -185,14 +184,10 @@ class ConfigMerger(Generic[DocT]):
     """
 
     @overload
-    def __init__(
-        self, *, preserve_comments: Literal[True] = True
-    ) -> None: ...
+    def __init__(self, *, preserve_comments: Literal[True] = True) -> None: ...
 
     @overload
-    def __init__(
-        self, *, preserve_comments: Literal[False]
-    ) -> None: ...
+    def __init__(self, *, preserve_comments: Literal[False]) -> None: ...
 
     def __init__(
         self,
@@ -202,9 +197,9 @@ class ConfigMerger(Generic[DocT]):
         preserve_comments: bool = True,
     ):
         # parse both documents
-        self._loads = tomlkit.loads if preserve_comments else tomllib.loads
-        self._dumps = tomlkit.dumps if preserve_comments else toml.dumps
-        self._parse = tomlkit.parse if preserve_comments else tomllib.loads
+        self._loads = tomlkit.loads if preserve_comments else rtoml.loads
+        self._dumps = tomlkit.dumps if preserve_comments else rtoml.dumps
+        self._parse = tomlkit.parse if preserve_comments else rtoml.loads
         system_path = Path(__file__).parent / "drs_config.toml"
         self._system_doc: DocT = cast(
             DocT, self._parse(system_path.read_text(encoding="utf-8"))
