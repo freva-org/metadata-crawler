@@ -22,18 +22,17 @@ def run_add(
 ) -> Tuple[float, int]:
     """Run mdc add."""
     start = time.perf_counter()
+    cat_file = temp_dir / "data.yml"
     add(
         config_file,
-        store=temp_dir / "data.yml",
+        store=cat_file,
         data_set=[dataset],
         verbosity=0,
         fail_under=-1,
         scan_concurrency=concurrency,
     )
     end = time.perf_counter()
-    n_files = yaml.safe_load(Path("data.yml").read_text())["metadata"][
-        "indexed_objects"
-    ]
+    n_files = yaml.safe_load(cat_file.read_text())["metadata"]["indexed_objects"]
     return end - start, n_files
 
 
