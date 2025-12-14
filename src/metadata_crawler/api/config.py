@@ -15,17 +15,20 @@ from typing import (
     Annotated,
     Any,
     Dict,
+    Generic,
     List,
     Literal,
     Optional,
     Tuple,
+    TypeVar,
     Union,
     cast,
+    overload,
 )
 from urllib.parse import urlsplit
 from warnings import catch_warnings
 
-import tomli
+import rtoml
 import tomlkit
 import xarray
 from pydantic import (
@@ -47,6 +50,8 @@ from ..utils import (
 from ..utils.cftime_utils import infer_cmor_like_time_frequency
 from .mixin import TemplateMixin
 from .storage_backend import Metadata, MetadataType
+
+DocT = TypeVar("DocT", tomlkit.TOMLDocument, Dict[str, Any])
 
 
 class BaseType(str, Enum):
@@ -171,22 +176,34 @@ class StatRule(BaseModel):
     default: Any = None
 
 
-class ConfigMerger:
+class ConfigMerger(Generic[DocT]):
     """Load the system and user TOML, merges user -> system under.
 
     Merging the config preserves comments/formatting, and lets you inspect or
     write the result.
     """
 
+    @overload
+    def __init__(self, *, preserve_comments: Literal[True] = True) -> None: ...
+
+    @overload
+    def __init__(self, *, preserve_comments: Literal[False]) -> None: ...
+
     def __init__(
         self,
         *user_paths_or_config: Union[
             Path, str, Dict[str, Any], tomlkit.TOMLDocument
         ],
+        preserve_comments: bool = True,
     ):
         # parse both documents
+        self._loads = tomlkit.loads if preserve_comments else rtoml.loads
+        self._dumps = tomlkit.dumps if preserve_comments else rtoml.dumps
+        self._parse = tomlkit.parse if preserve_comments else rtoml.loads
         system_path = Path(__file__).parent / "drs_config.toml"
-        self._system_doc = tomlkit.parse(system_path.read_text(encoding="utf-8"))
+        self._system_doc: DocT = cast(
+            DocT, self._parse(system_path.read_text(encoding="utf-8"))
+        )
         _configs: List[str] = []
         for user_path_or_config in user_paths_or_config:
             if isinstance(user_path_or_config, (str, Path)) and os.path.isdir(
@@ -222,37 +239,45 @@ class ConfigMerger:
                     elif not os.path.exists(path_or_cfg):
                         _configs.append(str(user_path_or_config))
             else:
-                _configs.append(tomlkit.dumps(user_path_or_config))
+                _configs.append(self._dumps(user_path_or_config))
         for _config in _configs:
             try:
-                self._user_doc = tomlkit.parse(_config)
-            except Exception:
-                raise MetadataCrawlerException("Could not load config path.")
+                self._user_doc = self._parse(_config)
+            except Exception as error:
+                raise MetadataCrawlerException(
+                    f"Could not load config path: {error}"
+                ) from error
             self._merge_tables(self._system_doc, self._user_doc)
 
     def _merge_tables(
         self,
-        base: Union[tomlkit.TOMLDocument, Table, OutOfOrderTableProxy],
-        override: Union[Table, tomlkit.TOMLDocument, OutOfOrderTableProxy],
+        base: Union[
+            Dict[str, Any], tomlkit.TOMLDocument, Table, OutOfOrderTableProxy
+        ],
+        override: Union[
+            Dict[str, Any], Table, tomlkit.TOMLDocument, OutOfOrderTableProxy
+        ],
     ) -> None:
 
         for key, value in override.items():
             if key not in base:
                 base[key] = value
                 continue
-            if isinstance(value, (Table, OutOfOrderTableProxy)):
-                self._merge_tables(cast(Table, base[key]), value)
+            if isinstance(value, (Table, OutOfOrderTableProxy, dict)):
+                self._merge_tables(
+                    cast(Union[Table, Dict[str, Any]], base[key]), value
+                )
             else:
                 base[key] = value
 
     @property
-    def merged_doc(self) -> tomlkit.TOMLDocument:
+    def merged_doc(self) -> DocT:
         """Return the merged TOMLDocument."""
         return self._system_doc
 
     def dumps(self) -> str:
         """Return the merged document as a TOML string."""
-        return tomlkit.dumps(self.merged_doc)
+        return self._dumps(self.merged_doc)
 
 
 def strip_protocol(inp: str | Path) -> Path:
@@ -696,7 +721,7 @@ class DRSConfig(BaseModel, TemplateMixin):
         *config_paths: Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument],
     ) -> DRSConfig:
         """Load a drs config from file."""
-        cfg = tomli.loads(ConfigMerger(*config_paths).dumps())
+        cfg = ConfigMerger(*config_paths, preserve_comments=False).merged_doc
         settings = cfg.pop("drs_settings")
         try:
             return cls(datasets=cfg, **settings)

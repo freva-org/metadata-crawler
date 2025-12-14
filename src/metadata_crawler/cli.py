@@ -100,10 +100,13 @@ def _process_storage_option(option: str) -> Union[str, bool, int, float]:
 
 
 def display_config(
-    *config: Union[Path, str], json: bool = False, **kwargs: Any
+    *config: Union[Path, str],
+    json: bool = False,
+    no_comments: bool = False,
+    **kwargs: Any,
 ) -> None:
     """Display the config file."""
-    cfg = get_config(*config)
+    cfg = get_config(*config, preserve_comments=no_comments is False)
     if json is False:
         print(cfg.dumps())
     else:
@@ -171,6 +174,13 @@ class ArgParse:
         )
         parser.add_argument(
             "--json", help="Print in json format.", action="store_true"
+        )
+        parser.add_argument(
+            "--no-comments",
+            "--drop-comments",
+            help="Do not include comments in the config file.",
+            action="store_true",
+            default=False,
         )
         parser.set_defaults(apply_func=display_config)
         parser.add_argument(
