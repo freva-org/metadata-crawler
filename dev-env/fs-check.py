@@ -29,6 +29,7 @@ def run_add(
         data_set=[dataset],
         verbosity=0,
         fail_under=-1,
+        n_proc=8,
         scan_concurrency=concurrency,
     )
     end = time.perf_counter()
