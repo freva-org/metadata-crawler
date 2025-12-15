@@ -39,15 +39,13 @@ def run_add(
 
 def write_header(path: Path, header: List[str]):
     path.parent.mkdir(exist_ok=True, parents=True)
-    with open(path, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(header)
+    path.write_text(",".join(header) + "\n")
 
 
 def append_row(path: Path, *values: Union[str, int, float]):
+
     with open(path, "a", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(values)
+        f.write(",".join(map(str, values)) + "\n")
         f.flush()
         os.fsync(f.fileno())
 
