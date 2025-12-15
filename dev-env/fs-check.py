@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run a file system check."""
 import argparse
+import csv
 import os
 import socket
 import sys
@@ -8,10 +9,9 @@ import time
 from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Tuple
+from typing import Dict, List, Tuple, Union
 
 import numpy as np
-import pandas as pd
 import yaml
 
 from metadata_crawler import add
@@ -34,6 +34,21 @@ def run_add(
     end = time.perf_counter()
     n_files = yaml.safe_load(cat_file.read_text())["metadata"]["indexed_objects"]
     return end - start, n_files
+
+
+def write_header(path: Path, header: List[str]):
+    path.parent.mkdir(exist_ok=True, parents=True)
+    with open(path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+
+
+def append_row(path: Path, values: Dict[str, Union[str, int, float]]):
+    with open(path, "a", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(values.values())
+        f.flush()
+        os.fsync(f.fileno())
 
 
 def main() -> None:
@@ -78,45 +93,46 @@ def main() -> None:
     )
     args = parser.parse_args()
     host = socket.gethostname()
-    result = {
-        "host": [],
-        "startime": [],
-        "endtime": [],
-        "num_files": [],
-        "itt": [],
-        "runtime": [],
-        "concurrency": [],
-    }
+    header = [
+        "host",
+        "starttime",
+        "endtime",
+        "num_files",
+        "itt",
+        "runtime",
+        "concurrency",
+    ]
+    now = datetime.now().strftime("%a_%F")
+    outfile = (
+        args.out_dir / f"fs-performance-test-{args.dataset}-{host}-{now}.csv"
+    )
     env = os.environ.copy()
     old_stdout = sys.stdout
     curr_dir = Path.cwd()
     cfg_file = args.config_file.absolute()
     with TemporaryDirectory() as td:
+        write_header(outfile, header)
         stdout = (Path(td) / ".out").open("w")
         sys.stdout = stdout
         try:
+            result = {}
             os.environ["MDC_MAX_FILES"] = str(args.num_files)
             os.environ["MDC_INTERACTIVE"] = "0"
             for cur in np.linspace(*args.concurrency).astype(int):
                 for num in range(args.num_itt):
-                    result["host"].append(host)
-                    result["itt"].append(num + 1)
-                    result["concurrency"].append(cur)
-                    result["startime"].append(datetime.now())
+                    result["host"] = host
+                    result["itt"] = num + 1
+                    result["concurrency"] = cur
+                    result["startime"] = datetime.now().isoformat()
                     dt, num_files = run_add(cfg_file, args.dataset, cur, Path(td))
-                    result["endtime"].append(datetime.now().isoformat())
-                    result["num_files"].append(num_files)
-                    result["runtime"].append(dt)
+                    result["endtime"] = datetime.now().isoformat()
+                    result["num_files"] = num_files
+                    result["runtime"] = dt
+                    append_row(outfile, result)
         finally:
             os.environ = env
             sys.stdout = old_stdout
-    os.chdir(curr_dir)
-    now = datetime.now().strftime("%a_%F")
-    args.out_dir.mkdir(exist_ok=True, parents=True)
-    outfile = (
-        args.out_dir / f"fs-performance-test-{args.dataset}-{host}-{now}.csv"
-    )
-    pd.DataFrame(result).to_csv(outfile)
+            os.chdir(curr_dir)
 
 
 if __name__ == "__main__":
