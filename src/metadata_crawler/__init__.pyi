@@ -1,7 +1,10 @@
+import asyncio
 from pathlib import Path
-from typing import Any
+from types import ModuleType
+from typing import Any, Literal, overload
 
-import tomlkit
+import uvloop
+from tomlkit import TOMLDocument
 
 from ._version import __version__ as __version__
 from .api.config import ConfigMerger
@@ -23,10 +26,20 @@ __all__ = [
     "async_index",
     "async_delete",
     "async_add",
-    "get_config",
 ]
 
-def get_config(config: Path | str | None = None) -> ConfigMerger: ...
+async_model: ModuleType
+
+@overload
+def get_config(
+    *, preserve_comments: Literal[True] = ...
+) -> ConfigMerger[TOMLDocument]: ...
+@overload
+def get_config(
+    *, preserve_comments: Literal[False]
+) -> ConfigMerger[dict[str, Any]]: ...
+@overload
+def get_config(*, preserve_comments: bool) -> ConfigMerger[Any]: ...
 def index(
     index_system: str,
     *catalogue_files: Path | str | list[str] | list[Path],
@@ -43,8 +56,8 @@ def delete(
     **kwargs: Any,
 ) -> None: ...
 def add(
+    *config_files: Path | str | dict[str, Any] | TOMLDocument,
     store: str | Path | None = None,
-    config_file: Path | str | dict[str, Any] | tomlkit.TOMLDocument | None = None,
     data_object: str | list[str] | None = None,
     data_set: str | list[str] | None = None,
     data_store_prefix: str = "metadata",

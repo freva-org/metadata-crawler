@@ -1,9 +1,9 @@
 [cordex-benchmark-fs]
-root_path = "./data/cordex-tree/"
+root_path = "./data/cordex-tree/cordex_fake"
 drs_format = "cordex"
 
 [cordex-benchmark-template]
-root_path = "./data/cordex-tree/"
+root_path = "./data/cordex-tree/cordex_fake"
 drs_format = "cordex-template"
 
 [drs_settings.dialect.cordex-template]

@@ -3,6 +3,10 @@ What's new
 
 This document highlights major changes and additions across releases.
 
+v2511.2.2
+---------
+* Faster config loading.
+
 v2511.2.1
 ---------
 * Bug fixing.

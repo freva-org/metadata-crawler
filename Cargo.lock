@@ -228,7 +228,7 @@ dependencies = [
 
 [[package]]
 name = "metadata_crawler"
-version = "2511.2.1"
+version = "2511.2.2"
 dependencies = [
  "globset",
  "once_cell",

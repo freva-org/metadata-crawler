@@ -9,7 +9,7 @@ from tempfile import TemporaryDirectory
 import intake
 import mock
 import pytest
-import toml
+import rtoml
 import xarray as xr
 from jinja2 import Template
 
@@ -95,7 +95,7 @@ def test_read_zarr_data(zarr_data: Path) -> None:
         vars="{var = '{vars}', attr = 'short_name', default = '__name__' }",
         path=str(zarr_data),
     )
-    cfg = toml.loads(conf)
+    cfg = rtoml.loads(conf)
     config = DRSConfig.load(cfg)
     data = config.read_metadata("bar", {"path": str(zarr_data), "metadata": {}})
     assert "model" in data and isinstance(data["model"], list)
