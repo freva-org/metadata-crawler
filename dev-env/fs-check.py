@@ -44,10 +44,10 @@ def write_header(path: Path, header: List[str]):
         writer.writerow(header)
 
 
-def append_row(path: Path, values: Dict[str, Union[str, int, float]]):
+def append_row(path: Path, *values: Union[str, int, float]):
     with open(path, "a", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(values.values())
+        writer.writerow(values)
         f.flush()
         os.fsync(f.fileno())
 
@@ -116,20 +116,23 @@ def main() -> None:
         stdout = (Path(td) / ".out").open("w")
         sys.stdout = stdout
         try:
-            result = {}
             os.environ["MDC_MAX_FILES"] = str(args.num_files)
             os.environ["MDC_INTERACTIVE"] = "0"
             for cur in np.linspace(*args.concurrency).astype(int):
                 for num in range(args.num_itt):
-                    result["host"] = host
-                    result["itt"] = num + 1
-                    result["concurrency"] = cur
-                    result["startime"] = datetime.now().isoformat()
+                    starttime = datetime.now().isoformat()
                     dt, num_files = run_add(cfg_file, args.dataset, cur, Path(td))
-                    result["endtime"] = datetime.now().isoformat()
-                    result["num_files"] = num_files
-                    result["runtime"] = dt
-                    append_row(outfile, result)
+                    endtime = datetime.now().isoformat()
+                    append_row(
+                        outfile,
+                        host,
+                        starttime,
+                        endtime,
+                        num_files,
+                        num + 1,
+                        dt,
+                        cur,
+                    )
         finally:
             os.environ = env
             sys.stdout = old_stdout
