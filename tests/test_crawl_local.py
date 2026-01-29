@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 import intake
+import mock
 import numpy as np
 import pytest
 
@@ -40,6 +41,29 @@ def test_crawl_local_obs(
     assert _lens[0] == _lens[-1]
     with pytest.raises(MetadataCrawlerException):
         add(cat_file)
+
+
+def test_crawl_local_obs_with_eval_conf(
+    drs_config_path: Path, cat_file: Path, data_dir: Path
+) -> None:
+    """Test crawling the local observations."""
+    _lens = []
+    with mock.patch.dict(
+        os.environ,
+        {"EVALUATION_SYSTEM_CONFIG_DIR": str(drs_config_path)},
+        clear=True,
+    ):
+
+        add(
+            drs_config_path,
+            store=cat_file,
+            n_procs=1,
+            batch_size=3,
+            catalogue_backend="jsonlines",
+            data_object=[data_dir / "observations"],
+        )
+        assert cat_file.exists()
+        _lens.append(len(intake.open_catalog(cat_file).latest.read()))
 
 
 def test_crawl_cordex(drs_config_path: Path, cat_file: Path) -> None:
