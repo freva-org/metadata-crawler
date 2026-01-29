@@ -3,6 +3,10 @@ What's new
 
 This document highlights major changes and additions across releases.
 
+v2602.0.0
+---------
+* Bug fixing.
+
 v2511.2.2
 ---------
 * Faster config loading.
