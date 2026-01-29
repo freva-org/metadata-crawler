@@ -353,7 +353,7 @@ async def async_add(
     env = cast(os._Environ[str], os.environ.copy())
     old_level = apply_verbosity(verbosity, suffix=log_suffix)
     eval_env_dir = os.getenv("EVALUATION_SYSTEM_CONFIG_DIR")
-    cfg_files_fallback = [eval_env_dir] if eval_env_dir else []
+    cfg_files_fallback = (eval_env_dir,) if eval_env_dir else ()
     try:
         os.environ["MDC_LOG_INIT"] = "1"
         os.environ["MDC_LOG_LEVEL"] = str(get_level_from_verbosity(verbosity))
