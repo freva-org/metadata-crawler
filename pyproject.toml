@@ -132,7 +132,7 @@ python-packages = ["metadata_crawler"]
 
 
 [tool.pytest.ini_options]
-env = ["MDC_LOG_INTERVAL=1"]
+env = ["MDC_LOG_INTERVAL=1", "RICH_TERMINAL_WIDTH=120"]
 
 [tool.coverage.run]
 branch = false
