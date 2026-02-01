@@ -49,7 +49,10 @@ class S3Path(PathTemplate):
             )
             loop = asyncio.get_running_loop()
             self._client = S3FileSystem(
-                asynchronous=True, loop=loop, **self.storage_options
+                asynchronous=True,
+                loop=loop,
+                skip_instance_cache=True,
+                **self.storage_options,
             )
             self._client._loop = loop
 

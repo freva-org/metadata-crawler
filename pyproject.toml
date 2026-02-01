@@ -21,7 +21,7 @@ classifiers = [
                "Programming Language :: Python :: 3.13",
                "Programming Language :: Python :: 3.14",
 ]
-version = "2511.2.2"
+version = "2602.0.0"
 description="Crawl, extract and push climate metadata for indexing."
 requires-python = ">=3.11"
 dependencies = [
@@ -32,6 +32,7 @@ dependencies = [
         "diskcache",
         "s3fs",
         "jinja2",
+        "ipython",
         "intake",
         "intake-xarray",
         "intake-esm",
@@ -41,6 +42,7 @@ dependencies = [
         "orjson",
         "pyarrow",
         "h5netcdf",
+        "h5py",
         "pydantic",
         "pyarrow",
         "rich",
@@ -130,7 +132,7 @@ python-packages = ["metadata_crawler"]
 
 
 [tool.pytest.ini_options]
-env = ["MDC_LOG_INTERVAL=1"]
+env = ["MDC_LOG_INTERVAL=1", "RICH_TERMINAL_WIDTH=120"]
 
 [tool.coverage.run]
 branch = false

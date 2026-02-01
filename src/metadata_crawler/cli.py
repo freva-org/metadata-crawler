@@ -193,6 +193,7 @@ class ArgParse:
 
     def _add_crawler_subcommand(self) -> None:
         """Add sub command for crawling metadata."""
+        eval_config = os.getenv("EVALUATION_SYSTEM_CONFIG_DIR")
         parser = self.subparsers.add_parser(
             "add",
             description="Harvest (add) metadata",
@@ -231,7 +232,7 @@ class ArgParse:
             type=Path,
             help="Path(s) to the metadata config file(s)",
             action="append",
-            default=os.environ.get("EVALUATION_SYSTEM_CONFIG_DIR"),
+            default=[eval_config] if eval_config else None,
         )
         parser.add_argument(
             "-b",
