@@ -64,9 +64,7 @@ class QueueLike(Protocol[T]):
     def put(self, item: T) -> None:  # noqa
         ...
 
-    def get(
-        self, block: bool = True, timeout: Optional[float] = ...
-    ) -> T:  # noqa
+    def get(self, block: bool = True, timeout: Optional[float] = ...) -> T:  # noqa
         ...
 
     def qsize(self) -> int:  # noqa
@@ -92,9 +90,7 @@ class EventLike(Protocol):
 class LockLike(Protocol):
     """A lock like Type class."""
 
-    def acquire(
-        self, blocking: bool = ..., timeout: Optional[float] = ...
-    ) -> bool:  # noqa
+    def acquire(self, blocking: bool = ..., timeout: Optional[float] = ...) -> bool:  # noqa
         ...
 
     def release(self) -> None:  # noqa
@@ -211,7 +207,7 @@ def convert_str_to_timestamp(
     str: ISO time string representation of the input time step, such as
         %Y %Y-%m-%d or %Y-%m-%dT%H%M%S
     """
-    _date = isoparse(alternative)
+    _date: datetime = isoparse(alternative)
     _time = f"{_date.strftime('%H')}:{_date.strftime('%M')}"
     _day = _date.strftime("%d")
     _mon = _date.strftime("%m")
@@ -228,33 +224,33 @@ def convert_str_to_timestamp(
     try:
         if l_times <= 4:
             # Suppose this is a year only
-            return isoparse(f"{digits.zfill(4)}-{_mon}-{_day}T{_time}")
-        if l_times <= 6:
+            _date = isoparse(f"{digits.zfill(4)}-{_mon}-{_day}T{_time}")
+        elif l_times <= 6:
             # Suppose this is %Y%m or %Y%e
-            return isoparse(f"{digits[:4]}-{digits[4:].zfill(2)}-{_day}T{_time}")
+            _date = isoparse(f"{digits[:4]}-{digits[4:].zfill(2)}-{_day}T{_time}")
         # Year and day of year
-        if l_times == 7:
+        elif l_times == 7:
             # Suppose this is %Y%j
             year = int(digits[:4])
             day_of_year = int(digits[4:])
-            date = datetime(year, 1, 1, _date.hour, _date.minute) + timedelta(
+            _date = datetime(year, 1, 1, _date.hour, _date.minute) + timedelta(
                 days=day_of_year - 1
             )
-            return date
-        if l_times <= 8:
+        elif l_times <= 8:
             # Suppose this is %Y%m%d
-            return isoparse(
+            _date = isoparse(
                 f"{digits[:4]}-{digits[4:6]}-{digits[6:].zfill(2)}T{_time}"
             )
-
-        date_str = f"{digits[:4]}-{digits[4:6]}-{digits[6:8]}"
-        time = digits[8:]
-        if len(time) <= 2:
-            time = time.zfill(2)
         else:
-            # Alaways drop seconds
-            time = time[:2] + ":" + time[2 : min(4, len(time))].zfill(2)
-        return isoparse(f"{date_str}T{time}")
+            date_str = f"{digits[:4]}-{digits[4:6]}-{digits[6:8]}"
+            time = digits[8:]
+            if len(time) <= 2:
+                time = time.zfill(2)
+            else:
+                # Alaways drop seconds
+                time = time[:2] + ":" + time[2 : min(4, len(time))].zfill(2)
+            _date = isoparse(f"{date_str}T{time}")
+        return _date
 
     except ValueError:
         if has_t_separator and position_t > 0:
@@ -263,7 +259,7 @@ def convert_str_to_timestamp(
 
             date_digits = "".join(filter(str.isdigit, date_part))
             if len(date_digits) >= 8:
-                return isoparse(
+                _date = isoparse(
                     f"{date_digits[:4]}-{date_digits[4:6]}"
                     f"-{date_digits[6:8]}T{time_part[:2].zfill(2)}"
                 )
@@ -423,9 +419,7 @@ def print_performance(
     spinner = rich.spinner.Spinner(
         os.getenv("SPINNER", "earth"), text="[b]Preparing crawler ...[/]"
     )
-    interactive = bool(
-        int(os.getenv("MDC_INTERACTIVE", str(int(Console.is_terminal))))
-    )
+    interactive = bool(int(os.getenv("MDC_INTERACTIVE", str(int(Console.is_terminal)))))
     log_interval = int(os.getenv("MDC_LOG_INTERVAL", "30"))
     sample_interval = 1.0 if interactive else 10.0
 
@@ -449,15 +443,13 @@ def print_performance(
     ) -> str:
         # Color thresholds only when markup=True (interactive)
         if markup:
-            f_col = (
-                "green"
-                if perf_file > 500
-                else "red" if perf_file < 100 else "blue"
-            )
+            f_col = "green" if perf_file > 500 else "red" if perf_file < 100 else "blue"
             q_col = (
                 "red"
                 if queue_size > 100_000
-                else "green" if queue_size < 10_000 else "blue"
+                else "green"
+                if queue_size < 10_000
+                else "blue"
             )
             return (
                 f"[bold]Discovering: [{f_col}]{perf_file:>6,.1f}[/{f_col}] files/s "
@@ -472,9 +464,7 @@ def print_performance(
             )
 
     if interactive:
-        with Live(
-            spinner, console=Console, refresh_per_second=2.5, transient=True
-        ):
+        with Live(spinner, console=Console, refresh_per_second=2.5, transient=True):
             while print_status.is_set():
                 perf, disc, qsz, idx = _snapshot()
                 spinner.update(text=_build_msg(perf, disc, qsz, idx, markup=True))

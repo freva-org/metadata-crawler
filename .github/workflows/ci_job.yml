@@ -17,9 +17,20 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
+            target: x86_64
+            manylinux: auto
+
           - os: macos-14
+            target: aarch64-apple-darwin
+            manylinux: off
+
           - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            manylinux: off
+
           - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            manylinux: 2014
 
     steps:
       - name: Enable long paths for Git on Windows
@@ -29,26 +40,26 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - name: Setup micromamba
-        uses: mamba-org/setup-micromamba@v1
+      - name: Set up Python "3.X"
+        uses: actions/setup-python@v5
         with:
-          micromamba-version: "latest"
-          environment-name: ci
-          cache-environment: true
-          cache-downloads: true
-          create-args: python>=3.11 tox maturin
-      - name: Linting, type checking and docs with tox (win)
-        if: runner.os == 'Windows'
-        run: micromamba run -n ci tox run-parallel --parallel-no-spinner
+          python-version: "3.13"
 
-
+      - name: Build wheels with maturin
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          args: --release --sdist -o dist
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux }}
 
   tests:
+    name: CI Tests
     runs-on: ubuntu-latest
     strategy:
       max-parallel: 5
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -66,6 +77,9 @@ jobs:
       - name: Set up services
         run: |
           docker compose -f docker-compose.yaml up -d --remove-orphans
+      - name: Linting, type checking and docs with tox
+        if: matrix.python-version == '3.14'
+        run: tox run-parallel --parallel-no-spinner
       - name: Run tests
         run: tox -e test
       - name: Upload coverage to Codecov

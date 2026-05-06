@@ -3,6 +3,10 @@ What's new
 
 This document highlights major changes and additions across releases.
 
+v2605.0.0
+---------
+* Enable glob pattern for indexing metadata stores.
+
 v2602.0.0
 ---------
 * Bug fixing.

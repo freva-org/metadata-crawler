@@ -11,10 +11,15 @@ from __future__ import annotations
 
 import io
 import os
+import json
 import sys
+import pathlib
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime
 from urllib.parse import urljoin
+
+import requests
+
 
 # Include the project source on the Python path so sphinx can find it.
 sys.path.insert(0, os.path.abspath("."))
@@ -22,6 +27,35 @@ sys.path.insert(0, os.path.abspath("../src"))
 
 from metadata_crawler import __version__
 from metadata_crawler.cli import cli
+
+
+def _get_rtd_versions() -> list:
+    """Fetch active versions from the ReadTheDocs API."""
+    try:
+        resp = requests.get(
+            "https://readthedocs.org/api/v3/projects/metadata-crawler/versions/",
+            params={"active": True, "limit": 50},
+            timeout=5,
+        )
+        resp.raise_for_status()
+        versions = []
+        for v in resp.json().get("results", []):
+            slug = v["slug"]
+            versions.append(
+                {
+                    "name": slug,
+                    "version": slug,
+                    "url": f"https://metadata-crawler.readthedocs.io/en/{slug}/",
+                }
+            )
+        return versions
+    except Exception:
+        return []  # fail silently so builds don't break offline
+
+
+# Write switcher.json into _static at build time
+_switcher_path = pathlib.Path(__file__).parent / "_static" / "switcher.json"
+_switcher_path.write_text(json.dumps(_get_rtd_versions(), indent=2))
 
 
 def get_cli_output(*args: str) -> str:
@@ -149,11 +183,15 @@ html_favicon = "_static/favicon.png"
 
 html_theme_options = {
     # "github_url": "https://github.com/freva-org/metadata-crawler",
-    "navbar_end": ["theme-switcher", "navbar-icon-links"],
+    "navbar_end": ["version-switcher", "theme-switcher", "navbar-icon-links"],
     "logo": {
         "image_light": "_static/final_logo-light.png",
         "image_dark": "_static/final_logo-dark.png",
         "text": "Metadata Crawler",
+    },
+    "switcher": {
+        "json_url": "https://metadata-crawler.readthedocs.io/en/latest/_static/switcher.json",
+        "version_match": __version__,
     },
     "icon_links": [
         {
