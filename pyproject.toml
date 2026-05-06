@@ -21,7 +21,7 @@ classifiers = [
                "Programming Language :: Python :: 3.13",
                "Programming Language :: Python :: 3.14",
 ]
-version = "2602.0.0"
+version = "2605.0.0"
 description="Crawl, extract and push climate metadata for indexing."
 requires-python = ">=3.11"
 dependencies = [
