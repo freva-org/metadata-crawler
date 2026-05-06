@@ -54,6 +54,7 @@ jobs:
           manylinux: ${{ matrix.manylinux }}
 
   tests:
+    name: CI Tests
     runs-on: ubuntu-latest
     strategy:
       max-parallel: 5
@@ -77,6 +78,7 @@ jobs:
         run: |
           docker compose -f docker-compose.yaml up -d --remove-orphans
       - name: Linting, type checking and docs with tox
+        if: matrix.python-version == "3.14"
         run: tox run-parallel --parallel-no-spinner
       - name: Run tests
         run: tox -e test
