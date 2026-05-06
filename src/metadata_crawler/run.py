@@ -3,9 +3,21 @@
 import os
 import time
 from fnmatch import fnmatch
+from functools import lru_cache
 from pathlib import Path
 from types import NoneType
-from typing import Any, Collection, Dict, List, Optional, Sequence, Union, cast
+from typing import (
+    Any,
+    Collection,
+    Dict,
+    FrozenSet,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+    cast,
+)
 
 import tomlkit
 import yaml
@@ -32,14 +44,27 @@ from .utils import (
 FilesArg = Optional[Union[str, Path, Sequence[Union[str, Path]]]]
 
 
-def _norm_files(catalogue_files: FilesArg) -> List[str]:
+@lru_cache(maxsize=None)
+def _norm_files_cached(
+    catalogue_files: Tuple[str, ...], opts: FrozenSet[Tuple[str, str]]
+) -> Tuple[str, ...]:
+    storage_options = dict(opts)
+    files: Tuple[str, ...] = ()
+    for _file in catalogue_files:
+        files += tuple(CatalogueReader.rglob_files(_file, **storage_options))
+    print(files)
+    return files
+
+
+def _norm_files(catalogue_files: FilesArg, **storage_options: Any) -> Tuple[str, ...]:
     if catalogue_files is None:
-        return [""]
-    return (
-        [str(catalogue_files)]
+        return ("",)
+    raw = (
+        (str(catalogue_files),)
         if isinstance(catalogue_files, (str, Path))
-        else [str(p) for p in catalogue_files]
+        else tuple(str(p) for p in catalogue_files)
     )
+    return _norm_files_cached(raw, frozenset(storage_options.items()))
 
 
 def _match(match: str, items: Collection[str]) -> List[str]:
@@ -59,7 +84,7 @@ def _get_num_of_indexed_objects(
 ) -> int:
     num_objects = 0
     storage_options = storage_options or {}
-    for cat_file in _norm_files(catalogue_files):
+    for cat_file in _norm_files(catalogue_files, **storage_options):
         try:
             cat = CatalogueReader.load_catalogue(cat_file, **storage_options)
             num_objects += cat.get("metadata", {}).get("indexed_objects", 0)
@@ -117,9 +142,7 @@ async def async_call(
         progress = IndexProgress(total=num_objects)
         os.environ["MDC_LOG_INIT"] = "1"
         os.environ["MDC_LOG_LEVEL"] = str(get_level_from_verbosity(verbosity))
-        os.environ["MDC_LOG_SUFFIX"] = (
-            log_suffix or os.getenv("MDC_LOG_SUFFIX") or ""
-        )
+        os.environ["MDC_LOG_SUFFIX"] = log_suffix or os.getenv("MDC_LOG_SUFFIX") or ""
         backends = load_plugins("metadata_crawler.ingester")
         try:
             cls = backends[index_system]
@@ -128,9 +151,8 @@ async def async_call(
                 f"No such backend: {index_system}", index_system, backends.keys()
             )
             raise ValueError(msg) from None
-        flat_files = _norm_files(catalogue_files)
-        flat_files = flat_files or [""]
         storage_options = kwargs.pop("storage_options", {})
+        flat_files = _norm_files(catalogue_files, **storage_options) or [""]
         progress.start()
         for cf in flat_files:
             async with cls(
@@ -256,9 +278,7 @@ async def async_delete(
 
 async def async_add(
     *config_files: Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument],
-    store: Optional[
-        Union[str, Path, Dict[str, Any], tomlkit.TOMLDocument]
-    ] = None,
+    store: Optional[Union[str, Path, Dict[str, Any], tomlkit.TOMLDocument]] = None,
     data_object: Optional[Union[str, List[str]]] = None,
     data_set: Optional[Union[List[str], str]] = None,
     data_store_prefix: str = "metadata",
@@ -357,15 +377,11 @@ async def async_add(
     try:
         os.environ["MDC_LOG_INIT"] = "1"
         os.environ["MDC_LOG_LEVEL"] = str(get_level_from_verbosity(verbosity))
-        os.environ["MDC_LOG_SUFFIX"] = (
-            log_suffix or os.getenv("MDC_LOG_SUFFIX") or ""
-        )
+        os.environ["MDC_LOG_SUFFIX"] = log_suffix or os.getenv("MDC_LOG_SUFFIX") or ""
 
         config_files = config_files or cfg_files_fallback
         if not all(config_files):
-            raise MetadataCrawlerException(
-                "You must give a config file/directory"
-            )
+            raise MetadataCrawlerException("You must give a config file/directory")
         st = time.time()
         passwd: Optional[str] = None
         if password:  # pragma: no cover
@@ -381,9 +397,7 @@ async def async_add(
             else [str(data_object)]
         )
         data_set = (
-            data_set
-            if isinstance(data_set, (NoneType, list))
-            else [str(data_set)]
+            data_set if isinstance(data_set, (NoneType, list)) else [str(data_set)]
         )
         cfg = DRSConfig.load(*config_files)
         async with DataCollector(
@@ -420,9 +434,7 @@ async def async_add(
         ) or files_discovered == 0:
             if data_col.ingest_queue.silent is False:
                 await data_col.ingest_queue.delete()
-                raise EmptyCrawl(
-                    "Could not fulfill discovery threshold!"
-                ) from None
+                raise EmptyCrawl("Could not fulfill discovery threshold!") from None
     finally:
         os.environ = env
         logger.set_level(old_level)

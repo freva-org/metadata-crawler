@@ -52,18 +52,16 @@ from ..utils import (
 from .config import DRSConfig, SchemaField
 from .storage_backend import MetadataType
 
-ISO_FORMAT_REGEX = re.compile(
-    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?$"
-)
+ISO_FORMAT_REGEX = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?$")
 
 BATCH_SECS_THRESHOLD = 20
 BATCH_ITEM = List[Tuple[str, Dict[str, Any]]]
 
 
-ConsumerQueueType: TypeAlias = QueueLike[
-    Union[int, Tuple[str, str, MetadataType]]
-]
+ConsumerQueueType: TypeAlias = QueueLike[Union[int, Tuple[str, str, MetadataType]]]
 WriterQueueType: TypeAlias = SimpleQueueLike[Union[int, BATCH_ITEM]]
+
+_GLOB_CHARS = re.compile(r"[*?\[\]{]")
 
 
 class Stream(NamedTuple):
@@ -166,8 +164,7 @@ class IndexStore:
         self._timestamp_keys: Set[str] = {
             k
             for k, col in schema.items()
-            if getattr(getattr(col, "base_type", None), "value", None)
-            == "timestamp"
+            if getattr(getattr(col, "base_type", None), "value", None) == "timestamp"
         }
 
     @staticmethod
@@ -175,10 +172,10 @@ class IndexStore:
         uri: str, **storage_options: Any
     ) -> Tuple[fsspec.AbstractFileSystem, bool]:
         """Get the base-url from a path."""
-        protocol, path = fsspec.core.split_protocol(uri)
+        protocol, _ = fsspec.core.split_protocol(uri)
         protocol = protocol or "file"
-        add = {"anon": True} if protocol == "s3" else {}
-        storage_options = storage_options or add
+        if protocol == "s3" and "key" not in storage_options:
+            storage_options.setdefault("anon", True)
         fs = fsspec.filesystem(protocol, **storage_options)
         return fs, protocol == "file"
 
@@ -231,9 +228,7 @@ class IndexStore:
         """Define the intake arguments."""
         ...  # pragma: no cover
 
-    def catalogue_storage_options(
-        self, path: Optional[str] = None
-    ) -> Dict[str, Any]:
+    def catalogue_storage_options(self, path: Optional[str] = None) -> Dict[str, Any]:
         """Construct the storage options for the catalogue."""
         is_s3 = (path or "").startswith("s3://")
         opts = {
@@ -316,9 +311,7 @@ class JSONLineWriter:
 
     def _add(self, metadata_batch: List[Tuple[str, Dict[str, Any]]]) -> None:
         """Add a batch of metadata to the gzip store."""
-        by_index: Dict[str, List[Dict[str, Any]]] = {
-            name: [] for name in self._streams
-        }
+        by_index: Dict[str, List[Dict[str, Any]]] = {name: [] for name in self._streams}
         for index_name, metadata in metadata_batch:
             by_index[index_name].append(metadata)
         for index_name, records in by_index.items():
@@ -338,9 +331,7 @@ class JSONLineWriter:
                 pass
             stream.close()
             if not self._records:
-                fs, _ = IndexStore.get_fs(
-                    self._streams[name], **self.storage_options
-                )
+                fs, _ = IndexStore.get_fs(self._streams[name], **self.storage_options)
                 fs.rm(self._streams[name])
 
 
@@ -476,9 +467,7 @@ class CatalogueReader:
         _schema_json = cat["metadata"]["schema"]
         schema = {s["key"]: SchemaField(**s) for k, s in _schema_json.items()}
         index_name = IndexName(**cat["metadata"]["index_names"])
-        cls: Type[IndexStore] = CatalogueBackends[
-            cat["metadata"]["backend"]
-        ].value
+        cls: Type[IndexStore] = CatalogueBackends[cat["metadata"]["backend"]].value
         storage_options = cat["metadata"].get("storage_options", {})
         self.store = cls(
             cat["metadata"]["prefix"],
@@ -493,9 +482,30 @@ class CatalogueReader:
     def load_catalogue(path: Union[str, Path], **storage_options: Any) -> Any:
         """Load a intake yaml catalogue (remote or local)."""
         fs, _ = IndexStore.get_fs(str(path), **storage_options)
-        cat_path = fs.unstrip_protocol(path)
+        cat_path = fs.unstrip_protocol(str(path))
         with fs.open(cat_path) as stream:
             return yaml.safe_load(stream.read())
+
+    @staticmethod
+    def rglob_files(path: Union[str, Path], **storage_options: Any) -> List[str]:
+        """Recursively get a find target files."""
+        path = str(path).rstrip("/")
+        fs, is_local = IndexStore.get_fs(path, **storage_options)
+        if _GLOB_CHARS.search(path):
+            return [
+                str(f) if is_local else fs.unstrip_protocol(str(f))
+                for f in fs.glob(path)
+            ]
+        try:
+            if fs.isdir(path):
+                return [
+                    str(f) if is_local else fs.unstrip_protocol(str(f))
+                    for f in fs.find(path)
+                    if f.endswith(".yml")
+                ]
+        except (FileNotFoundError, NotImplementedError):
+            pass
+        return [path]
 
 
 class QueueConsumer:
@@ -726,9 +736,7 @@ class CatalogueWriter:
                 "version": 1,
                 "backend": self.backend,
                 "prefix": self.prefix,
-                "storage_options": self.store.catalogue_storage_options(
-                    self.prefix
-                ),
+                "storage_options": self.store.catalogue_storage_options(self.prefix),
                 "index_names": {
                     "latest": self.index_name.latest,
                     "all": self.index_name.all,
