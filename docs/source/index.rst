@@ -59,7 +59,7 @@ Too long; didn't read (TL;DR)
   dataset attributes/vars
 - **Special rules**: conditionals and method/function calls (e.g. CMIP6 realm,
   time aggregation)
-- **Index backends**: JSONLines (intake), Apache Solr, MongoDB
+- **Index backends**: Apache Solr, MongoDB
 - **Support of dataset versions**: Dataset versions are stored separately.
   Data containing *all* dataset versions and the *latest* versions only.
 
@@ -84,6 +84,17 @@ and adjusted.
 
     Use the ``--json`` flag with ``jq`` command line json parser to inspect
     the configuration by ``<key>-<value>`` pair queries.
+
+
+Check the last metadata crawl
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+You can get a quick overview over the metadata store by inspecting it's
+content with the ``glance`` sub commmand:
+
+.. code-block:: console
+    mdc glance mongodb://localhost -s username mongo -s password secrect
+
 
 
 Harvest metadata into a catalogue

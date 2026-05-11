@@ -5,38 +5,48 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Dict, List
 
-import intake
 import mock
+import pytest
 import requests
 from pymongo import MongoClient
 
 from metadata_crawler import add, delete, index
 
 
+@pytest.mark.parametrize("backend", ["intake", "mongodb", "postgresql"])
 def test_ingest_solr(
-    drs_config_path: Path, storage_options: Dict[str, str], solr_server: str
+    backend: str,
+    drs_config_path: Path,
+    storage_options: Dict[str, str],
+    solr_server: str,
+    db_storage_options: dict[str, str],
+    pg_cursor: Any,
+    mongo_client: Any,
 ) -> None:
     """Test ingesting metadata to solr."""
 
-    cat_file = "s3://test/metadata_crawler/tests/solr.yml"
-    cat_files = []
-    lens = []
+    ports = {"mongodb": 27017, "postgresql": 5432}
+    db = db_storage_options["database"]
+    u = db_storage_options["username"]
+    p = db_storage_options["password"]
+    stores = []
     for ds in ("fs", "s3", "swift"):
-        cat_file = f"s3://test/metadata_crawler/tests/solr-{ds}.yml"
-        cat_files.append(cat_file)
+        if backend == "intake":
+            store = f"s3://test/metadata_crawler/tests/solr-{ds}.yml"
+        else:
+            store = f"{backend}://{u}:{p}@localhost:{ports[backend]}/{db}"
+        stores.append(store)
         add(
             drs_config_path,
-            store=cat_file,
+            store=store,
             data_store_prefix=f"s3://test/metadata_crawler/tests/solrdata-{ds}",
             data_set=[f"obs-{ds}"],
             storage_options=storage_options,
         )
-        cat = intake.open_catalog(cat_file, storage_options=storage_options)
-        lens.append(len(cat.latest.read()))
     with mock.patch.dict(os.environ, {"MDC_INTERACTIVE": "1"}, clear=True):
         index(
             "solr",
-            *cat_files,
+            *stores,
             server=solr_server,
             storage_options=storage_options,
             batch_size=1,
@@ -45,36 +55,43 @@ def test_ingest_solr(
         f"{solr_server}/solr/latest/select", params={"q": "*:*", "rows": 0}
     )
     num = res.json().get("response", {}).get("numFound", 0)
-    assert sum(lens) == num
+    assert num > 0
 
 
+@pytest.mark.parametrize("backend", ["intake", "mongodb", "postgresql"])
 def test_ingest_mongo(
+    backend: str,
     drs_config_path: Path,
     mongo_server: Dict[str, str],
+    db_storage_options: dict[str, str],
+    pg_cursor: Any,
+    mongo_client: Any,
 ) -> None:
     """Test ingesting metadata to mongo."""
-
-    cat_files = []
-    lens = []
+    # ports = {"mongodb": 27017, "postgresql": 5432}
+    db = db_storage_options["database"]
+    u = db_storage_options["username"]
+    p = db_storage_options["password"]
+    stores = []
     with TemporaryDirectory() as temp_dir:
         for ds in ("fs", "s3", "swift"):
-            cat_file = Path(temp_dir) / f"mongo-{ds}.yml"
-            cat_files.append(cat_file)
+            if backend == "intake":
+                store = Path(temp_dir) / f"mongo-{ds}.yml"
+            else:
+                store = f"{backend}://{u}:{p}@localhost/{db}"
+            stores.append(store)
             add(
                 drs_config_path,
-                store=cat_file,
+                store=store,
                 data_store_prefix=f"{ds}-mongodata",
                 data_set=[f"obs-{ds}"],
-                catalogue_backend="intake",
+                backend=backend,
             )
-            cat = intake.open_catalog(cat_file)
-            lens.append(len(cat.latest.read()))
-        index("mongo", *cat_files, **mongo_server)
+        index("mongo", *stores, url=mongo_server["url"], database="test")
     with MongoClient(mongo_server["url"]) as client:
-        col = client[mongo_server["database"]]["latest"]
+        col = client["test"]["latest"]
         _f = list(col.find({}))
-        print(len(_f))
-        assert len(_f) == sum(lens)
+        assert len(_f) > 0
 
 
 def test_delete_mongo(

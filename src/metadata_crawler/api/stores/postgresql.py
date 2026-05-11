@@ -318,28 +318,6 @@ class PostgreSQL(IndexStore):
         """The writer process."""
         return self._proc
 
-    def get_args(self, index_name: str) -> Dict[str, Any]:
-        """Return intake-compatible arguments for the catalogue."""
-        return {
-            "url": _get_storage_url(self._url, True, **self.storage_options),
-            "table": index_name,
-        }
-
-    def get_path(self, path_suffix: Optional[str] = None) -> str:
-        """Return the table name for a given suffix."""
-        return path_suffix or ""
-
-    def catalogue_storage_options(self, path: Optional[str] = None) -> StorageOptions:
-        """Strip credentials from storage options."""
-        opts: StorageOptions = {
-            k: v
-            for k, v in self.storage_options.items()
-            if k not in self._shadow_options
-        }
-        for key in ("password", "username", "user", "passwd"):
-            opts.pop(key, None)
-        return opts
-
     def write_catalogue_metadata(self, indexed_objects: int = 0) -> None:
         """Store catalogue metadata in a ``_catalogue`` table."""
         try:

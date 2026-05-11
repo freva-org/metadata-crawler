@@ -1,10 +1,11 @@
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
 import fsspec
 import pytest
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 
-from metadata_crawler.api.stores import IndexStore  # adjust import
 from metadata_crawler import add
+from metadata_crawler.api.stores import IndexStore  # adjust import
 
 
 class TestBackendSelection:

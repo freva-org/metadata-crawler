@@ -71,16 +71,20 @@ def _sanitise_uri(uri: str, timeout_ms: int = 5000, **kwargs: Any) -> str:
     URI with the same keyword arguments produces the same result.
     """
     uri = str(uri)
-    parsed = urlparse(uri)
+    netloc, _, body = uri.rpartition("://")
+    netloc = netloc or "mongodb"
+    parsed = urlparse(f"{netloc}://{body}")
 
     # Credentials -- kwargs override URI, URI is the fallback
     username = kwargs.get("username") or kwargs.get("user") or parsed.username
     password = kwargs.get("password") or kwargs.get("passwd") or parsed.password
     database = kwargs.get("database") or kwargs.get("db")
+    port = str(kwargs.get("port", "")) or "27017"
 
     # Netloc
     host = parsed.hostname or "localhost"
-    port = f":{parsed.port}" if parsed.port else ""
+    port = f":{parsed.port}" if parsed.port else f":{port}"
+    logger.critical("%s %s", parsed, port)
     if username:
         creds = quote_plus(str(username))
         if password:
@@ -102,7 +106,7 @@ def _sanitise_uri(uri: str, timeout_ms: int = 5000, **kwargs: Any) -> str:
     if "timeoutms" not in {k.lower() for k in query}:
         query["timeoutMS"] = [str(timeout_ms)]
 
-    return urlunparse(
+    result = urlunparse(
         ParseResult(
             "mongodb",
             netloc,
@@ -112,17 +116,8 @@ def _sanitise_uri(uri: str, timeout_ms: int = 5000, **kwargs: Any) -> str:
             parsed.fragment,
         )
     )
-
-
-def _strip_credentials(uri: str) -> str:
-    """Return a URI with user/password removed."""
-    parsed = urlparse(uri)
-    if parsed.username or parsed.password:
-        netloc = parsed.hostname or ""
-        if parsed.port:
-            netloc = f"{netloc}:{parsed.port}"
-        parsed = parsed._replace(netloc=netloc)
-    return urlunparse(parsed)
+    logger.critical(result)
+    return result
 
 
 # ------------------------------------------------------------------
@@ -280,29 +275,6 @@ class MongoDB(IndexStore):
     def proc(self) -> Optional[mp.process.BaseProcess]:
         """The writer process."""
         return self._proc
-
-    def get_args(self, index_name: str) -> Dict[str, Any]:
-        """Return intake-compatible arguments for the catalogue YAML."""
-        return {
-            "uri": _strip_credentials(self._uri),
-            "database": self._database,
-            "collection": index_name,
-        }
-
-    def get_path(self, path_suffix: Optional[str] = None) -> str:
-        """Return the collection name for a given suffix."""
-        return path_suffix or self._database
-
-    def catalogue_storage_options(self, path: Optional[str] = None) -> StorageOptions:
-        """Strip credentials from storage options."""
-        opts: StorageOptions = {
-            k: v
-            for k, v in self.storage_options.items()
-            if k not in self._shadow_options
-        }
-        for key in ("password", "username", "user"):
-            opts.pop(key, None)
-        return opts
 
     def write_catalogue_metadata(self, indexed_objects: int = 0) -> None:
         """Store catalogue metadata in a ``_catalogue`` collection."""

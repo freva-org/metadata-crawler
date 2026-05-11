@@ -9,9 +9,10 @@ supports both synchronous and asynchronous workflows.
 
 The general workflow of collecting metadata is separated into *two* steps:
 
-1. Harvesting metadata and storing the crawled data to a **temporary intake**
-   catalogue. This step should de-couples the crawling from the indexing procedure -
-   but if favourable it can also be used to only create **intake** catalogues.
+1. Harvesting metadata and storing the crawled data to a **metadata store**
+   This step should de-couples the crawling from the indexing procedure.
+   Supported metadata stores are **intake catalogues**, **MongoDB** and
+   **PostgreSQL**.
 2. Indexing the metadata to the index backend.
 
 
@@ -25,4 +26,4 @@ account (*latest* versions only).
    :maxdepth: 1
 
    sec1-cli
-   sec2-python
+   sec2-pytho

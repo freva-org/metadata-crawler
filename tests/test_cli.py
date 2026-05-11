@@ -4,20 +4,12 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from functools import partial
-from typing import (
-    Annotated,
-    Any,
-    AsyncIterator,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Tuple,
-    cast,
-)
+from typing import (Annotated, Any, AsyncIterator, Callable, Dict, List,
+                    Optional, Tuple, cast)
 
 import pytest
 from pytest_mock import MockerFixture
+
 import metadata_crawler.cli as mc_cli
 
 # -----------------------------

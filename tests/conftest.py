@@ -9,9 +9,9 @@ from typing import Any, Dict, Iterator
 
 import numpy as np
 import pandas as pd
+import psycopg
 import pymongo
 import pytest
-import psycopg
 import requests
 import toml
 import xarray as xr

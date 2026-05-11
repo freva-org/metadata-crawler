@@ -1,16 +1,43 @@
 """Test storage backends other than intake."""
 
+from __future__ import annotations
+
+import asyncio
 import time
-from typing import Any
 from pathlib import Path
-from metadata_crawler import add
+from typing import Any, Dict, List
 from unittest.mock import patch
+
 import psycopg
-import pytest
 import pymongo
+import pytest
+
+from metadata_crawler import add
+from metadata_crawler.api.config import BaseType, SchemaField
+from metadata_crawler.api.stores import IndexName, MongoDB, PostgreSQL
+from metadata_crawler.api.stores.mongodb import _sanitise_uri
+from metadata_crawler.api.stores.postgresql import _sa_column_type
 
 
-from metadata_crawler.api.stores import PostgreSQL, MongoDB
+def _make_field(
+    base: str, multi: bool = False, length: int | None = None
+) -> SchemaField:
+    """Build a SchemaField with controlled attributes."""
+    f = SchemaField.__new__(SchemaField)
+    for attr, val in {
+        "key": "test",
+        "type": base,
+        "base_type": BaseType(base),
+        "multi_valued": multi,
+        "length": length,
+        "required": False,
+        "unique": False,
+        "indexed": True,
+        "default": None,
+        "name": "test",
+    }.items():
+        object.__setattr__(f, attr, val)
+    return f
 
 
 @patch.object(PostgreSQL, "_CATALOGUE_TABLE", "test_catalogue")
@@ -209,3 +236,97 @@ class TestMetaDataGlance:
         with patch.object(store_cls, attr, "foo"):
             with pytest.raises(ValueError):
                 glance_metadata(url, **db_storage_options)
+
+
+class TestGenericMonogDB:
+    """Cover remaining MongoDB gaps."""
+
+    def test_sanitise_uri_no_credentials(self) -> None:
+        """netloc without credentials."""
+        uri = _sanitise_uri("mongodb://myhost:27017")
+        assert "myhost:27017" in uri
+        assert "@" not in uri.split("?")[0]
+
+    def test_resolve_unique_key_fallback(self) -> None:
+        """no unique field in schema falls back to 'file'."""
+        schema: Dict[str, SchemaField] = {
+            "project": SchemaField(key="project", type="string", unique=False),
+            "variable": SchemaField(key="variable", type="string", unique=False),
+        }
+        store = MongoDB(
+            "mongodb://localhost:27017",
+            IndexName(),
+            schema,
+            mode="r",
+        )
+        assert store._unique_key == "file"
+
+
+class TestPostgreSQLColumnTypes:
+    """Cover _sa_column_type branches."""
+
+    def test_integer_scalar(self) -> None:
+        """BigInteger."""
+        import sqlalchemy as sa
+
+        assert isinstance(_sa_column_type(_make_field("integer")), sa.BigInteger)
+
+    def test_integer_multi(self) -> None:
+        """ARRAY(BigInteger)."""
+        import sqlalchemy as sa
+
+        assert isinstance(_sa_column_type(_make_field("integer", multi=True)), sa.ARRAY)
+
+    def test_float_scalar(self) -> None:
+        """Float."""
+        import sqlalchemy as sa
+
+        assert isinstance(_sa_column_type(_make_field("float")), sa.Float)
+
+    def test_timestamp_scalar(self) -> None:
+        """DateTime."""
+        import sqlalchemy as sa
+
+        assert isinstance(_sa_column_type(_make_field("timestamp")), sa.DateTime)
+
+
+class TestGenericPostgreSQL:
+    """Cover remaining PostgreSQL gaps."""
+
+    def test_resolve_unique_key_fallback(self) -> None:
+        """no unique field falls back to 'file'."""
+        schema: Dict[str, SchemaField] = {
+            "project": SchemaField(key="project", type="string", unique=False),
+        }
+        store = PostgreSQL(
+            "postgresql://localhost/metadata",
+            IndexName(),
+            schema,
+            mode="r",
+        )
+        assert store._unique_key == "file"
+
+    def test_read_nonexistent_table(
+        self,
+        db_storage_options: Dict[str, str],
+    ) -> None:
+        """read() on a missing table returns empty."""
+        schema: Dict[str, SchemaField] = {
+            "file": SchemaField(key="file", type="string", unique=True),
+        }
+        store = PostgreSQL(
+            "postgresql://localhost/metadata",
+            IndexName(latest="nonexistent_table", all="also_missing"),
+            schema,
+            mode="r",
+            storage_options=db_storage_options,
+        )
+
+        async def _collect() -> List[Dict[str, Any]]:
+            records: List[Dict[str, Any]] = []
+            async for batch in store.read("nonexistent_table"):
+                records.extend(batch)
+            return records
+
+        result = asyncio.run(_collect())
+        assert result == []

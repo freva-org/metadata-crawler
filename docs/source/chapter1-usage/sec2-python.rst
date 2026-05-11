@@ -27,7 +27,7 @@ and raise exceptions on error.  A typical workflow consists of
    of search facets (optional).
 
 Below is a minimal example that crawls data from a local directory,
-stores it in a JSON lines catalog, and indexes it to Apache Solr:
+stores it in a metadata store, and indexes it to Apache Solr:
 
 .. code-block:: python
 
@@ -39,7 +39,7 @@ stores it in a JSON lines catalog, and indexes it to Apache Solr:
        "/path/to/second/drs_config.toml",
        store="/tmp/catalog.jsonl",
        data_object=["/path/to/data"],
-       catalogue_backend="jsonlines",
+       backend="jsonlines",
        threads=8,
        batch_size=50,
    )
@@ -68,6 +68,43 @@ stores it in a JSON lines catalog, and indexes it to Apache Solr:
    ``add("data.yaml", "drs-config.toml")`` becomes
    ``add("drs-config.toml", store="data.yaml")``. If the ``store`` keyword
    is omitted the output catalogue will be interpreted as config file.
+
+.. versionadded:: 2605.0.0
+
+    Instead of writing to file-based ``intake`` catalogues, metadata can be
+    crawled directly into a **MongoDB** or **PostgreSQL** database. Database
+    backends store catalogue metadata internally, so no YAML catalogue file
+    is needed. The backend is detected automatically from the URL scheme.
+
+**MongoDB as data store:**
+
+.. code-block:: python
+
+    add(
+       "/path/to/drs_config.toml",
+       "/path/to/second/drs_config.toml",
+       store="username:password@server/databasename",
+       data_object=["/path/to/data"],
+       backend="mongodb",
+       threads=8,
+       batch_size=50,
+    )
+
+**PostgreSQL as data store:**
+
+.. code-block:: python
+
+    add(
+       "/path/to/drs_config.toml",
+       "/path/to/second/drs_config.toml",
+       store="username:password@server/databasename",
+       data_object=["/path/to/data"],
+       backend="postgresql",
+       threads=8,
+       batch_size=50,
+    )
+
+
 
 
 Asynchronous usage
@@ -125,6 +162,13 @@ other tasks:
    ``async_add("data.yaml", "drs-config.toml")`` becomes
    ``async_add("drs-config.toml", store="data.yaml")``. If the ``store`` keyword
    is omitted the output catalogue will be interpreted as config file.
+
+.. versionadded:: 2605.0.0
+
+    Instead of writing to file-based ``intake`` catalogues, metadata can be
+    crawled directly into a **MongoDB** or **PostgreSQL** database. Database
+    backends store catalogue metadata internally, so no YAML catalogue file
+    is needed. The backend is detected automatically from the URL scheme.
 
 
 Library Reference

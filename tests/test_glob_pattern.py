@@ -1,5 +1,5 @@
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from metadata_crawler.api.metadata_stores import CatalogueReader, IndexStore
 
