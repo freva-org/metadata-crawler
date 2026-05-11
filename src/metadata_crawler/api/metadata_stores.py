@@ -1,32 +1,28 @@
-"""Metadata Storage definitions."""
+"""Metadata Storage definitions.
+
+Backend-specific implementations live in :mod:`~.stores`.  This module
+provides the catalogue writer / reader orchestration, the backend
+registry (:class:`CatalogueBackends`), and the queue consumer that
+bridges crawling with writing.
+"""
 
 from __future__ import annotations
 
-import abc
-import asyncio
-import gzip
 import json
 import multiprocessing as mp
 import os
 import re
 import time
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-from enum import Enum
-from io import BytesIO
+from enum import Enum, EnumType
 from multiprocessing import sharedctypes
 from pathlib import Path
-from types import NoneType
 from typing import (
     Any,
-    AsyncIterator,
-    ClassVar,
     Dict,
     List,
     Literal,
-    NamedTuple,
     Optional,
-    Set,
     Tuple,
     Type,
     TypeAlias,
@@ -34,8 +30,6 @@ from typing import (
     cast,
 )
 
-import fsspec
-import orjson
 import yaml
 
 import metadata_crawler
@@ -45,467 +39,58 @@ from ..utils import (
     Counter,
     MetadataCrawlerException,
     QueueLike,
-    SimpleQueueLike,
-    create_async_iterator,
-    parse_batch,
 )
 from .config import DRSConfig, SchemaField
 from .storage_backend import MetadataType
+from .stores import MongoDB, PostgreSQL
+
+# Re-export everything that was previously importable from this module
+# so that ``from ..api.metadata_stores import IndexStore`` etc. keep working.
+from .stores.base import (
+    IndexName,
+    IndexStore,
+    WriterQueueType,
+)
+from .stores.jsonlines import JSONLines
 
 ISO_FORMAT_REGEX = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?$")
 
-BATCH_SECS_THRESHOLD = 20
-BATCH_ITEM = List[Tuple[str, Dict[str, Any]]]
-
-
 ConsumerQueueType: TypeAlias = QueueLike[Union[int, Tuple[str, str, MetadataType]]]
-WriterQueueType: TypeAlias = SimpleQueueLike[Union[int, BATCH_ITEM]]
 
 _GLOB_CHARS = re.compile(r"[*?\[\]{]")
 
 
-class Stream(NamedTuple):
-    """A representation of a path stream as named tuple."""
-
-    name: str
-    path: str
+# ------------------------------------------------------------------
+# Backend registry
+# ------------------------------------------------------------------
 
 
-class DateTimeEncoder(json.JSONEncoder):
-    """JSON‐Encoder that emits datetimes as ISO‐8601 strings."""
-
-    def default(self, obj: Any) -> Any:
-        """Set default time encoding."""
-        if isinstance(obj, datetime):
-            return obj.isoformat()
-        return super().default(obj)
-
-
-class DateTimeDecoder(json.JSONDecoder):
-    """JSON Decoder that converts ISO‐8601 strings to datetime objects."""
-
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(object_hook=self._decode_objects, *args, **kwargs)
-
-    def _decode_datetime(self, obj: Any) -> Any:
-        if isinstance(obj, list):
-            return list(map(self._decode_datetime, obj))
-        elif isinstance(obj, dict):
-            for key in obj:
-                obj[key] = self._decode_datetime(obj[key])
-        if isinstance(obj, str):
-            try:
-                return datetime.fromisoformat(obj.replace("Z", "+00:00"))
-            except ValueError:
-                return obj
-        return obj
-
-    def _decode_objects(self, obj: Dict[str, Any]) -> Any:
-        for key, value in obj.items():
-            obj[key] = self._decode_datetime(value)
-        return obj
+class _BackendMeta(EnumType):
+    def __getitem__(cls, name: str) -> CatalogueBackends:
+        try:
+            return super().__getitem__(name)
+        except KeyError:
+            available = ", ".join(cls.__members__)
+            raise ValueError(
+                f"Unknown backend {name!r}. Available backends: {available}"
+            ) from None
 
 
-class IndexName(NamedTuple):
-    """A paired set of metadata indexes representations.
-
-        - `latest`: Metadata for the latest version of each dataset.
-        - `files`: Metadata for all available versions of datasets.
-
-    This abstraction is backend-agnostic and can be used with any index system,
-    such as Apache Solr cores, MongoDB collections, or SQL tables.
-
-    """
-
-    latest: str = "latest"
-    all: str = "files"
-
-
-class IndexStore:
-    """Base class for all metadata stores."""
-
-    suffix: ClassVar[str]
-    """Path suffix of the metadata store."""
-
-    driver: ClassVar[str]
-    """Intake driver."""
-
-    def __init__(
-        self,
-        path: str,
-        index_name: IndexName,
-        schema: Dict[str, SchemaField],
-        batch_size: int = 25_000,
-        mode: Literal["r", "w"] = "r",
-        storage_options: Optional[Dict[str, Any]] = None,
-        shadow: Optional[Union[str, List[str]]] = None,
-        **kwargs: Any,
-    ) -> None:
-        self.storage_options = storage_options or {}
-        self._shadow_options = (
-            shadow or [] if isinstance(shadow, (list, NoneType)) else [shadow]
-        )
-        self._ctx = mp.get_context("spawn")
-        self.queue: WriterQueueType = self._ctx.SimpleQueue()
-        self._sent = 42
-        self._fs, self._is_local_path = self.get_fs(path, **self.storage_options)
-        self._path = self._fs.unstrip_protocol(path)
-        self.schema = schema
-        self.batch_size = batch_size
-        self.index_names: Tuple[str, str] = (index_name.latest, index_name.all)
-        self.mode = mode
-        self._rows_since_flush = 0
-        self._last_flush = time.time()
-        self._paths: List[Stream] = []
-        self.max_workers: int = max(1, (os.cpu_count() or 4))
-        for name in self.index_names:
-            out_path = self.get_path(name)
-            self._paths.append(Stream(name=name, path=out_path))
-        self._timestamp_keys: Set[str] = {
-            k
-            for k, col in schema.items()
-            if getattr(getattr(col, "base_type", None), "value", None) == "timestamp"
-        }
-
-    @staticmethod
-    def get_fs(
-        uri: str, **storage_options: Any
-    ) -> Tuple[fsspec.AbstractFileSystem, bool]:
-        """Get the base-url from a path."""
-        protocol, _ = fsspec.core.split_protocol(uri)
-        protocol = protocol or "file"
-        if protocol == "s3" and "key" not in storage_options:
-            storage_options.setdefault("anon", True)
-        fs = fsspec.filesystem(protocol, **storage_options)
-        return fs, protocol == "file"
-
-    @abc.abstractmethod
-    async def read(
-        self,
-        index_name: str,
-    ) -> AsyncIterator[List[Dict[str, Any]]]:
-        """Yield batches of metadata records from a specific table.
-
-        Parameters
-        ^^^^^^^^^^
-        index_name:
-            The name of the index_name.
-
-        Yields
-        ^^^^^^
-        List[Dict[str, Any]]:
-            Deserialised metadata records.
-        """
-        yield [{}]  # pragma: no cover
-
-    def get_path(self, path_suffix: Optional[str] = None) -> str:
-        """Construct a path name for a given suffix."""
-        path = self._path.removesuffix(self.suffix)
-        new_path = (
-            f"{path}-{path_suffix}{self.suffix}"
-            if path_suffix
-            else f"{path}{self.suffix}"
-        )
-        return new_path
-
-    def join(self) -> None:
-        """Shutdown the writer task."""
-        self.queue.put(self._sent)
-        if self.proc is not None:
-            self.proc.join()
-
-    def close(self) -> None:
-        """Shutdown the write worker."""
-        self.join()
-
-    @property
-    def proc(self) -> Optional["mp.process.BaseProcess"]:
-        """The writer process."""
-        raise NotImplementedError("This property must be defined.")
-
-    @abc.abstractmethod
-    def get_args(self, index_name: str) -> Dict[str, Any]:
-        """Define the intake arguments."""
-        ...  # pragma: no cover
-
-    def catalogue_storage_options(self, path: Optional[str] = None) -> Dict[str, Any]:
-        """Construct the storage options for the catalogue."""
-        is_s3 = (path or "").startswith("s3://")
-        opts = {
-            k: v
-            for k, v in self.storage_options.items()
-            if k not in self._shadow_options
-        }
-        shadow_keys = {
-            "key",
-            "secret",
-            "token",
-            "username",
-            "user",
-            "password",
-            "secret_file",
-            "secretfile",
-        }
-        opts |= {"anon": True} if is_s3 and not shadow_keys & opts.keys() else {}
-        return opts
-
-
-class JSONLineWriter:
-    """Write JSONLines to disk."""
-
-    def __init__(
-        self,
-        *streams: Stream,
-        comp_level: int = 4,
-        shadow: Optional[Union[str, List[str]]] = None,
-        **storage_options: Any,
-    ) -> None:
-
-        self._comp_level = comp_level
-        self._f: Dict[str, BytesIO] = {}
-        self._streams = {s.name: s.path for s in streams}
-        self._records = 0
-        self.storage_options = storage_options
-        for _stream in streams:
-            fs, _ = IndexStore.get_fs(_stream.path, **storage_options)
-            parent = os.path.dirname(_stream.path).rstrip("/")
-            try:
-                fs.makedirs(parent, exist_ok=True)
-            except Exception:  # pragma: no cover
-                pass  # pragma: no cover
-            self._f[_stream.name] = fs.open(_stream.path, mode="wb")
-
-    @classmethod
-    def as_daemon(
-        cls,
-        queue: WriterQueueType,
-        semaphore: int,
-        *streams: Stream,
-        comp_level: int = 4,
-        **storage_options: Any,
-    ) -> None:
-        """Start the writer process as a daemon."""
-        this = cls(*streams, comp_level=comp_level, **storage_options)
-        get = queue.get
-        add = this._add
-        while True:
-            item = get()
-            if item == semaphore:
-                logger.info("Closing writer task.")
-                break
-            try:
-                add(cast(BATCH_ITEM, item))
-            except Exception as error:
-                logger.error(error)
-        this.close()
-
-    @staticmethod
-    def _encode_records(records: List[Dict[str, Any]]) -> bytes:
-        """Serialize a list of dicts into one JSONL bytes blob."""
-        parts = [orjson.dumps(rec) for rec in records]
-        return b"".join(p + b"\n" for p in parts)
-
-    def _gzip_once(self, payload: bytes) -> bytes:
-        """Compress a whole JSONL blob into a single gz member (fast)."""
-        return gzip.compress(payload, compresslevel=self._comp_level)
-
-    def _add(self, metadata_batch: List[Tuple[str, Dict[str, Any]]]) -> None:
-        """Add a batch of metadata to the gzip store."""
-        by_index: Dict[str, List[Dict[str, Any]]] = {name: [] for name in self._streams}
-        for index_name, metadata in metadata_batch:
-            by_index[index_name].append(metadata)
-        for index_name, records in by_index.items():
-            if not records:
-                continue
-            payload = self._encode_records(records)
-            gz = self._gzip_once(payload)
-            self._f[index_name].write(gz)
-            self._records += len(records)
-
-    def close(self) -> None:
-        """Close the files."""
-        for name, stream in self._f.items():
-            try:
-                stream.flush()
-            except Exception:
-                pass
-            stream.close()
-            if not self._records:
-                fs, _ = IndexStore.get_fs(self._streams[name], **self.storage_options)
-                fs.rm(self._streams[name])
-
-
-class JSONLines(IndexStore):
-    """Write metadata to gzipped JSONLines files."""
-
-    suffix = ".json.gz"
-    driver = "intake.source.jsonfiles.JSONLinesFileSource"
-
-    def __init__(
-        self,
-        path: str,
-        index_name: IndexName,
-        schema: Dict[str, SchemaField],
-        mode: Literal["w", "r"] = "r",
-        storage_options: Optional[Dict[str, Any]] = None,
-        shadow: Optional[Union[str, List[str]]] = None,
-        batch_size: int = 25_000,
-        **kwargs: Any,
-    ):
-        super().__init__(
-            path,
-            index_name,
-            schema,
-            mode=mode,
-            shadow=shadow,
-            storage_options=storage_options,
-            batch_size=batch_size,
-        )
-        _comp_level = int(kwargs.get("comp_level", "4"))
-        self._proc: Optional["mp.process.BaseProcess"] = None
-        if mode == "w":
-            self._proc = self._ctx.Process(
-                target=JSONLineWriter.as_daemon,
-                args=(
-                    self.queue,
-                    self._sent,
-                )
-                + tuple(self._paths),
-                kwargs={**{"comp_level": _comp_level}, **self.storage_options},
-                daemon=True,
-            )
-            self._proc.start()
-
-    @property
-    def proc(self) -> Optional["mp.process.BaseProcess"]:
-        """The writer process."""
-        return self._proc
-
-    def get_args(self, index_name: str) -> Dict[str, Any]:
-        """Define the intake arguments."""
-        path = self.get_path(index_name)
-        return {
-            "urlpath": path,
-            "compression": "gzip",
-            "text_mode": True,
-            "storage_options": self.catalogue_storage_options(path),
-        }
-
-    async def read(
-        self,
-        index_name: str,
-    ) -> AsyncIterator[List[Dict[str, Any]]]:
-        """Yield batches of metadata records from a specific table.
-
-        Parameters
-        ^^^^^^^^^^
-        index_name:
-            The name of the index_name.
-
-        Yields
-        ^^^^^^^
-        List[Dict[str, Any]]:
-            Deserialised metadata records.
-        """
-        loop = asyncio.get_running_loop()
-        ts_keys = self._timestamp_keys
-        path = self.get_path(index_name)
-        with (
-            self._fs.open(
-                path,
-                mode="rt",
-                compression="gzip",
-                encoding="utf-8",
-            ) as stream,
-            ThreadPoolExecutor(max_workers=self.max_workers) as pool,
-        ):
-            raw_lines: List[str] = []
-            async for line in create_async_iterator(stream):
-                raw_lines.append(line)
-                if len(raw_lines) >= self.batch_size:
-                    batch = await loop.run_in_executor(
-                        pool, parse_batch, raw_lines, ts_keys
-                    )
-                    yield batch
-                    raw_lines.clear()
-            if raw_lines:
-                batch = await loop.run_in_executor(
-                    pool, parse_batch, raw_lines, ts_keys
-                )
-                yield batch
-
-
-class CatalogueBackends(Enum):
+class CatalogueBackends(Enum, metaclass=_BackendMeta):
     """Define the implemented catalogue backends."""
 
+    intake = JSONLines
+    mongodb = MongoDB
+    postgresql = PostgreSQL
     jsonlines = JSONLines
 
 
-CatalogueBackendType: TypeAlias = Literal["jsonlines"]
+CatalogueBackendType: TypeAlias = Literal["mongodb", "postgresql", "intake"]
 
 
-class CatalogueReader:
-    """Backend for reading the content of an intake catalogue.
-
-    Parameters
-    ^^^^^^^^^^
-    catalogue_file:
-        Path to the intake catalogue
-    batch_size:
-        Size of the metadata chunks that should be read.
-    """
-
-    def __init__(
-        self,
-        catalogue_file: Union[str, Path],
-        batch_size: int = 2500,
-        storage_options: Optional[Dict[str, Any]] = None,
-    ) -> None:
-        catalogue_file = str(catalogue_file)
-        storage_options = storage_options or {}
-        cat = self.load_catalogue(catalogue_file, **storage_options)
-        _schema_json = cat["metadata"]["schema"]
-        schema = {s["key"]: SchemaField(**s) for k, s in _schema_json.items()}
-        index_name = IndexName(**cat["metadata"]["index_names"])
-        cls: Type[IndexStore] = CatalogueBackends[cat["metadata"]["backend"]].value
-        storage_options = cat["metadata"].get("storage_options", {})
-        self.store = cls(
-            cat["metadata"]["prefix"],
-            index_name,
-            schema,
-            mode="r",
-            batch_size=batch_size,
-            storage_options=storage_options,
-        )
-
-    @staticmethod
-    def load_catalogue(path: Union[str, Path], **storage_options: Any) -> Any:
-        """Load a intake yaml catalogue (remote or local)."""
-        fs, _ = IndexStore.get_fs(str(path), **storage_options)
-        cat_path = fs.unstrip_protocol(str(path))
-        with fs.open(cat_path) as stream:
-            return yaml.safe_load(stream.read())
-
-    @staticmethod
-    def rglob_files(path: Union[str, Path], **storage_options: Any) -> List[str]:
-        """Recursively get a find target files."""
-        path = str(path).rstrip("/")
-        fs, is_local = IndexStore.get_fs(path, **storage_options)
-        if _GLOB_CHARS.search(path):
-            return [
-                str(f) if is_local else fs.unstrip_protocol(str(f))
-                for f in fs.glob(path)
-            ]
-        try:
-            if fs.isdir(path):
-                return [
-                    str(f) if is_local else fs.unstrip_protocol(str(f))
-                    for f in fs.find(path)
-                    if f.endswith(".yml")
-                ]
-        except (FileNotFoundError, NotImplementedError):
-            pass
-        return [path]
+# ------------------------------------------------------------------
+# Queue consumer (runs in spawned processes)
+# ------------------------------------------------------------------
 
 
 class QueueConsumer:
@@ -578,19 +163,37 @@ class QueueConsumer:
         logger.info("Closing consumer %i", this_worker)
 
 
+# ------------------------------------------------------------------
+# Catalogue writer
+# ------------------------------------------------------------------
+
+
 class CatalogueWriter:
     """Create intake catalogues that store metadata entries.
 
     Parameters
     ^^^^^^^^^^
-    yaml_path:
+    catalogue_path:
         Path the to intake catalogue that should be created.
+        Can be ``None`` for database backends that store their own
+        catalogue metadata internally.
     index_name:
         Names of the metadata indexes.
     config:
         Metadata Config class
     data_store_prefix:
-        Prefix of the path/url where the metadata is stored.
+        Name or path of the metadata store.  For the *intake*
+        backend this is a filesystem path prefix for the ``.json.gz``
+        files (resolved relative to *yaml_path* unless absolute).
+        For database backends it serves as the default collection or
+        table name.  Defaults to ``"metadata"``.
+    collection:
+        Alias for *data_store_prefix* — preferred when using the
+        *mongodb* backend.  Maps directly to the MongoDB collection
+        name.
+    table:
+        Alias for *data_store_prefix* — preferred when using the
+        *sqlalchemy* backend.  Maps directly to the SQL table name.
     batch_size:
         Size of the metadata chunks that should be added to the data store.
     n_procs:
@@ -604,13 +207,15 @@ class CatalogueWriter:
 
     def __init__(
         self,
-        yaml_path: str,
+        store_uri: str,
         index_name: IndexName,
         config: DRSConfig,
         *,
-        data_store_prefix: str = "metadata",
-        backend: str = "jsonlines",
+        data_store_prefix: Optional[str] = None,
+        collection: Optional[str] = None,
+        table: Optional[str] = None,
         batch_size: int = 25_000,
+        backend: Optional[CatalogueBackendType] = None,
         n_procs: Optional[int] = None,
         storage_options: Optional[Dict[str, Any]] = None,
         shadow: Optional[Union[str, List[str]]] = None,
@@ -618,20 +223,30 @@ class CatalogueWriter:
     ) -> None:
         self.config = config
         storage_options = storage_options or {}
-        self.fs, _ = IndexStore.get_fs(yaml_path, **storage_options)
-        self.path = self.fs.unstrip_protocol(yaml_path)
-        scheme, _, _ = data_store_prefix.rpartition("://")
+        _store_path = collection or table or data_store_prefix or "metadata"
+        scheme, _, _ = _store_path.rpartition("://")
         self.silent = bool(int(os.getenv("MDC_SILENT", "0")))
-        self.backend = backend
-        if not scheme and not os.path.isabs(data_store_prefix):
-            data_store_prefix = os.path.join(
-                os.path.abspath(os.path.dirname(yaml_path)), data_store_prefix
-            )
-        self.prefix = data_store_prefix
+        self.backend = backend or CatalogueReader.backend_from_store_url(store_uri)
+        self.epoch = self._get_epoch()
+        # YAML catalogue setup -- only for file-based backends.
+        self.path: Optional[str] = store_uri
+        self.fs = None
+        if self.backend in ("intake",):
+            self.fs, _ = IndexStore.get_fs(store_uri, **storage_options)
+            self.path = self.fs.unstrip_protocol(store_uri)
+            if not scheme and not os.path.isabs(_store_path):
+                _store_path = os.path.join(
+                    os.path.abspath(os.path.dirname(store_uri)),
+                    _store_path,
+                )
+        else:
+            _store_path = self.path
+
+        self.prefix = _store_path
         self.index_name = index_name
-        cls: Type[IndexStore] = CatalogueBackends[backend].value
+        cls: Type[IndexStore] = CatalogueBackends[self.backend].value
         self.store = cls(
-            data_store_prefix,
+            _store_path,
             index_name,
             self.config.index_schema,
             mode="w",
@@ -661,6 +276,13 @@ class CatalogueWriter:
             for i in range(n_procs)
         ]
 
+    @staticmethod
+    def _get_epoch() -> float:
+        grace_env = os.getenv("MDC_GRACE_DAYS", "5")
+        grace_days = int(grace_env) if grace_env.isdigit() else 5
+        grace_sec = max(86400.0 * grace_days, 10)
+        return time.time() - grace_sec
+
     async def put(
         self,
         inp: MetadataType,
@@ -682,7 +304,7 @@ class CatalogueWriter:
             The data type the discovered object belongs to.
         name:
             Name of the catalogue, if applicable. This variable depends on
-            the cataloguing system. For example apache solr would use a `core`.
+            the cataloguing system. For example apache solr would use a ``core``.
         """
         self.queue.put((name, drs_type, inp))
 
@@ -708,17 +330,25 @@ class CatalogueWriter:
     async def close(self, create_catalogue: bool = True) -> None:
         """Close any connections."""
         self.store.join()
+        self.store.sweep(self.epoch)
         self.store.close()
         if create_catalogue:
-            self._create_catalogue_file()
+            if self.store.has_catalogue_storage:
+                self.store.write_catalogue_metadata(
+                    indexed_objects=self.ingested_objects,
+                )
+            elif self.fs:
+                self._create_catalogue_file()
 
     async def delete(self) -> None:
         """Delete all stores."""
         await self.close(False)
         for name in self.index_name.latest, self.index_name.all:
             path = self.store.get_path(name)
-            self.store._fs.rm(path) if self.store._fs.exists(path) else None
-        self.fs.rm(self.path) if self.fs.exists(self.path) else None
+            if hasattr(self.store, "_fs"):
+                self.store._fs.rm(path) if self.store._fs.exists(path) else None
+        if self.fs is not None and self.path:
+            self.fs.rm(self.path) if self.fs.exists(self.path) else None
 
     def run_consumer(self) -> None:
         """Set up all the consumers."""
@@ -726,6 +356,8 @@ class CatalogueWriter:
             task.start()
 
     def _create_catalogue_file(self) -> None:
+        if not self.fs:
+            return
         catalog = {
             "description": (
                 f"{metadata_crawler.__name__} "
@@ -767,3 +399,117 @@ class CatalogueWriter:
                 sort_keys=False,  # preserve our ordering
                 default_flow_style=False,
             )
+
+
+# ------------------------------------------------------------------
+# Catalogue reader
+# ------------------------------------------------------------------
+
+
+class CatalogueReader:
+    """Backend for reading the content of an intake catalogue.
+
+    Parameters
+    ^^^^^^^^^^
+    storage_uri:
+        Path to the intake catalogue for intake backends / connection url for
+        db based backends.
+    batch_size:
+        Size of the metadata chunks that should be read.
+    """
+
+    def __init__(
+        self,
+        store_url: Union[str, Path],
+        batch_size: int = 2500,
+        storage_options: Optional[Dict[str, Any]] = None,
+        backend: Optional[CatalogueBackendType] = None,
+    ) -> None:
+        backend = backend or self.backend_from_store_url(store_url)
+        store_url = str(store_url)
+        storage_options = storage_options or {}
+        meta = self.read_catalogue_metadata(store_url, backend, **storage_options)
+        store_cls: Type[IndexStore] = CatalogueBackends[backend].value
+        if store_cls.has_catalogue_storage is False:
+            store_cls = CatalogueBackends[meta["backend"]].value
+            store_path = meta["prefix"]
+            storage_options = meta.get("storage_options", {})
+        else:
+            store_path = store_url
+        _schema_json = meta["schema"]
+        schema = {s["key"]: SchemaField(**s) for k, s in _schema_json.items()}
+        index_name = IndexName(**meta["index_names"])
+
+        self.store = store_cls(
+            store_path,
+            index_name,
+            schema,
+            mode="r",
+            batch_size=batch_size,
+            storage_options=storage_options,
+        )
+
+    @classmethod
+    def read_catalogue_metadata(
+        cls,
+        uri: Union[str, Path],
+        backend: Optional[CatalogueBackendType] = None,
+        **storage_options: Any,
+    ) -> Dict[str, Any]:
+        """Read the metadata from a metadata store."""
+        backend = backend or cls.backend_from_store_url(uri)
+        store_cls: Type[IndexStore] = CatalogueBackends[backend].value
+        return store_cls.read_catalogue_metadata(str(uri), **storage_options)
+
+    @staticmethod
+    def backend_from_store_url(
+        store_url: Union[Path, str],
+    ) -> CatalogueBackendType:
+        """Guess the storage backend from a given storage url.
+
+        Parameters
+        ^^^^^^^^^^
+        store_url:
+            Connection URI for the database backend, e.g.
+            ``/home/user/foo.yml``
+            ``s3:///store/user/foo.yml``
+            ``mongodb://localhost:27017`` or
+            ``postgresql://user:pw@host/dbname``.
+        """
+        suffix = Path(store_url).suffix.lower()
+        if isinstance(store_url, Path) or suffix in (".yml", ".yaml"):
+            return "intake"
+        store_url = str(store_url)
+        protocol = store_url.partition("://")[0] or os.getenv("MDC_BACKEND", "")
+        if protocol.startswith("mongo"):
+            return "mongodb"
+        return "postgresql"
+
+    @classmethod
+    def rglob_stores(
+        cls,
+        path: Union[str, Path],
+        backend: Optional[CatalogueBackendType] = None,
+        **storage_options: Any,
+    ) -> List[str]:
+        """Recursively get a find target files."""
+        backend = backend or cls.backend_from_store_url(path)
+        path = str(path).rstrip("/")
+        if backend not in ("intake", "jsonlines"):
+            return [path]
+        fs, is_local = IndexStore.get_fs(path, **storage_options)
+        if _GLOB_CHARS.search(path):
+            return [
+                str(f) if is_local else fs.unstrip_protocol(str(f))
+                for f in fs.glob(path)
+            ]
+        try:
+            if fs.isdir(path):
+                return [
+                    str(f) if is_local else fs.unstrip_protocol(str(f))
+                    for f in fs.find(path)
+                    if f.endswith(".yml")
+                ]
+        except (FileNotFoundError, NotImplementedError):
+            pass
+        return [path]

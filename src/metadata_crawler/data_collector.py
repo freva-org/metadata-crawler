@@ -24,8 +24,9 @@ from typing import (
 import tomlkit
 
 from .api.config import CrawlerSettings, DRSConfig
-from .api.metadata_stores import CatalogueWriter, IndexName
+from .api.metadata_stores import CatalogueWriter
 from .api.storage_backend import PathTemplate
+from .api.stores import IndexName
 from .logger import logger
 from .utils import (
     Counter,
@@ -144,16 +145,12 @@ class DataCollector:
         silent = self.ingest_queue.silent
         if iterable:
             try:
-                _sub_dirs = self.config.datasets[drs_type].backend.iterdir(
-                    search_dir
-                )
+                _sub_dirs = self.config.datasets[drs_type].backend.iterdir(search_dir)
             except Exception as error:
                 logger.error(error)
                 return
         else:
-            _sub_dirs = cast(
-                AsyncIterator[str], create_async_iterator([search_dir])
-            )
+            _sub_dirs = cast(AsyncIterator[str], create_async_iterator([search_dir]))
         rank = 0
         sub_dirs = []
         async for _dir in _sub_dirs:
@@ -165,9 +162,7 @@ class DataCollector:
             ):
                 if self._test_env():
                     return
-                await self.ingest_queue.put(
-                    _inp, drs_type, name=self.index_name.all
-                )
+                await self.ingest_queue.put(_inp, drs_type, name=self.index_name.all)
                 if rank == 0 or is_versioned is False:
                     await self.ingest_queue.put(
                         _inp, drs_type, name=self.index_name.latest
@@ -222,9 +217,7 @@ class DataCollector:
 
         if op is not None:
             # enqueue the heavy scan; workers will run _ingest_dir concurrently
-            await self._scan_queue.put(
-                (drs_type, inp_dir, iterable, is_versioned)
-            )
+            await self._scan_queue.put((drs_type, inp_dir, iterable, is_versioned))
             return
 
         # otherwise, recurse sequentially (cheap) — no task per directory
@@ -265,9 +258,7 @@ class DataCollector:
                         " your search path."
                     )
 
-                await self._iter_content(
-                    drs_type, path, pos, is_versioned=is_versioned
-                )
+                await self._iter_content(drs_type, path, pos, is_versioned=is_versioned)
 
             # wait until all queued scan items are processed
             await self._scan_queue.join()
@@ -276,9 +267,7 @@ class DataCollector:
             for _ in range(self._scan_concurrency):
                 await self._scan_queue.put(None)
 
-        logger.info(
-            "%i ingestion tasks have been completed", len(self._search_objects)
-        )
+        logger.info("%i ingestion tasks have been completed", len(self._search_objects))
         self.ingest_queue.join_all_tasks()
         if self.ingest_queue.silent is False:
             self._print_status.clear()

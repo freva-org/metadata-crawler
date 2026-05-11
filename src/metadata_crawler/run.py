@@ -27,8 +27,8 @@ from .api.config import CrawlerSettings, Datasets, DRSConfig, strip_protocol
 from .api.metadata_stores import (
     CatalogueBackendType,
     CatalogueReader,
-    IndexName,
 )
+from .api.stores import IndexName
 from .data_collector import DataCollector
 from .logger import apply_verbosity, get_level_from_verbosity, logger
 from .utils import (
@@ -41,30 +41,37 @@ from .utils import (
     timedelta_to_str,
 )
 
-FilesArg = Optional[Union[str, Path, Sequence[Union[str, Path]]]]
+FilesArg = Union[str, Path, Sequence[Union[str, Path]]]
 
 
 @lru_cache(maxsize=None)
 def _norm_files_cached(
-    catalogue_files: Tuple[str, ...], opts: FrozenSet[Tuple[str, str]]
+    uris: Tuple[str, ...],
+    backend: Optional[CatalogueBackendType],
+    opts: FrozenSet[Tuple[str, str]],
 ) -> Tuple[str, ...]:
     storage_options = dict(opts)
-    files: Tuple[str, ...] = ()
-    for _file in catalogue_files:
-        files += tuple(CatalogueReader.rglob_files(_file, **storage_options))
-    print(files)
-    return files
+    flat_uris: Tuple[str, ...] = ()
+    for _uri in uris:
+        flat_uris += tuple(
+            CatalogueReader.rglob_stores(_uri, backend=backend, **storage_options)
+        )
+    return flat_uris
 
 
-def _norm_files(catalogue_files: FilesArg, **storage_options: Any) -> Tuple[str, ...]:
-    if catalogue_files is None:
+def _norm_files(
+    metadata_stores: Optional[Union[FilesArg, Sequence[FilesArg]]],
+    backend: Optional[CatalogueBackendType] = None,
+    **storage_options: Any,
+) -> Tuple[str, ...]:
+    if metadata_stores is None:
         return ("",)
-    raw = (
-        (str(catalogue_files),)
-        if isinstance(catalogue_files, (str, Path))
-        else tuple(str(p) for p in catalogue_files)
+    raw: Tuple[str, ...] = (
+        (str(metadata_stores),)
+        if isinstance(metadata_stores, (str, Path))
+        else tuple(str(p) for p in metadata_stores)
     )
-    return _norm_files_cached(raw, frozenset(storage_options.items()))
+    return _norm_files_cached(raw, backend, frozenset(storage_options.items()))
 
 
 def _match(match: str, items: Collection[str]) -> List[str]:
@@ -80,14 +87,18 @@ def _match(match: str, items: Collection[str]) -> List[str]:
 
 
 def _get_num_of_indexed_objects(
-    catalogue_files: FilesArg, storage_options: Optional[Dict[str, Any]] = None
+    metadata_stores: Optional[Union[Sequence[FilesArg], FilesArg]],
+    backend: Optional[CatalogueBackendType] = None,
+    storage_options: Optional[Dict[str, Any]] = None,
 ) -> int:
     num_objects = 0
     storage_options = storage_options or {}
-    for cat_file in _norm_files(catalogue_files, **storage_options):
+    for _uri in _norm_files(metadata_stores, backend=backend, **storage_options):
         try:
-            cat = CatalogueReader.load_catalogue(cat_file, **storage_options)
-            num_objects += cat.get("metadata", {}).get("indexed_objects", 0)
+            cat = CatalogueReader.read_catalogue_metadata(
+                _uri, backend=backend, **storage_options
+            )
+            num_objects += cat.get("indexed_objects", 0)
         except (FileNotFoundError, IsADirectoryError, yaml.parser.ParserError):
             pass
     return num_objects
@@ -126,8 +137,8 @@ def _get_search(
 async def async_call(
     index_system: str,
     method: str,
+    uris: Optional[Sequence[str]] = None,
     batch_size: int = 2500,
-    catalogue_files: Optional[Sequence[Union[Path, str]]] = None,
     verbosity: int = 0,
     log_suffix: Optional[str] = None,
     num_objects: int = 0,
@@ -152,12 +163,11 @@ async def async_call(
             )
             raise ValueError(msg) from None
         storage_options = kwargs.pop("storage_options", {})
-        flat_files = _norm_files(catalogue_files, **storage_options) or [""]
         progress.start()
-        for cf in flat_files:
+        for _uri in uris or [""]:
             async with cls(
                 batch_size=batch_size,
-                catalogue_file=cf or None,
+                uri=_uri or None,
                 storage_options=storage_options,
                 progress=progress,
             ) as obj:
@@ -172,10 +182,11 @@ async def async_call(
 
 async def async_index(
     index_system: str,
-    *catalogue_files: Union[Path, str, List[str], List[Path]],
+    *metadata_stores: FilesArg,
     batch_size: int = 2500,
     verbosity: int = 0,
     log_suffix: Optional[str] = None,
+    backend: Optional[CatalogueBackendType] = None,
     **kwargs: Any,
 ) -> None:
     """Index metadata in the indexing system.
@@ -185,14 +196,17 @@ async def async_index(
 
     index_system:
         The index server where the metadata is indexed.
-    catalogue_file:
-        Path to the file where the metadata was stored.
+    metadata_stores:
+        Uri to the metadata store(s).
     batch_size:
         If the index system supports batch-sizes, the size of the batches.
     verbosity:
         Set the verbosity of the system.
     log_suffix:
         Add a suffix to the log file output.
+    backend: str
+        Backend to be used for the metadata store. If None given (default)
+        the backend will be guessed from the storage uri
 
     Other Parameters
     ^^^^^^^^^^^^^^^^
@@ -213,16 +227,24 @@ async def async_index(
             batch_size=1000,
         )
     """
-    kwargs.setdefault("catalogue_files", catalogue_files)
+    storage_options: Dict[str, Any] = kwargs.get("storage_options", {})
+    _mdata: Optional[Union[FilesArg, Sequence[FilesArg]]] = kwargs.pop(
+        "metadata_stores", None
+    )
+    _mdata = metadata_stores or _mdata
+    uris = _norm_files(_mdata, backend=backend, **storage_options)
+    print(uris)
     await async_call(
         index_system,
         "index",
         batch_size=batch_size,
         verbosity=verbosity,
         log_suffix=log_suffix,
+        uris=_norm_files(_mdata, backend=backend, **storage_options),
         num_objects=_get_num_of_indexed_objects(
-            kwargs["catalogue_files"],
-            storage_options=kwargs.get("storage_options"),
+            _mdata,
+            backend=backend,
+            storage_options=storage_options,
         ),
         **kwargs,
     )
@@ -281,12 +303,15 @@ async def async_add(
     store: Optional[Union[str, Path, Dict[str, Any], tomlkit.TOMLDocument]] = None,
     data_object: Optional[Union[str, List[str]]] = None,
     data_set: Optional[Union[List[str], str]] = None,
-    data_store_prefix: str = "metadata",
+    data_store_prefix: Optional[str] = None,
+    collection: Optional[str] = None,
+    table: Optional[str] = None,
     batch_size: int = 25_000,
+    catalogue_backend: Optional[CatalogueBackendType] = None,
+    backend: Optional[CatalogueBackendType] = None,
     comp_level: int = 4,
     storage_options: Optional[Dict[str, Any]] = None,
     shadow: Optional[Union[str, List[str]]] = None,
-    catalogue_backend: CatalogueBackendType = "jsonlines",
     latest_version: str = IndexName().latest,
     all_versions: str = IndexName().all,
     password: bool = False,
@@ -323,7 +348,23 @@ async def async_add(
         in the drs-config file. By default all datasets are crawled.
         Names can contain wildcards such as ``xces-*``.
     data_store_prefix: str
-        Absolute path or relative path to intake catalogue source
+        Name or path of the metadata store.  For the *jsonlines*
+        backend this is a filesystem path prefix for the ``.json.gz``
+        files (resolved relative to *yaml_path* unless absolute).
+        For database backends it serves as the default collection or
+        table name.  Defaults to ``"metadata"``.
+    collection: str
+        Alias for *data_store_prefix* — preferred when using the
+        *mongodb* backend.  Maps directly to the MongoDB collection
+        name.
+    table: str
+        Alias for *data_store_prefix* — preferred when using the
+        *sql* backend.  Maps directly to the SQL table name.
+    backend: str
+        Backend to be used for the metadata store. If None given (default)
+        the backend will be guessed from the storage uri
+    catalogue_backend: str
+        Alias for ``backend``
     batch_size:
         Batch size that is used to collect the meta data. This can affect
         performance.
@@ -334,8 +375,6 @@ async def async_add(
     shadow:
         'Shadow' this storage options. This is useful to hide secrets in public
         data catalogues.
-    catalogue_backend:
-        Intake catalogue backend
     latest_version:
         Name of the core holding 'latest' metadata.
     all_versions:
@@ -374,6 +413,8 @@ async def async_add(
     old_level = apply_verbosity(verbosity, suffix=log_suffix)
     eval_env_dir = os.getenv("EVALUATION_SYSTEM_CONFIG_DIR")
     cfg_files_fallback = (eval_env_dir,) if eval_env_dir else ()
+
+    backend = backend or catalogue_backend
     try:
         os.environ["MDC_LOG_INIT"] = "1"
         os.environ["MDC_LOG_LEVEL"] = str(get_level_from_verbosity(verbosity))
@@ -407,11 +448,13 @@ async def async_add(
             *_get_search(cfg.datasets, data_object, data_set),
             batch_size=batch_size,
             comp_level=comp_level,
-            backend=catalogue_backend,
-            data_store_prefix=data_store_prefix,
+            data_store_prefix=data_store_prefix or "",
+            table=table or "",
+            collection=collection or "",
             n_procs=n_procs,
             storage_options=storage_options or {},
             shadow=shadow,
+            backend=backend,
             **kwargs,
         ) as data_col:
             await data_col.ingest_data()

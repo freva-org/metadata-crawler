@@ -1,9 +1,7 @@
-import asyncio
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Literal, overload
+from typing import Any, Literal, Optional, overload
 
-import uvloop
 from tomlkit import TOMLDocument
 
 from ._version import __version__ as __version__
@@ -61,7 +59,7 @@ def add(
     data_object: str | list[str] | None = None,
     data_set: str | list[str] | None = None,
     data_store_prefix: str = "metadata",
-    catalogue_backend: CatalogueBackendType = "jsonlines",
+    catalogue_backend: Optional[CatalogueBackendType] = None,
     batch_size: int = 25000,
     comp_level: int = 4,
     storage_options: dict[str, Any] | None = None,
@@ -75,3 +73,8 @@ def add(
     fail_under: int = -1,
     **kwargs: Any,
 ) -> None: ...
+def glance_metadata(
+    store: Path | str,
+    backend: Optional[CatalogueBackendType] = None,
+    **storage_options: Any,
+) -> dict[str, Any]: ...

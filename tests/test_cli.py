@@ -17,7 +17,7 @@ from typing import (
 )
 
 import pytest
-
+from pytest_mock import MockerFixture
 import metadata_crawler.cli as mc_cli
 
 # -----------------------------
@@ -47,9 +47,7 @@ class Recorder:
 
 
 class FakeConfig:
-    def __init__(
-        self, doc: Dict[str, Any], perserve_comments: bool = False
-    ) -> None:
+    def __init__(self, doc: Dict[str, Any], perserve_comments: bool = False) -> None:
         self.merged_doc = doc
 
     def dumps(self) -> str:
@@ -101,6 +99,7 @@ def _get_config(
     *_cfg: str,
     preserve_comments: bool = True,
     result: Optional[Dict[str, Any]] = None,
+    **kwarg: Any,
 ) -> FakeConfig:
     return FakeConfig(result)
 
@@ -112,9 +111,7 @@ def test_crawl_parsing_and_dispatch(
 
     # Patch the functions used by the CLI
     monkeypatch.setattr(mc_cli, "add", rec.record("add"))
-    monkeypatch.setattr(
-        mc_cli, "get_config", partial(_get_config, result={"ok": True})
-    )
+    monkeypatch.setattr(mc_cli, "get_config", partial(_get_config, result={"ok": True}))
     monkeypatch.setattr(
         mc_cli, "load_plugins", lambda ep: {}
     )  # no plugin subcommands in this test
@@ -185,13 +182,44 @@ def test_crawl_parsing_and_dispatch(
     assert kw["verbosity"] == 2
 
 
+def test_glance_subcommand_prints_text(
+    mocker: MockerFixture, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Patch config + logging
+    import yaml
+
+    mocker.patch(
+        "metadata_crawler.cli.glance_metadata",
+        return_value={"x": 1},
+    )
+
+    # Run full CLI entrypoint
+    mc_cli.cli(["glance", "localhost", "-vvvvv"])
+
+    out = yaml.safe_load(capsys.readouterr().out)
+    assert out == {"x": 1}
+
+
+def test_glance_subcommand_prints_json(
+    mocker: MockerFixture, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import json
+
+    mocker.patch(
+        "metadata_crawler.cli.glance_metadata",
+        return_value={"x": 1},
+    )
+    mc_cli.cli(["glance", "localhost", "--json"])
+
+    out = json.loads(capsys.readouterr().out)
+    assert out == {"x": 1}
+
+
 def test_config_subcommand_prints_text(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     # Patch config + logging
-    monkeypatch.setattr(
-        mc_cli, "get_config", partial(_get_config, result={"x": 1})
-    )
+    monkeypatch.setattr(mc_cli, "get_config", partial(_get_config, result={"x": 1}))
     monkeypatch.setattr(mc_cli, "load_plugins", lambda ep: {})
 
     # Run full CLI entrypoint
@@ -204,9 +232,7 @@ def test_config_subcommand_prints_text(
 def test_config_subcommand_prints_json(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(
-        mc_cli, "get_config", partial(_get_config, result={"x": 1})
-    )
+    monkeypatch.setattr(mc_cli, "get_config", partial(_get_config, result={"x": 1}))
     monkeypatch.setattr(mc_cli, "load_plugins", lambda ep: {})
 
     mc_cli.cli(["config", "-c", "conf.toml", "--json"])
@@ -260,9 +286,7 @@ def test_plugin_index_and_delete_wiring(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(
         mc_cli, "delete", lambda *a, **kw: rec.calls.append(Call("delete", a, kw))
     )
-    monkeypatch.setattr(
-        mc_cli, "load_plugins", lambda ep: {"dummy": DummyIngester}
-    )
+    monkeypatch.setattr(mc_cli, "load_plugins", lambda ep: {"dummy": DummyIngester})
 
     # Build CLI with plugin subcommands
     parser = mc_cli.ArgParse()
@@ -290,7 +314,7 @@ def test_plugin_index_and_delete_wiring(monkeypatch: pytest.MonkeyPatch) -> None
     # The CLI forwards parsed params using the parameter names (dest=param_name)
     assert kw["path"] == "/data"
     assert kw["limit"] == 5
-    assert kw["catalogue_files"] == ["cat1.yml", "cat2.yml"]
+    assert kw["metadata_stores"] == ["cat1.yml", "cat2.yml"]
     assert kw["index_system"] == "dummy"
 
     # --- delete path ---

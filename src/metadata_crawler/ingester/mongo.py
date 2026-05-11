@@ -5,19 +5,32 @@ from __future__ import annotations
 import asyncio
 import re
 from functools import cached_property
-from typing import Annotated, Any, Dict, List, Optional, Tuple
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    Any,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    TypeAlias,
+)
 from urllib.parse import ParseResult, parse_qs, urlencode, urlparse, urlunparse
 
-from motor.motor_asyncio import (
-    AsyncIOMotorClient,
-    AsyncIOMotorCollection,
-    AsyncIOMotorDatabase,
-)
-from pymongo import DeleteMany, UpdateOne
+from pymongo import AsyncMongoClient, DeleteMany, UpdateOne
 
 from ..api.cli import cli_function, cli_parameter
 from ..api.index import BaseIndex
 from ..logger import logger
+
+if TYPE_CHECKING:
+    from pymongo.asynchronous.collection import AsyncCollection
+    from pymongo.asynchronous.database import AsyncDatabase
+    from pymongo.typings import _DocumentType
+
+
+MetadataRecord: TypeAlias = Dict[str, Any]
+"""A single metadata record: key -> value of heterogeneous types."""
 
 
 class MongoIndex(BaseIndex):
@@ -26,7 +39,7 @@ class MongoIndex(BaseIndex):
     def __post_init__(self) -> None:
         self._raw_uri = ""
         self._url = ""
-        self._client: Optional[AsyncIOMotorClient[Any]] = None
+        self._client: Optional[AsyncMongoClient[MetadataRecord]] = None
 
     @property
     def uri(self) -> str:
@@ -59,15 +72,15 @@ class MongoIndex(BaseIndex):
         raise ValueError("The schema doesn't define a unique value.")
 
     @property
-    def client(self) -> AsyncIOMotorClient[Any]:
+    def client(self) -> AsyncMongoClient[MetadataRecord]:
         """Get the mongoDB client."""
         if self._client is None:
             logger.debug("Creating async mongoDB client: %s", self.uri)
-            self._client = AsyncIOMotorClient(self.uri)
+            self._client = AsyncMongoClient(self.uri)
         return self._client
 
     async def _bulk_upsert(
-        self, chunk: List[Dict[str, Any]], collection: AsyncIOMotorCollection[Any]
+        self, chunk: List[Dict[str, Any]], collection: "AsyncCollection[_DocumentType]"
     ) -> None:
         ops = [
             UpdateOne(
@@ -80,7 +93,7 @@ class MongoIndex(BaseIndex):
         await collection.bulk_write(ops, ordered=False)
 
     async def _index_collection(
-        self, db: AsyncIOMotorDatabase[Any], collection: str, suffix: str = ""
+        self, db: "AsyncDatabase[MetadataRecord]", collection: str, suffix: str = ""
     ) -> None:
         """Index a collection."""
         col = collection + suffix
@@ -90,7 +103,7 @@ class MongoIndex(BaseIndex):
 
     async def _prep_db_connection(
         self, database: str, url: str
-    ) -> AsyncIOMotorDatabase[Any]:
+    ) -> "AsyncDatabase[MetadataRecord]":
 
         await self.close()
         self._raw_uri = url or ""
@@ -134,9 +147,7 @@ class MongoIndex(BaseIndex):
         async with asyncio.TaskGroup() as tg:
             for collection in self.index_names:
                 tg.create_task(
-                    self._index_collection(
-                        db, collection, suffix=index_suffix or ""
-                    )
+                    self._index_collection(db, collection, suffix=index_suffix or "")
                 )
 
     async def close(self) -> None:

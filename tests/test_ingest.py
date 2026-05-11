@@ -65,7 +65,7 @@ def test_ingest_mongo(
                 store=cat_file,
                 data_store_prefix=f"{ds}-mongodata",
                 data_set=[f"obs-{ds}"],
-                catalogue_backend="jsonlines",
+                catalogue_backend="intake",
             )
             cat = intake.open_catalog(cat_file)
             lens.append(len(cat.latest.read()))

@@ -9,11 +9,12 @@ from typing import Any, Dict, Iterator
 
 import numpy as np
 import pandas as pd
+import pymongo
 import pytest
+import psycopg
 import requests
 import toml
 import xarray as xr
-from pymongo import MongoClient
 
 
 class ThreadContext:
@@ -123,16 +124,16 @@ def data_dir() -> Iterator[Path]:
 
 @pytest.fixture(scope="function")
 def mongo_server() -> Iterator[Dict[str, str]]:
-    server = "mongodb://mongo:secret@localhost:27017"
+    server = "mongodb://metadata:secret@localhost:27017"
     db = "metadata"
-    with MongoClient(server) as client:
+    with pymongo.MongoClient(server) as client:
         _db = client[db]
         for col in ("latest", "files"):
             _db[col].delete_many({})
     try:
         yield {"url": server, "database": db}
     finally:
-        with MongoClient(server) as client:
+        with pymongo.MongoClient(server) as client:
             db = client[db]
             for col in ("latest", "files"):
                 db[col].delete_many({})
@@ -156,6 +157,66 @@ def solr_server() -> Iterator[str]:
                 json={"delete": {"query": "*:*"}},
             )
             res.raise_for_status()
+
+
+@pytest.fixture(scope="session")
+def db_storage_options() -> Dict[str, str]:
+    return {
+        "username": "metadata",
+        "password": "secret",
+        "database": "metadata",
+    }
+
+
+@pytest.fixture(scope="function")
+def mongo_client(
+    db_storage_options: Dict[str, str],
+) -> Iterator[pymongo.database.Database]:
+
+    client = pymongo.MongoClient(
+        "mongodb://localhost:27017",
+        username=db_storage_options["username"],
+        password=db_storage_options["password"],
+        authSource="admin",
+    )
+    db = client[db_storage_options["database"]]
+
+    def _cleanup():
+        for name in db.list_collection_names():
+            if not name.startswith("system."):
+                db[name].delete_many({})
+
+    _cleanup()
+    yield client
+    # Clean up all non-system collections
+    _cleanup()
+    client.close()
+
+
+@pytest.fixture(scope="function")
+def pg_cursor(db_storage_options: Dict[str, str]) -> Iterator[psycopg.Cursor]:
+    conn = psycopg.connect(
+        host="localhost",
+        port=5432,
+        user=db_storage_options["username"],
+        password=db_storage_options["password"],
+        dbname=db_storage_options["database"],
+    )
+    cur = conn.cursor()
+
+    def _del_content():
+        cur.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+        tables = [row[0] for row in cur.fetchall()]
+        for table in tables:
+            cur.execute(f"DELETE FROM {table}")
+        conn.commit()
+
+    _del_content()
+    yield cur
+    # Clean up all non-system tables
+    _del_content()
+    cur.close()
+    conn.close()
 
 
 @pytest.fixture(scope="session")
