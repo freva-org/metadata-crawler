@@ -1,5 +1,7 @@
 # Testing things
 *.json.gz
+!tests/mock_crawls/*.json.gz
+!tests/mock_crawls/*.yml
 *.parquet
 data*.yml
 data*.yaml
