@@ -12,6 +12,7 @@ import psycopg
 import pymongo
 import pytest
 import requests
+import sqlalchemy as sa
 import yaml
 from pymongo import MongoClient
 
@@ -51,7 +52,8 @@ def db_cleanup(request, db_storage_options):
     """Clean the relevant database before and after the test."""
     from metadata_crawler.api.stores.base import Stream
     from metadata_crawler.api.stores.mongodb import MongoDB, MongoDBWriter
-    from metadata_crawler.api.stores.postgresql import PostgreSQL, PostgreSQLWriter
+    from metadata_crawler.api.stores.postgresql import (PostgreSQL,
+                                                        PostgreSQLWriter)
 
     cur_dir = os.getcwd()
     os.chdir(Path(__file__).parent / "mock_crawls")
@@ -72,13 +74,13 @@ def db_cleanup(request, db_storage_options):
                 unique_key="file",
                 schema_json=json.dumps(meta["schema"]),
             )
+            engine = sa.create_engine(writer._url, pool_pre_ping=True)
             for batch in data:
                 for entry in map(_convert, batch):
                     writer.add([("latest", entry)])
                     writer.add([("files", entry)])
-            url = "postgresql://localhost:5432"
-            PostgreSQL._write_metadata(writer._engine, meta)
-            writer._engine.dispose()
+            PostgreSQL._write_metadata(engine, meta)
+            engine.dispose()
         if backend in (None, "mongodb"):
             url = "mongodb://localhost:27017"
             s = [Stream(name=n, path=url) for n in ("latest", "files")]
