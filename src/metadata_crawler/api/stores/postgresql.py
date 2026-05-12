@@ -330,30 +330,38 @@ class PostgreSQL(IndexStore):
         """The writer process."""
         return self._proc
 
-    def write_catalogue_metadata(self, payload: Dict[str, Any]) -> None:
-        """Store catalogue metadata in a ``_catalogue`` table."""
+    @classmethod
+    def _write_metadata(cls, engine: "sa.Engine", payload: Dict[str, Any]) -> None:
         try:
             import sqlalchemy as sa
             from sqlalchemy.dialects.postgresql import insert
         except ImportError:
             raise ImportError(_IMPORT_ERR) from None
         value = json.dumps(payload)
+        meta_table: sa.Table = sa.Table(
+            cls._CATALOGUE_TABLE,
+            sa.MetaData(),
+            sa.Column("key", sa.Text(), primary_key=True),
+            sa.Column("value", sa.Text()),
+        )
+        meta_table.create(engine, checkfirst=True)
+        with engine.begin() as conn:
+            stmt = insert(meta_table).values(key="metadata", value=value)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["key"],
+                set_={"value": value},
+            )
+            conn.execute(stmt)
+
+    def write_catalogue_metadata(self, payload: Dict[str, Any]) -> None:
+        """Store catalogue metadata in a ``_catalogue`` table."""
+        try:
+            import sqlalchemy as sa
+        except ImportError:
+            raise ImportError(_IMPORT_ERR) from None
         engine: sa.Engine = sa.create_engine(self._url, pool_pre_ping=True)
         try:
-            meta_table: sa.Table = sa.Table(
-                self._CATALOGUE_TABLE,
-                sa.MetaData(),
-                sa.Column("key", sa.Text(), primary_key=True),
-                sa.Column("value", sa.Text()),
-            )
-            meta_table.create(engine, checkfirst=True)
-            with engine.begin() as conn:
-                stmt = insert(meta_table).values(key="metadata", value=value)
-                stmt = stmt.on_conflict_do_update(
-                    index_elements=["key"],
-                    set_={"value": value},
-                )
-                conn.execute(stmt)
+            self._write_metadata(engine, payload)
         finally:
             engine.dispose()
 

@@ -83,7 +83,6 @@ def _sanitise_uri(uri: str, timeout_ms: int = 5000, **kwargs: Any) -> str:
     # Netloc
     host = parsed.hostname or "localhost"
     port = f":{parsed.port}" if parsed.port else f":{port}"
-    logger.critical("%s %s", parsed, port)
     if username:
         creds = quote_plus(str(username))
         if password:
@@ -115,7 +114,6 @@ def _sanitise_uri(uri: str, timeout_ms: int = 5000, **kwargs: Any) -> str:
             parsed.fragment,
         )
     )
-    logger.critical(result)
     return result
 
 
@@ -270,6 +268,19 @@ class MongoDB(IndexStore):
         """The writer process."""
         return self._proc
 
+    @classmethod
+    def _write_metadata(
+        cls, client: "MongoClient[MetadataRecord]", payload: Dict[str, Any]
+    ) -> None:
+        payload["_id"] = "metadata"
+        db = client.get_default_database(default="metadata")
+        col = db[cls._CATALOGUE_COLLECTION]
+        col.replace_one(
+            {"_id": "metadata"},
+            payload,
+            upsert=True,
+        )
+
     def write_catalogue_metadata(self, payload: Dict[str, Any]) -> None:
         """Store catalogue metadata in a ``_catalogue`` collection."""
         try:
@@ -280,13 +291,7 @@ class MongoDB(IndexStore):
         client: "MongoClient[MetadataRecord]" = _MongoClient(self._uri)
         payload["_id"] = "metadata"
         try:
-            db = client.get_default_database(default="metadata")
-            col = db[self._CATALOGUE_COLLECTION]
-            col.replace_one(
-                {"_id": "metadata"},
-                payload,
-                upsert=True,
-            )
+            self._write_metadata(client, payload)
         finally:
             client.close()
 

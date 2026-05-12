@@ -2,26 +2,149 @@
 
 import os
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import Any, Dict, List
-
+from datetime import datetime
 import mock
+import psycopg
+import pymongo
 import pytest
 import requests
 from pymongo import MongoClient
+import intake
+from metadata_crawler import delete, index
+import yaml
+import json
 
-from metadata_crawler import add, delete, index
+
+def _read_catalogues() -> List[Any]:
+    data = []
+    cur_dir = os.getcwd()
+    os.chdir(Path(__file__).parent / "mock_crawls")
+    for _file in Path(".").rglob("*.yml"):
+        data.append(intake.open_catalog(_file).latest.read())
+    os.chdir(cur_dir)
+    return data
 
 
-@pytest.mark.parametrize("backend", ["intake", "mongodb", "postgresql"])
+def _get_metadata() -> Dict[str, Any]:
+    for _file in Path(Path(__file__).parent).rglob("*.yml"):
+        return yaml.safe_load(_file.read_text())["metadata"]
+
+
+def _convert(metadata: Dict[str, Any]) -> Dict[str, Any]:
+    out = {}
+    for key, entry in metadata.items():
+        if key == "time":
+            out[key] = [
+                datetime.fromisoformat(entry[0]),
+                datetime.fromisoformat(entry[1]),
+            ]
+        else:
+            out[key] = entry
+    return out
+
+
+@pytest.fixture()
+def db_cleanup(request, db_storage_options):
+    """Clean the relevant database before and after the test."""
+    from metadata_crawler.api.stores.base import Stream
+    from metadata_crawler.api.stores.postgresql import PostgreSQLWriter, PostgreSQL
+    from metadata_crawler.api.stores.mongodb import MongoDBWriter, MongoDB
+
+    cur_dir = os.getcwd()
+    os.chdir(Path(__file__).parent / "mock_crawls")
+
+    meta = _get_metadata()
+    backend = request.param if hasattr(request, "param") else None
+    data = _read_catalogues()
+
+    def _add_data():
+        if backend in (None, "postgresql"):
+            url = "postgresql://localhost:5432"
+            s = [Stream(name=n, path=url) for n in ("latest", "files")]
+            writer = PostgreSQLWriter(
+                *s,
+                username=db_storage_options["username"],
+                password=db_storage_options["password"],
+                database=db_storage_options["database"],
+                unique_key="file",
+                schema_json=json.dumps(meta["schema"]),
+            )
+            for batch in data:
+                for entry in map(_convert, batch):
+                    writer.add([("latest", entry)])
+                    writer.add([("files", entry)])
+            url = "postgresql://localhost:5432"
+            PostgreSQL._write_metadata(writer._engine, meta)
+            writer._engine.dispose()
+        if backend in (None, "mongodb"):
+            url = "mongodb://localhost:27017"
+            s = [Stream(name=n, path=url) for n in ("latest", "files")]
+            writer = MongoDBWriter(
+                *s,
+                username=db_storage_options["username"],
+                password=db_storage_options["password"],
+                database=db_storage_options["database"],
+                unique_key="file",
+            )
+            for batch in data:
+                for entry in map(_convert, batch):
+                    writer.add([("latest", entry)])
+                    writer.add([("files", entry)])
+            MongoDB._write_metadata(writer._client, meta)
+            writer._client.close()
+
+    def _cleanup():
+        if backend in (None, "postgresql"):
+            conn = psycopg.connect(
+                host="localhost",
+                port=5432,
+                user=db_storage_options["username"],
+                password=db_storage_options["password"],
+                dbname=db_storage_options["database"],
+            )
+            cur = conn.cursor()
+            cur.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+            for (table,) in cur.fetchall():
+                cur.execute(f"DELETE FROM {table}")
+            conn.commit()
+            cur.close()
+            conn.close()
+        if backend in (None, "mongodb"):
+            client = pymongo.MongoClient(
+                "mongodb://localhost:27017",
+                username=db_storage_options["username"],
+                password=db_storage_options["password"],
+                authSource="admin",
+            )
+            db = client[db_storage_options["database"]]
+            for name in db.list_collection_names():
+                if not name.startswith("system."):
+                    db[name].delete_many({})
+            client.close()
+
+    _cleanup()
+    _add_data()
+    yield
+    _cleanup()
+    os.chdir(cur_dir)
+
+
+@pytest.mark.parametrize(
+    "backend,db_cleanup",
+    [
+        ("intake", None),
+        ("mongodb", "mongodb"),
+        ("postgresql", "postgresql"),
+    ],
+    indirect=["db_cleanup"],
+)
 def test_ingest_solr(
     backend: str,
-    drs_config_path: Path,
+    db_cleanup: str,
     storage_options: Dict[str, str],
     solr_server: str,
     db_storage_options: dict[str, str],
-    pg_cursor: Any,
-    mongo_client: Any,
 ) -> None:
     """Test ingesting metadata to solr."""
 
@@ -30,19 +153,13 @@ def test_ingest_solr(
     u = db_storage_options["username"]
     p = db_storage_options["password"]
     stores = []
+
     for ds in ("fs", "s3", "swift"):
         if backend == "intake":
-            store = f"s3://test/metadata_crawler/tests/solr-{ds}.yml"
+            store = (Path(__file__).parent / f"mock_crawls/{ds}-cat.yml").absolute()
+            stores.append(str(store))
         else:
-            store = f"{backend}://{u}:{p}@localhost:{ports[backend]}/{db}"
-        stores.append(store)
-        add(
-            drs_config_path,
-            store=store,
-            data_store_prefix=f"s3://test/metadata_crawler/tests/solrdata-{ds}",
-            data_set=[f"obs-{ds}"],
-            storage_options=storage_options,
-        )
+            stores = [f"{backend}://{u}:{p}@localhost:{ports[backend]}/{db}"]
     with mock.patch.dict(os.environ, {"MDC_INTERACTIVE": "1"}, clear=True):
         index(
             "solr",
@@ -58,14 +175,20 @@ def test_ingest_solr(
     assert num > 0
 
 
-@pytest.mark.parametrize("backend", ["intake", "mongodb", "postgresql"])
+@pytest.mark.parametrize(
+    "backend,db_cleanup",
+    [
+        ("intake", None),
+        ("mongodb", "mongodb"),
+        ("postgresql", "postgresql"),
+    ],
+    indirect=["db_cleanup"],
+)
 def test_ingest_mongo(
     backend: str,
-    drs_config_path: Path,
+    db_cleanup: str,
     mongo_server: Dict[str, str],
     db_storage_options: dict[str, str],
-    pg_cursor: Any,
-    mongo_client: Any,
 ) -> None:
     """Test ingesting metadata to mongo."""
     # ports = {"mongodb": 27017, "postgresql": 5432}
@@ -73,21 +196,13 @@ def test_ingest_mongo(
     u = db_storage_options["username"]
     p = db_storage_options["password"]
     stores = []
-    with TemporaryDirectory() as temp_dir:
-        for ds in ("fs", "s3", "swift"):
-            if backend == "intake":
-                store = Path(temp_dir) / f"mongo-{ds}.yml"
-            else:
-                store = f"{backend}://{u}:{p}@localhost/{db}"
-            stores.append(store)
-            add(
-                drs_config_path,
-                store=store,
-                data_store_prefix=f"{ds}-mongodata",
-                data_set=[f"obs-{ds}"],
-                backend=backend,
-            )
-        index("mongo", *stores, url=mongo_server["url"], database="test")
+    for ds in ("fs", "s3", "swift"):
+        if backend == "intake":
+            store = (Path(__file__).parent / f"mock_crawls/{ds}-cat.yml").absolute()
+            stores.append(str(store))
+        else:
+            stores = [f"{backend}://{u}:{p}@localhost/{db}"]
+    index("mongo", *stores, url=mongo_server["url"], database="test")
     with MongoClient(mongo_server["url"]) as client:
         col = client["test"]["latest"]
         _f = list(col.find({}))

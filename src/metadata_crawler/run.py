@@ -238,8 +238,6 @@ async def async_index(
         "metadata_stores", None
     )
     _mdata = metadata_stores or _mdata
-    uris = _norm_files(_mdata, backend=backend, **storage_options)
-    print(uris)
     await async_call(
         index_system,
         "index",
