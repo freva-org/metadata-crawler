@@ -1,9 +1,10 @@
 """PostgreSQL metadata storage backend.
 
-Both the *read* and *write* paths use synchronous :mod:`sqlalchemy`
-targeting PostgreSQL exclusively.  Native ``ARRAY`` column types are
-used for multi-valued fields so datetimes and strings round-trip
-without JSON serialisation.
+The *write* path uses raw :mod:`psycopg` (v3) with ``executemany``
+for maximum throughput.  :mod:`sqlalchemy` is used only for table
+creation (DDL) and cold-path operations (reads, catalogue metadata,
+sweep).  Native ``ARRAY`` column types are used for multi-valued
+fields so datetimes and strings round-trip without JSON serialisation.
 
 The writer daemon runs in a spawned process.  The reader offloads
 cursor iteration to a single-thread
@@ -65,7 +66,7 @@ _IMPORT_ERR = (
 # ------------------------------------------------------------------
 
 
-def _sa_column_type(field: SchemaField) -> sa.types.TypeEngine[Any]:
+def _sa_column_type(field: SchemaField) -> "sa.types.TypeEngine[Any]":
     """Map a :class:`SchemaField` to a PostgreSQL-native column type."""
     import sqlalchemy as sa
 
@@ -91,9 +92,9 @@ def _sa_column_type(field: SchemaField) -> sa.types.TypeEngine[Any]:
 def _build_table(
     table_name: str,
     schema: Dict[str, SchemaField],
-    metadata: sa.MetaData,
+    metadata: "sa.MetaData",
     epoch_key: str = "_crawl_epoch",
-) -> sa.Table:
+) -> "sa.Table":
     """Create a :class:`sqlalchemy.Table` from the crawler schema."""
     import sqlalchemy as sa
 
@@ -149,10 +150,15 @@ def _get_storage_url(url: str, hide_password: bool = False, **kwargs: Any) -> st
     return parsed.render_as_string(hide_password=hide_password)
 
 
+def _get_psycopg_url(sa_url: str) -> str:
+    """Convert a SQLAlchemy URL to a plain psycopg connection string."""
+    return sa_url.replace("postgresql+psycopg://", "postgresql://")
+
+
 @contextmanager
 def _open_db_connection(
     url: str, sanitise: bool = True, **storage_options: Any
-) -> Iterator["sa.Connection"]:
+) -> "Iterator[sa.Connection]":
     try:
         import sqlalchemy as sa
     except ImportError:
@@ -173,74 +179,79 @@ def _open_db_connection(
 class PostgreSQLWriter(BackendWriter):
     """Synchronous writer that upserts metadata into PostgreSQL.
 
-    Uses ``INSERT ... ON CONFLICT DO UPDATE`` for atomic upserts.
+    Uses raw :mod:`psycopg` ``executemany`` with pipelining for
+    maximum write throughput.  SQLAlchemy is used only for initial
+    table creation (DDL).
     """
 
     backend: ClassVar[str] = "PostgresQL"
 
     def __post_init__(self) -> None:
         try:
+            import psycopg as pg
             import sqlalchemy as sa
         except ImportError:
             raise ImportError(_IMPORT_ERR) from None
+
         unique_key = self.storage_options.pop("unique_key", "file")
         schema_json = self.storage_options.pop("schema_json", "{}")
-        url = _get_storage_url(self.streams[0].path, **self.storage_options)
-        self._engine: sa.Engine = sa.create_engine(url, pool_pre_ping=True)
-        self._sa_meta: sa.MetaData = sa.MetaData()
-        self._schema: Dict[str, SchemaField] = {
+        self._url = _get_storage_url(self.streams[0].path, **self.storage_options)
+
+        # --- SQLAlchemy: DDL only (create tables if needed) ---
+        engine: sa.Engine = sa.create_engine(self._url, pool_pre_ping=True)
+        sa_meta: sa.MetaData = sa.MetaData()
+        schema: Dict[str, SchemaField] = {
             k: SchemaField(**v) for k, v in json.loads(schema_json).items()
         }
         self._unique_key = unique_key
-        self._tables: Dict[str, sa.Table] = {
-            s.name: _build_table(
-                s.name, self._schema, self._sa_meta, epoch_key=self._epoch_key
-            )
+        tables: Dict[str, sa.Table] = {
+            s.name: _build_table(s.name, schema, sa_meta, epoch_key=self._epoch_key)
             for s in self.streams
         }
-        self._sa_meta.create_all(self._engine)
+        sa_meta.create_all(engine)
+        engine.dispose()
+
+        # --- Raw psycopg3: pre-build upsert SQL, open connection ---
+        self._conn: pg.Connection[Any] = pg.connect(
+            _get_psycopg_url(self._url), autocommit=False
+        )
+        self._upsert_sql: Dict[str, str] = {}
+        for name, table in tables.items():
+            columns = [col.name for col in table.columns]
+            col_list = ", ".join(f'"{c}"' for c in columns)
+            placeholders = ", ".join(f"%({c})s" for c in columns)
+            update_set = ", ".join(
+                f'"{c}" = EXCLUDED."{c}"' for c in columns if c != unique_key
+            )
+            self._upsert_sql[name] = (
+                f"INSERT INTO {table.name} ({col_list}) "
+                f"VALUES ({placeholders}) "
+                f'ON CONFLICT ("{unique_key}") '
+                f"DO UPDATE SET {update_set}"
+            )
 
     def add(self, metadata_batch: List[Tuple[str, MetadataRecord]]) -> None:
-        """Upsert a batch into the appropriate tables."""
-        by_table: Dict[str, List[MetadataRecord]] = {name: [] for name in self._tables}
+        """Upsert a batch using raw psycopg3 executemany."""
+        by_table: Dict[str, List[MetadataRecord]] = {
+            name: [] for name in self._upsert_sql
+        }
         now = time.time()
         for table_name, metadata in metadata_batch:
             if table_name in by_table:
                 metadata[self._epoch_key] = now
                 by_table[table_name].append(metadata)
 
-        with self._engine.begin() as conn:
-            for table_name, rows in by_table.items():
-                if not rows:
-                    continue
-                table = self._tables[table_name]
-                self._upsert_rows(conn, table, rows)
-                self.indexed_objects += len(rows)
-
-    def _upsert_rows(
-        self,
-        conn: sa.Connection,
-        table: sa.Table,
-        rows: List[MetadataRecord],
-    ) -> None:
-        """Insert rows, updating on unique-key conflict."""
-        from sqlalchemy.dialects.postgresql import insert
-
-        uk = self._unique_key
-        stmt = insert(table).values(rows)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=[uk],
-            set_={
-                col.name: stmt.excluded[col.name]
-                for col in table.columns
-                if col.name != uk
-            },
-        )
-        conn.execute(stmt)
+        cursor = self._conn.cursor()
+        for table_name, rows in by_table.items():
+            if not rows:
+                continue
+            cursor.executemany(self._upsert_sql[table_name], rows)
+            self.indexed_objects += len(rows)
+        self._conn.commit()
 
     def close(self) -> None:
-        """Dispose of the engine."""
-        self._engine.dispose()
+        """Close the raw connection."""
+        self._conn.close()
 
 
 # ------------------------------------------------------------------
@@ -279,7 +290,6 @@ class PostgreSQL(IndexStore):
         batch_size: int = 25_000,
         **kwargs: Any,
     ):
-        kwargs.pop("collection", None)
         super().__init__(
             path,
             index_name,
@@ -393,7 +403,7 @@ class PostgreSQL(IndexStore):
 
         try:
             with _open_db_connection(url, **kwargs) as conn:
-                result: sa.CursorResult[Tuple[str]] = conn.execute(
+                result: "sa.CursorResult[Tuple[str]]" = conn.execute(
                     sa.text(
                         f"SELECT value FROM {cls._CATALOGUE_TABLE} "
                         "WHERE key = 'metadata'"
@@ -439,7 +449,7 @@ class PostgreSQL(IndexStore):
         full_table_name = index_name
 
         def _open() -> Tuple[
-            sa.Engine, Optional[sa.Connection], Optional[sa.CursorResult[Any]]
+            "sa.Engine", Optional["sa.Connection"], Optional["sa.CursorResult[Any]"]
         ]:
             engine: sa.Engine = sa.create_engine(url, pool_pre_ping=True)
             sa_meta: sa.MetaData = sa.MetaData()
@@ -453,7 +463,7 @@ class PostgreSQL(IndexStore):
             return engine, conn, result
 
         def _next_batch(
-            result: sa.CursorResult[Any],
+            result: "sa.CursorResult[Any]",
         ) -> Optional[List[MetadataRecord]]:
             batch: List[MetadataRecord] = []
             for row in result.mappings():
@@ -464,7 +474,7 @@ class PostgreSQL(IndexStore):
                     return batch
             return batch or None
 
-        def _close(engine: sa.Engine, conn: Optional[sa.Connection]) -> None:
+        def _close(engine: "sa.Engine", conn: Optional["sa.Connection"]) -> None:
             if conn is not None:
                 conn.close()
             engine.dispose()
