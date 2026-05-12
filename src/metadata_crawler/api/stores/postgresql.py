@@ -196,6 +196,8 @@ class PostgreSQLWriter(BackendWriter):
         unique_key = self.storage_options.pop("unique_key", "file")
         schema_json = self.storage_options.pop("schema_json", "{}")
         self._url = _get_storage_url(self.streams[0].path, **self.storage_options)
+        self._pending: int = 0
+        self._commit_interval: int = 10
 
         # --- SQLAlchemy: DDL only (create tables if needed) ---
         engine: sa.Engine = sa.create_engine(self._url, pool_pre_ping=True)
@@ -247,10 +249,14 @@ class PostgreSQLWriter(BackendWriter):
                 continue
             cursor.executemany(self._upsert_sql[table_name], rows)
             self.indexed_objects += len(rows)
-        self._conn.commit()
+        self._pending += 1
+        if self._pending >= self._commit_interval:
+            self._conn.commit()
+            self._pending = 0
 
     def close(self) -> None:
         """Close the raw connection."""
+        self._conn.commit()
         self._conn.close()
 
 

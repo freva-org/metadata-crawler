@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from metadata_crawler import add, index
-
+from metadata_crawler.cli import _get_storage_option_from_env
 # --- your workload ---------------------------------------------------------
 
 
@@ -42,21 +42,30 @@ def run_workload(
     config_file = Path(
         config_file or Path(__file__).parent.parent / "benchmark-config.toml"
     )
+    storage_options = dict(_get_storage_option_from_env()) or None
     try:
         os.environ["MDC_MAX_FILES"] = str(num_files)
         if task == "add":
             add(
                 config_file,
                 store=store,
-                batch_size=2_000,
+                batch_size=100_000,
                 data_set=[data_set],
                 verbosity=0,
                 backend=backend,
                 data_store_prefix="benchmark-fs",
                 fail_under=-1,
+                storage_options=storage_options,
             )
         else:
-            index("solr", store, verbosity=0, backend=backend, server="localhost:8983")
+            index(
+                "solr",
+                store,
+                verbosity=0,
+                backend=backend,
+                storage_options=storage_options,
+                server="localhost:8983",
+            )
     finally:
         os.environ = env
 
