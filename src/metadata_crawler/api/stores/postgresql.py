@@ -227,13 +227,16 @@ class PostgreSQLWriter(BackendWriter):
         from sqlalchemy.dialects.postgresql import insert
 
         uk = self._unique_key
-        for row in rows:
-            stmt = insert(table).values(**row)
-            stmt = stmt.on_conflict_do_update(
-                index_elements=[uk],
-                set_={k: v for k, v in row.items() if k != uk},
-            )
-            conn.execute(stmt)
+        stmt = insert(table).values(rows)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[uk],
+            set_={
+                col.name: stmt.excluded[col.name]
+                for col in table.columns
+                if col.name != uk
+            },
+        )
+        conn.execute(stmt)
 
     def close(self) -> None:
         """Dispose of the engine."""
