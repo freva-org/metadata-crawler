@@ -11,6 +11,7 @@ Outputs:
 Usage:
   python profile_cordex.py --top 60
 """
+
 import argparse
 import atexit
 import cProfile
@@ -22,15 +23,18 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
-from metadata_crawler import add
+from metadata_crawler import add, index
 
 # --- your workload ---------------------------------------------------------
 
 
 def run_workload(
     num_files: int,
+    task: str = "add",
     data_set: str = "cordex-benchmark",
     config_file: Optional[str] = None,
+    store: str = "data.yml",
+    backend: str = "intake",
 ) -> None:
     # Keep the same arguments you currently use:
 
@@ -40,16 +44,19 @@ def run_workload(
     )
     try:
         os.environ["MDC_MAX_FILES"] = str(num_files)
-        add(
-            config_file,
-            store="data.yml",
-            batch_size=2_000,
-            data_set=[data_set],
-            verbosity=0,
-            catalogue_backend="jsonlines",
-            data_store_prefix="benchmark-fs",
-            fail_under=-1,
-        )
+        if task == "add":
+            add(
+                config_file,
+                store=store,
+                batch_size=2_000,
+                data_set=[data_set],
+                verbosity=0,
+                backend=backend,
+                data_store_prefix="benchmark-fs",
+                fail_under=-1,
+            )
+        else:
+            index("solr", store, verbosity=0, backend=backend, server="localhost:8983")
     finally:
         os.environ = env
 
@@ -83,9 +90,7 @@ def run_with_cprofile(top: int, num_files: int, **kwargs: Any) -> None:
         print("\n=== cProfile (cumtime, top {} funcs) ===".format(top))
         print(text)
         # Write with safe error handling for any stray surrogates
-        with open(
-            "cordex.cprofile.txt", "w", encoding="utf-8", errors="replace"
-        ) as f:
+        with open("cordex.cprofile.txt", "w", encoding="utf-8", errors="replace") as f:
             f.write(text)
 
         elapsed = t1 - t0
@@ -104,6 +109,14 @@ def main(argv=None):
         help="Number of max files to ingest.",
     )
     parser.add_argument(
+        "--task",
+        "-t",
+        type=str,
+        default="add",
+        help="Set the task to benchmark.",
+        choices=["add", "index"],
+    )
+    parser.add_argument(
         "--config-file",
         type=Path,
         default=None,
@@ -115,6 +128,15 @@ def main(argv=None):
         default="cordex-benchmark-fs",
         help="The dataset that is tests.",
     )
+    parser.add_argument(
+        "--backend",
+        type=str,
+        default="intake",
+        help="The meta data store backend.",
+    )
+    parser.add_argument(
+        "--store", type=str, default="data.yml", help="URI to the metadata store."
+    )
     args = parser.parse_args(argv)
 
     # Make sure we flush all reports even on unexpected exit
@@ -125,9 +147,12 @@ def main(argv=None):
 
     run_with_cprofile(
         top=args.top,
+        task=args.task,
         num_files=args.num_files,
         data_set=args.dataset,
         config_file=args.config_file,
+        backend=args.backend,
+        store=args.store,
     )
 
 
