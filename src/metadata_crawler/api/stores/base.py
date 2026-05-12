@@ -22,13 +22,13 @@ from typing import (
     Set,
     Tuple,
     TypeAlias,
-    TypedDict,
     Union,
     cast,
 )
 
 import fsspec
 import pydantic
+from typing_extensions import TypedDict
 
 from ...logger import logger
 from ...utils import SimpleQueueLike
