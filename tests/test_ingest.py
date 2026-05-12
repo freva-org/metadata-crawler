@@ -1,19 +1,21 @@
 """test ingesting."""
 
+import json
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
-from datetime import datetime
+
+import intake
 import mock
 import psycopg
 import pymongo
 import pytest
 import requests
-from pymongo import MongoClient
-import intake
-from metadata_crawler import delete, index
 import yaml
-import json
+from pymongo import MongoClient
+
+from metadata_crawler import delete, index
 
 
 def _read_catalogues() -> List[Any]:
@@ -48,8 +50,8 @@ def _convert(metadata: Dict[str, Any]) -> Dict[str, Any]:
 def db_cleanup(request, db_storage_options):
     """Clean the relevant database before and after the test."""
     from metadata_crawler.api.stores.base import Stream
-    from metadata_crawler.api.stores.postgresql import PostgreSQLWriter, PostgreSQL
-    from metadata_crawler.api.stores.mongodb import MongoDBWriter, MongoDB
+    from metadata_crawler.api.stores.mongodb import MongoDB, MongoDBWriter
+    from metadata_crawler.api.stores.postgresql import PostgreSQL, PostgreSQLWriter
 
     cur_dir = os.getcwd()
     os.chdir(Path(__file__).parent / "mock_crawls")

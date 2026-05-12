@@ -1,0 +1,329 @@
+description: metadata_crawler (v2605.0.0) at Tue May 12 08:05:32 2026
+metadata:
+  version: 1
+  backend: intake
+  prefix: s3
+  storage_options:
+    username: metadata
+    password: secret
+  index_names:
+    latest: latest
+    all: files
+  indexed_objects: 48
+  total_objects: 48
+  timestamp: Tue May 12 08:05:32 2026
+  crawler:
+    name: metadata_crawler
+    version: v2605.0.0
+  schema:
+    file:
+      key: file
+      type: path
+      required: true
+      default: null
+      length: null
+      base_type: string
+      multi_valued: false
+      indexed: true
+      name: file
+      unique: true
+    uri:
+      key: uri
+      type: uri
+      required: true
+      default: null
+      length: null
+      base_type: string
+      multi_valued: false
+      indexed: true
+      name: uri
+      unique: false
+    project:
+      key: project
+      type: string
+      required: false
+      default: null
+      length: null
+      base_type: string
+      multi_valued: true
+      indexed: true
+      name: project
+      unique: false
+    product:
+      key: product
+      type: string
+      required: false
+      default: null
+      length: null
+      base_type: string
+      multi_valued: true
+      indexed: true
+      name: product
+      unique: false
+    institute:
+      key: institute
+      type: string
+      required: false
+      default: null
+      length: null
+      base_type: string
+      multi_valued: true
+      indexed: true
+      name: institute
+      unique: false
+    model:
+      key: model
+      type: string
+      required: false
+      default: null
+      length: null
+      base_type: string
+      multi_valued: true
+      indexed: true
+      name: model
+      unique: false
+    experiment:
+      key: experiment
+      type: string
+      required: false
+      default: null
+      length: null
+      base_type: string
+      multi_valued: true
+      indexed: true
+      name: experiment
+      unique: false
+    time_frequency:
+      key: time_frequency
+      type: string
+      required: false
+      default: null
+      length: null
+      base_type: string
+      multi_valued: true
+      indexed: true
+      name: time_frequency
+      unique: false
+    realm:
+      key: realm
+      type: string
+      required: false
+      default: null
+      length: null
+      base_type: string
+      multi_valued: true
+      indexed: true
+      name: realm
+      unique: false
+    cmor_table:
+      key: cmor_table
+      type: string
+      required: false
+      default: null
+      length: null
+      base_type: string
+      multi_valued: true
+      indexed: true
+      name: cmor_table
+      unique: false
+    ensemble:
+      key: ensemble
+      type: string
+      required: false
+      default: null
+      length: null
+      base_type: string
+      multi_valued: true
+      indexed: true
+      name: ensemble
+      unique: false
+    variable:
+      key: variable
+      type: string
+      required: false
+      default: null
+      length: null
+      base_type: string
+      multi_valued: true
+      indexed: true
+      name: variable
+      unique: false
+    time:
+      key: time
+      type: daterange
+      required: false
+      default: fx
+      length: 2
+      base_type: timestamp
+      multi_valued: false
+      indexed: true
+      name: time
+      unique: false
+    grid_label:
+      key: grid_label
+      type: string
+      required: false
+      default: gn
+      length: null
+      base_type: string
+      multi_valued: true
+      indexed: true
+      name: grid_label
+      unique: false
+    version:
+      key: version
+      type: string
+      required: false
+      default: '-1'
+      length: null
+      base_type: string
+      multi_valued: false
+      indexed: true
+      name: version
+      unique: false
+    driving_model:
+      key: driving_model
+      type: string
+      required: false
+      default: null
+      length: null
+      base_type: string
+      multi_valued: true
+      indexed: true
+      name: driving_model
+      unique: false
+    rcm_name:
+      key: rcm_name
+      type: string
+      required: false
+      default: null
+      length: null
+      base_type: string
+      multi_valued: true
+      indexed: true
+      name: rcm_name
+      unique: false
+    rcm_version:
+      key: rcm_version
+      type: string
+      required: false
+      default: null
+      length: null
+      base_type: string
+      multi_valued: true
+      indexed: true
+      name: rcm_version
+      unique: false
+    dataset:
+      key: dataset
+      type: dataset
+      required: false
+      default: ''
+      length: null
+      base_type: string
+      multi_valued: false
+      indexed: true
+      name: dataset
+      unique: false
+    format:
+      key: format
+      type: fmt
+      required: false
+      default: null
+      length: null
+      base_type: string
+      multi_valued: false
+      indexed: true
+      name: format
+      unique: false
+    grid_id:
+      key: grid_id
+      type: string
+      required: false
+      default: null
+      length: null
+      base_type: string
+      multi_valued: true
+      indexed: true
+      name: grid_id
+      unique: false
+    level_type:
+      key: level_type
+      type: string
+      required: false
+      default: 2d
+      length: null
+      base_type: string
+      multi_valued: true
+      indexed: true
+      name: level_type
+      unique: false
+    user:
+      key: user
+      type: string
+      required: false
+      default: null
+      length: null
+      base_type: string
+      multi_valued: false
+      indexed: true
+      name: user
+      unique: false
+    fs_type:
+      key: fs_type
+      type: storage
+      required: false
+      default: posix
+      length: null
+      base_type: string
+      multi_valued: false
+      indexed: true
+      name: fs_type
+      unique: false
+    bbox:
+      key: bbox
+      type: bbox
+      required: false
+      default:
+      - 0
+      - 360
+      - -90
+      - 90
+      length: 4
+      base_type: float
+      multi_valued: true
+      indexed: true
+      name: bbox
+      unique: false
+    time_aggregation:
+      key: time_aggregation
+      type: string
+      required: false
+      default: mean
+      length: null
+      base_type: string
+      multi_valued: true
+      indexed: true
+      name: time_aggregation
+      unique: false
+sources:
+  latest:
+    description: Latest metadata versions.
+    driver: intake.source.jsonfiles.JSONLinesFileSource
+    args:
+      urlpath: ./s3-latest.json.gz
+      compression: gzip
+      text_mode: true
+      storage_options:
+        username: metadata
+        password: secret
+  files:
+    description: All metadata versions only.
+    driver: intake.source.jsonfiles.JSONLinesFileSource
+    args:
+      urlpath: ./s3-files.json.gz
+      compression: gzip
+      text_mode: true
+      storage_options:
+        username: metadata
+        password: secret
