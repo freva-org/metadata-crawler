@@ -37,4 +37,4 @@ account (*latest* versions only).
    :maxdepth: 1
 
    sec1-cli
-   sec2-pytho
+   sec2-python

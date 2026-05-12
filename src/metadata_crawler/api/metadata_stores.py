@@ -206,6 +206,20 @@ class CatalogueWriter:
     shadow:
         'Shadow' this storage options. This is useful to hide secrets in public
         data catalogues.
+    no_sweep: bool
+        ..versionadded:: v2605.0.0
+            Skip removal of stale records after crawling.
+            By default, database backends (MongoDB, PostgreSQL)
+            remove entries older than the grace period "
+            (set via ``sweep_grace_period``).
+            Use this flag for partial or incremental crawls
+            where not all data sources are being re-discovered.
+    sweep_grace_period: int
+        ..verisonadded:: v2605.0.0
+            Number of days to keep records before they become eligible
+            for sweeping. Records older than this grace period are
+            removed after a crawl. Overrides the MDC_GRACE_DAYS
+            environment variable. Defaults to 5 days.
     """
 
     def __init__(
@@ -222,6 +236,8 @@ class CatalogueWriter:
         n_procs: Optional[int] = None,
         storage_options: Optional[Dict[str, Any]] = None,
         shadow: Optional[Union[str, List[str]]] = None,
+        no_sweep: bool = False,
+        sweep_grace_period: int = 5,
         **kwargs: Any,
     ) -> None:
         self.config = config
@@ -229,8 +245,9 @@ class CatalogueWriter:
         _store_path = collection or table or data_store_prefix or "metadata"
         scheme, _, _ = _store_path.rpartition("://")
         self.silent = bool(int(os.getenv("MDC_SILENT", "0")))
+        self.no_sweep = no_sweep
         self.backend = backend or CatalogueReader.backend_from_store_url(store_uri)
-        self.epoch = self._get_epoch()
+        self.epoch = self._get_epoch(sweep_grace_period)
         # YAML catalogue setup -- only for file-based backends.
         self.path: Optional[str] = store_uri
         self.fs = None
@@ -307,9 +324,10 @@ class CatalogueWriter:
         return False
 
     @staticmethod
-    def _get_epoch() -> float:
+    def _get_epoch(grace_period: Optional[int] = None) -> float:
         grace_env = os.getenv("MDC_GRACE_DAYS", "5")
         grace_days = int(grace_env) if grace_env.isdigit() else 5
+        grace_days = grace_period or grace_days
         grace_sec = max(86400.0 * grace_days, 10)
         return time.time() - grace_sec
 
@@ -362,7 +380,7 @@ class CatalogueWriter:
         self.store.join()
         total = self.store.total_objects
         stale = self.store.count_stale_objects(self.epoch)
-        if total > 0 and stale / total > 0.75:
+        if total > 0 and stale / total > 0.75 and self.no_sweep is False:
             if self.confirm_sweep(stale, total):
                 self.store.sweep(self.epoch)
             else:
@@ -370,7 +388,7 @@ class CatalogueWriter:
                     f"Sweep aborted: {stale}/{total} records would be removed. "
                     "Investigate and re-run."
                 )
-        else:
+        elif self.no_sweep is False:
             self.store.sweep(self.epoch)
         self.store.close()
         if create_catalogue:

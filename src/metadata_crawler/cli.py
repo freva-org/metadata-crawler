@@ -282,16 +282,14 @@ class ArgParse:
             default=1024,
             help="Level of aync concurrency for data discovery.",
         )
-        (
-            parser.add_argument(
-                "-d",
-                "--data-object",
-                "--data-obj",
-                type=str,
-                help="Objects (directories or catalogue files) that are processed.",
-                default=None,
-                action="append",
-            ),
+        parser.add_argument(
+            "-d",
+            "--data-object",
+            "--data-obj",
+            type=str,
+            help="Objects (directories or catalogue files) that are processed.",
+            default=None,
+            action="append",
         )
         parser.add_argument(
             "-ds",
@@ -303,6 +301,30 @@ class ArgParse:
             ),
             default=None,
             action="append",
+        )
+        parser.add_argument(
+            "--no-sweep",
+            action="store_true",
+            default=False,
+            help=(
+                "Skip removal of stale records after crawling. "
+                "By default, database backends (MongoDB, PostgreSQL) "
+                "remove entries older than the grace period "
+                "(set via --sweep-grace-period). "
+                "Use this flag for partial or incremental crawls "
+                "where not all data sources are being re-discovered."
+            ),
+        )
+        parser.add_argument(
+            "--sweep-grace-period",
+            type=int,
+            default=os.getenv("MDC_GRACE_DAYS", "5"),
+            help=(
+                "Number of days to keep records before they become eligible "
+                "for sweeping. Records older than this grace period are "
+                "removed after a crawl. Overrides the MDC_GRACE_DAYS "
+                "environment variable. Defaults to 5 days."
+            ),
         )
         parser.add_argument(
             "-p",

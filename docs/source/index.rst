@@ -93,6 +93,7 @@ You can get a quick overview over the metadata store by inspecting it's
 content with the ``glance`` sub command:
 
 .. code-block:: console
+
     mdc glance mongodb://localhost -s username mongo -s password secret
 
 

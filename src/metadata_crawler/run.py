@@ -204,9 +204,15 @@ async def async_index(
         Set the verbosity of the system.
     log_suffix:
         Add a suffix to the log file output.
-    backend: str
+    backend:
         Backend to be used for the metadata store. If None given (default)
         the backend will be guessed from the storage uri
+
+        .. versionchanged:: 2605.0.0
+
+           Added ``"mongodb"`` and ``"postgresql"`` backends.
+
+
 
     Other Parameters
     ^^^^^^^^^^^^^^^^
@@ -316,6 +322,8 @@ async def async_add(
     all_versions: str = IndexName().all,
     password: bool = False,
     n_procs: Optional[int] = None,
+    no_sweep: bool = False,
+    sweep_grace_period: int = 5,
     verbosity: int = 0,
     log_suffix: Optional[str] = None,
     fail_under: int = -1,
@@ -347,24 +355,50 @@ async def async_add(
         Dataset(s) that should be crawled. The datasets need to be defined
         in the drs-config file. By default all datasets are crawled.
         Names can contain wildcards such as ``xces-*``.
-    data_store_prefix: str
+    data_store_prefix:
         Name or path of the metadata store.  For the *jsonlines*
         backend this is a filesystem path prefix for the ``.json.gz``
         files (resolved relative to *yaml_path* unless absolute).
         For database backends it serves as the default collection or
         table name.  Defaults to ``"metadata"``.
-    collection: str
+    collection:
         Alias for *data_store_prefix* — preferred when using the
         *mongodb* backend.  Maps directly to the MongoDB collection
         name.
-    table: str
+    table:
         Alias for *data_store_prefix* — preferred when using the
         *sql* backend.  Maps directly to the SQL table name.
-    backend: str
+    backend:
         Backend to be used for the metadata store. If None given (default)
         the backend will be guessed from the storage uri
-    catalogue_backend: str
+
+        .. versionchanged:: 2605.0.0
+
+           Added ``"mongodb"`` and ``"postgresql"`` backends.
+
+
+    catalogue_backend:
         Alias for ``backend``
+    no_sweep:
+        Skip removal of stale records after crawling.
+        By default, database backends (MongoDB, PostgreSQL)
+        remove entries older than the grace period "
+        (set via ``sweep_grace_period``).
+        Use this flag for partial or incremental crawls
+        where not all data sources are being re-discovered.
+
+        .. versionadded:: 2605.0.0
+
+
+    sweep_grace_period:
+        Number of days to keep records before they become eligible
+        for sweeping. Records older than this grace period are
+        removed after a crawl. Overrides the MDC_GRACE_DAYS
+        environment variable. Defaults to 5 days.
+
+        .. versionadded:: 2605.0.0
+
+
     batch_size:
         Batch size that is used to collect the meta data. This can affect
         performance.
@@ -455,6 +489,8 @@ async def async_add(
             storage_options=storage_options or {},
             shadow=shadow,
             backend=backend,
+            no_sweep=no_sweep,
+            sweep_grace_period=sweep_grace_period,
             **kwargs,
         ) as data_col:
             await data_col.ingest_data()
