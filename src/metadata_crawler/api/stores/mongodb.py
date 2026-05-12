@@ -17,7 +17,6 @@ collection into memory.
 from __future__ import annotations
 
 import asyncio
-import json
 import multiprocessing as mp
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -135,24 +134,19 @@ class MongoDBWriter(BackendWriter):
 
     backend: ClassVar[str] = "MongoDB"
 
-    def __init__(
-        self,
-        *streams: Stream,
-        **storage_options: Any,
-    ) -> None:
+    def __post_init__(self) -> None:
         try:
             from pymongo import MongoClient as _MongoClient
         except ImportError:
             raise ImportError(_IMPORT_ERR) from None
-        unique_key = storage_options.pop("unique_key", "file")
-        uri = _sanitise_uri(streams[0].path, **storage_options)
+        unique_key = self.storage_options.pop("unique_key", "file")
+        uri = _sanitise_uri(self.streams[0].path, **self.storage_options)
         self._client: "MongoClient[MetadataRecord]" = _MongoClient(uri)
         db = self._client.get_default_database(default="metadata")
         self._collections: Dict[str, "Collection[MetadataRecord]"] = {
-            s.name: db[s.name] for s in streams
+            s.name: db[s.name] for s in self.streams
         }
         self._unique_key = unique_key
-        self._records: int = 0
         for col in self._collections.values():
             col.create_index(unique_key, unique=True)
 
@@ -182,7 +176,7 @@ class MongoDBWriter(BackendWriter):
             ]
             if ops:
                 self._collections[col_name].bulk_write(ops, ordered=False)
-                self._records += len(ops)
+                self.indexed_objects += len(ops)
 
     def close(self) -> None:
         """Close the client connection."""
@@ -276,7 +270,7 @@ class MongoDB(IndexStore):
         """The writer process."""
         return self._proc
 
-    def write_catalogue_metadata(self, indexed_objects: int = 0) -> None:
+    def write_catalogue_metadata(self, payload: Dict[str, Any]) -> None:
         """Store catalogue metadata in a ``_catalogue`` collection."""
         try:
             from pymongo import MongoClient as _MongoClient
@@ -284,29 +278,35 @@ class MongoDB(IndexStore):
             raise ImportError(_IMPORT_ERR) from None
 
         client: "MongoClient[MetadataRecord]" = _MongoClient(self._uri)
+        payload["_id"] = "metadata"
         try:
             db = client.get_default_database(default="metadata")
             col = db[self._CATALOGUE_COLLECTION]
             col.replace_one(
                 {"_id": "metadata"},
-                {
-                    "_id": "metadata",
-                    "version": 1,
-                    "backend": self.driver,
-                    "index_names": {
-                        "latest": self.index_names[0],
-                        "all": self.index_names[1],
-                    },
-                    "indexed_objects": indexed_objects,
-                    "schema": {
-                        k: json.loads(s.model_dump_json())
-                        for k, s in self.schema.items()
-                    },
-                },
+                payload,
                 upsert=True,
             )
         finally:
             client.close()
+
+    @property
+    def total_objects(self) -> int:
+        """Get the number of total metadata objects in all collection."""
+        try:
+            from pymongo import MongoClient as _MongoClient
+        except ImportError:
+            raise ImportError(_IMPORT_ERR) from None
+
+        client: "MongoClient[MetadataRecord]" = _MongoClient(self._uri)
+        total = 0
+        try:
+            db = client.get_default_database(default="metadata")
+            for name in self.index_names:
+                total += db[name].estimated_document_count()
+        finally:
+            client.close()
+        return total
 
     @classmethod
     def read_catalogue_metadata(cls, url: str, **kwargs: Any) -> MetadataRecord:
@@ -388,6 +388,20 @@ class MongoDB(IndexStore):
                     yield batch
             finally:
                 await loop.run_in_executor(pool, client.close)
+
+    def count_stale_objects(self, epoch: float) -> int:
+        """Count the number of stale (outdated objects)."""
+        from pymongo import MongoClient as _MongoClient
+
+        client: "MongoClient[MetadataRecord]" = _MongoClient(self._uri)
+        total = 0
+        try:
+            db = client.get_default_database(default="metadata")
+            for name in self.index_names:
+                total += db[name].count_documents({self._epoch_key: {"$lt": epoch}})
+        finally:
+            client.close()
+        return total
 
     def sweep(self, epoch: float) -> None:
         """Delete all records whose epoch differs from *epoch*."""

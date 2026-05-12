@@ -9,10 +9,12 @@ metadata collected by the crawler.  Each backend is an
 from .base import (
     BATCH_ITEM,
     BATCH_SECS_THRESHOLD,
+    CatalogueBackendType,
     DateTimeDecoder,
     DateTimeEncoder,
     IndexName,
     IndexStore,
+    StoreMetadata,
     Stream,
     WriterQueueType,
 )
@@ -24,10 +26,12 @@ __all__ = [
     # base
     "BATCH_ITEM",
     "BATCH_SECS_THRESHOLD",
+    "CatalogueBackendType",
     "DateTimeDecoder",
     "DateTimeEncoder",
     "IndexName",
     "IndexStore",
+    "StoreMetadata",
     "Stream",
     "WriterQueueType",
     # jsonlines

@@ -12,6 +12,8 @@ import json
 import multiprocessing as mp
 import os
 import re
+import select
+import sys
 import time
 from datetime import datetime
 from enum import Enum, EnumType
@@ -49,6 +51,7 @@ from .stores import MongoDB, PostgreSQL
 from .stores.base import (
     IndexName,
     IndexStore,
+    StoreMetadata,
     WriterQueueType,
 )
 from .stores.jsonlines import JSONLines
@@ -66,7 +69,7 @@ _GLOB_CHARS = re.compile(r"[*?\[\]{]")
 
 
 class _BackendMeta(EnumType):
-    def __getitem__(cls, name: str) -> CatalogueBackends:
+    def __getitem__(cls, name: str) -> "CatalogueBackends":  # type: ignore[override]
         try:
             return super().__getitem__(name)
         except KeyError:
@@ -277,6 +280,33 @@ class CatalogueWriter:
         ]
 
     @staticmethod
+    def confirm_sweep(stale: int, total: int, timeout: int = 20) -> bool:
+        """Prompt for sweep confirmation with a countdown.
+
+        Returns ``True`` only on explicit 'y'.  Auto-aborts after
+        *timeout* seconds or immediately in non-interactive sessions.
+        """
+        ratio = stale / total * 100
+        msg = (
+            f"\nWARNING: Sweep would remove {stale} of {total} "
+            f"records ({ratio:.0f}%).\n"
+        )
+        if not sys.stdin.isatty():
+            logger.critical("%s Non-interactive session — aborting sweep.", msg.strip())
+            return False
+
+        sys.stderr.write(msg)
+        sys.stderr.write(f"Continue? [y/N] (auto-abort in {timeout}s): ")
+        sys.stderr.flush()
+        ready, _, _ = select.select([sys.stdin], [], [], timeout)
+        if ready:
+            answer = sys.stdin.readline().strip().lower()
+            return answer in ("y", "yes")
+
+        sys.stderr.write("\nTimeout — aborting sweep.\n")
+        return False
+
+    @staticmethod
     def _get_epoch() -> float:
         grace_env = os.getenv("MDC_GRACE_DAYS", "5")
         grace_days = int(grace_env) if grace_env.isdigit() else 5
@@ -330,12 +360,23 @@ class CatalogueWriter:
     async def close(self, create_catalogue: bool = True) -> None:
         """Close any connections."""
         self.store.join()
-        self.store.sweep(self.epoch)
+        total = self.store.total_objects
+        stale = self.store.count_stale_objects(self.epoch)
+        if total > 0 and stale / total > 0.75:
+            if self.confirm_sweep(stale, total):
+                self.store.sweep(self.epoch)
+            else:
+                raise SystemExit(
+                    f"Sweep aborted: {stale}/{total} records would be removed. "
+                    "Investigate and re-run."
+                )
+        else:
+            self.store.sweep(self.epoch)
         self.store.close()
         if create_catalogue:
             if self.store.has_catalogue_storage:
                 self.store.write_catalogue_metadata(
-                    indexed_objects=self.ingested_objects,
+                    self.metadata.model_dump(by_alias=True)
                 )
             elif self.fs:
                 self._create_catalogue_file()
@@ -355,30 +396,38 @@ class CatalogueWriter:
         for task in self._tasks:
             task.start()
 
+    @property
+    def metadata(self) -> StoreMetadata:
+        """Define the metadata that will get added to the metadata store."""
+        return StoreMetadata(
+            version=1,
+            backend=self.backend,
+            prefix=self.prefix,
+            storage_options=self.store.catalogue_storage_options(self.prefix),
+            index_names={"latest": self.index_name.latest, "all": self.index_name.all},
+            indexed_objects=self.ingested_objects,
+            total_objects=self.store.total_objects or self.ingested_objects,
+            timestamp=datetime.now().strftime("%c"),
+            crawler={
+                "name": metadata_crawler.__name__,
+                "version": f"v{metadata_crawler.__version__}",
+            },
+            the_schema={
+                k: json.loads(s.model_dump_json()) for k, s in self.store.schema.items()
+            },
+        )
+
     def _create_catalogue_file(self) -> None:
         if not self.fs:
             return
+        timestamp = datetime.now().strftime("%c")
         catalog = {
             "description": (
                 f"{metadata_crawler.__name__} "
                 f"(v{metadata_crawler.__version__})"
-                f" at {datetime.now().strftime('%c')}"
+                f" at {timestamp}"
             ),
-            "metadata": {
-                "version": 1,
-                "backend": self.backend,
-                "prefix": self.prefix,
-                "storage_options": self.store.catalogue_storage_options(self.prefix),
-                "index_names": {
-                    "latest": self.index_name.latest,
-                    "all": self.index_name.all,
-                },
-                "indexed_objects": self.ingested_objects,
-                "schema": {
-                    k: json.loads(s.model_dump_json())
-                    for k, s in self.store.schema.items()
-                },
-            },
+            "metadata": self.metadata.model_dump(by_alias=True),
             "sources": {
                 self.index_name.latest: {
                     "description": "Latest metadata versions.",

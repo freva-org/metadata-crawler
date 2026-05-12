@@ -26,12 +26,14 @@ import json
 import multiprocessing as mp
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from typing import (
     TYPE_CHECKING,
     Any,
     AsyncIterator,
     ClassVar,
     Dict,
+    Iterator,
     List,
     Literal,
     Optional,
@@ -147,6 +149,22 @@ def _get_storage_url(url: str, hide_password: bool = False, **kwargs: Any) -> st
     return parsed.render_as_string(hide_password=hide_password)
 
 
+@contextmanager
+def _open_db_connection(
+    url: str, sanitise: bool = True, **storage_options: Any
+) -> Iterator["sa.Connection"]:
+    try:
+        import sqlalchemy as sa
+    except ImportError:
+        raise ImportError(_IMPORT_ERR) from None
+
+    url = _get_storage_url(url, **storage_options) if sanitise else url
+    engine: sa.Engine = sa.create_engine(url, pool_pre_ping=True)
+    with engine.begin() as conn:
+        yield conn
+    engine.dispose()
+
+
 # ------------------------------------------------------------------
 # Writer daemon (runs in a spawned process, always sync)
 # ------------------------------------------------------------------
@@ -160,33 +178,27 @@ class PostgreSQLWriter(BackendWriter):
 
     backend: ClassVar[str] = "PostgresQL"
 
-    def __init__(
-        self,
-        *streams: Stream,
-        **storage_options: Any,
-    ) -> None:
+    def __post_init__(self) -> None:
         try:
             import sqlalchemy as sa
         except ImportError:
             raise ImportError(_IMPORT_ERR) from None
-        unique_key = storage_options.pop("unique_key", "file")
-        schema_json = storage_options.pop("schema_json", "{}")
-        url = _get_storage_url(streams[0].path, **storage_options)
+        unique_key = self.storage_options.pop("unique_key", "file")
+        schema_json = self.storage_options.pop("schema_json", "{}")
+        url = _get_storage_url(self.streams[0].path, **self.storage_options)
         self._engine: sa.Engine = sa.create_engine(url, pool_pre_ping=True)
         self._sa_meta: sa.MetaData = sa.MetaData()
-        schema: Dict[str, SchemaField] = {
+        self._schema: Dict[str, SchemaField] = {
             k: SchemaField(**v) for k, v in json.loads(schema_json).items()
         }
-        self._schema = schema
         self._unique_key = unique_key
         self._tables: Dict[str, sa.Table] = {
             s.name: _build_table(
-                s.name, schema, self._sa_meta, epoch_key=self._epoch_key
+                s.name, self._schema, self._sa_meta, epoch_key=self._epoch_key
             )
-            for s in streams
+            for s in self.streams
         }
         self._sa_meta.create_all(self._engine)
-        self._records: int = 0
 
     def add(self, metadata_batch: List[Tuple[str, MetadataRecord]]) -> None:
         """Upsert a batch into the appropriate tables."""
@@ -203,7 +215,7 @@ class PostgreSQLWriter(BackendWriter):
                     continue
                 table = self._tables[table_name]
                 self._upsert_rows(conn, table, rows)
-                self._records += len(rows)
+                self.indexed_objects += len(rows)
 
     def _upsert_rows(
         self,
@@ -318,14 +330,14 @@ class PostgreSQL(IndexStore):
         """The writer process."""
         return self._proc
 
-    def write_catalogue_metadata(self, indexed_objects: int = 0) -> None:
+    def write_catalogue_metadata(self, payload: Dict[str, Any]) -> None:
         """Store catalogue metadata in a ``_catalogue`` table."""
         try:
             import sqlalchemy as sa
             from sqlalchemy.dialects.postgresql import insert
         except ImportError:
             raise ImportError(_IMPORT_ERR) from None
-
+        value = json.dumps(payload)
         engine: sa.Engine = sa.create_engine(self._url, pool_pre_ping=True)
         try:
             meta_table: sa.Table = sa.Table(
@@ -335,30 +347,29 @@ class PostgreSQL(IndexStore):
                 sa.Column("value", sa.Text()),
             )
             meta_table.create(engine, checkfirst=True)
-            payload = json.dumps(
-                {
-                    "version": 1,
-                    "backend": self.driver,
-                    "index_names": {
-                        "latest": self.index_names[0],
-                        "all": self.index_names[1],
-                    },
-                    "indexed_objects": indexed_objects,
-                    "schema": {
-                        k: json.loads(s.model_dump_json())
-                        for k, s in self.schema.items()
-                    },
-                }
-            )
             with engine.begin() as conn:
-                stmt = insert(meta_table).values(key="metadata", value=payload)
+                stmt = insert(meta_table).values(key="metadata", value=value)
                 stmt = stmt.on_conflict_do_update(
                     index_elements=["key"],
-                    set_={"value": payload},
+                    set_={"value": value},
                 )
                 conn.execute(stmt)
         finally:
             engine.dispose()
+
+    @property
+    def total_objects(self) -> int:
+        """Get the number of total metadata objects in all tables."""
+        try:
+            import sqlalchemy as sa
+        except ImportError:
+            raise ImportError(_IMPORT_ERR) from None
+        total = 0
+        with _open_db_connection(self._url, sanitise=False) as conn:
+            for name in self.index_names:
+                row = conn.execute(sa.text(f"SELECT COUNT(*) FROM {name}")).fetchone()
+                total += 0 if row is None else row[0]
+        return total
 
     @classmethod
     def read_catalogue_metadata(cls, url: str, **kwargs: Any) -> MetadataRecord:
@@ -367,12 +378,10 @@ class PostgreSQL(IndexStore):
             import sqlalchemy as sa
         except ImportError:
             raise ImportError(_IMPORT_ERR) from None
-
-        url = _get_storage_url(url, **kwargs)
-        engine: sa.Engine = sa.create_engine(url, pool_pre_ping=True)
         payload: Optional[MetadataRecord] = None
+
         try:
-            with engine.connect() as conn:
+            with _open_db_connection(url, **kwargs) as conn:
                 result: sa.CursorResult[Tuple[str]] = conn.execute(
                     sa.text(
                         f"SELECT value FROM {cls._CATALOGUE_TABLE} "
@@ -383,8 +392,6 @@ class PostgreSQL(IndexStore):
                 payload = None if row is None else json.loads(row[0])
         except Exception as error:
             logger.warning(error)
-        finally:
-            engine.dispose()
         if payload is None:
             raise ValueError(
                 f"No catalogue metadata found in table '{cls._CATALOGUE_TABLE}'"
@@ -464,20 +471,37 @@ class PostgreSQL(IndexStore):
             finally:
                 await loop.run_in_executor(pool, _close, engine, conn)
 
+    def count_stale_objects(self, epoch: float) -> int:
+        """Count the number of stale (outdated objects)."""
+        try:
+            import sqlalchemy as sa
+        except ImportError:
+            raise ImportError(_IMPORT_ERR) from None
+        total = 0
+        with _open_db_connection(self._url, sanitise=False) as conn:
+            for name in self.index_names:
+                row = conn.execute(
+                    sa.text(
+                        f"SELECT COUNT(*) FROM {name} WHERE {self._epoch_key} < :epoch"
+                    ),
+                    {"epoch": epoch},
+                ).fetchone()
+                total += 0 if row is None else row[0]
+        return total
+
     def sweep(self, epoch: float) -> None:
         """Delete all records whose epoch differs from *epoch*."""
-        import sqlalchemy as sa
-
-        engine = sa.create_engine(self._url)
-        total = 0
         try:
-            with engine.begin() as conn:
-                for name in self.index_names:
-                    result = conn.execute(
-                        sa.text(f"DELETE FROM {name} WHERE {self._epoch_key} < :epoch"),
-                        {"epoch": epoch},
-                    )
-                    total += result.rowcount
-        finally:
-            engine.dispose()
+            import sqlalchemy as sa
+        except ImportError:
+            raise ImportError(_IMPORT_ERR) from None
+
+        total = 0
+        with _open_db_connection(self._url, sanitise=False) as conn:
+            for name in self.index_names:
+                result = conn.execute(
+                    sa.text(f"DELETE FROM {name} WHERE {self._epoch_key} < :epoch"),
+                    {"epoch": epoch},
+                )
+                total += result.rowcount
         logger.info("Cleaned up %i old entries from database.", total)

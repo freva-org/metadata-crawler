@@ -31,7 +31,6 @@ from .base import (
     IndexStore,
     MetadataRecord,
     StorageOptions,
-    Stream,
 )
 
 
@@ -40,19 +39,13 @@ class JSONLineWriter(BackendWriter):
 
     backend: ClassVar[str] = "JSONLines"
 
-    def __init__(
-        self,
-        *streams: Stream,
-        **storage_options: Any,
-    ) -> None:
+    def __post_init__(self) -> None:
 
-        self._comp_level: int = storage_options.pop("comp_level", 4)
+        self._comp_level: int = self.storage_options.pop("comp_level", 4)
         self._f: Dict[str, BinaryIO] = {}
-        self._streams: Dict[str, str] = {s.name: s.path for s in streams}
-        self._records: int = 0
-        self.storage_options: StorageOptions = storage_options
-        for _stream in streams:
-            fs, _ = IndexStore.get_fs(_stream.path, **storage_options)
+        self._stream_dict: Dict[str, str] = {s.name: s.path for s in self.streams}
+        for _stream in self.streams:
+            fs, _ = IndexStore.get_fs(_stream.path, **self.storage_options)
             parent = os.path.dirname(_stream.path).rstrip("/")
             try:
                 fs.makedirs(parent, exist_ok=True)
@@ -72,7 +65,9 @@ class JSONLineWriter(BackendWriter):
 
     def add(self, metadata_batch: List[Tuple[str, MetadataRecord]]) -> None:
         """Add a batch of metadata to the gzip store."""
-        by_index: Dict[str, List[MetadataRecord]] = {name: [] for name in self._streams}
+        by_index: Dict[str, List[MetadataRecord]] = {
+            name: [] for name in self._stream_dict
+        }
         for index_name, metadata in metadata_batch:
             by_index[index_name].append(metadata)
         for index_name, records in by_index.items():
@@ -81,7 +76,7 @@ class JSONLineWriter(BackendWriter):
             payload = self._encode_records(records)
             gz = self._gzip_once(payload)
             self._f[index_name].write(gz)
-            self._records += len(records)
+            self.indexed_objects += len(records)
 
     def close(self) -> None:
         """Close the files."""
@@ -91,9 +86,11 @@ class JSONLineWriter(BackendWriter):
             except Exception:
                 pass
             stream.close()
-            if not self._records:
-                fs, _ = IndexStore.get_fs(self._streams[name], **self.storage_options)
-                fs.rm(self._streams[name])
+            if not self.indexed_objects:
+                fs, _ = IndexStore.get_fs(
+                    self._stream_dict[name], **self.storage_options
+                )
+                fs.rm(self._stream_dict[name])
 
 
 class JSONLines(IndexStore):
@@ -150,6 +147,11 @@ class JSONLines(IndexStore):
             "text_mode": True,
             "storage_options": self.catalogue_storage_options(path),
         }
+
+    @property
+    def total_objects(self) -> int:
+        """The number of total objects is always the the indexed objects."""
+        return 0
 
     @classmethod
     def read_catalogue_metadata(cls, url: str, **kwargs: Any) -> MetadataRecord:

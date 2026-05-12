@@ -10,6 +10,7 @@ import time
 from datetime import datetime
 from types import NoneType
 from typing import (
+    Annotated,
     Any,
     AsyncIterator,
     ClassVar,
@@ -21,11 +22,13 @@ from typing import (
     Set,
     Tuple,
     TypeAlias,
+    TypedDict,
     Union,
     cast,
 )
 
 import fsspec
+import pydantic
 
 from ...logger import logger
 from ...utils import SimpleQueueLike
@@ -39,6 +42,38 @@ MetadataRecord: TypeAlias = Dict[str, Any]
 BATCH_ITEM: TypeAlias = List[Tuple[str, MetadataRecord]]
 WriterQueueType: TypeAlias = SimpleQueueLike[Union[int, BATCH_ITEM]]
 StorageOptions: TypeAlias = Dict[str, Any]
+CatalogueBackendType: TypeAlias = Literal["mongodb", "postgresql", "intake"]
+
+
+class ItemsDict(TypedDict):
+    """Representation of the indexed items."""
+
+    latest: str
+    all: str
+
+
+class CrawlerOptions(TypedDict):
+    """Representation of the metadata-crawler software information."""
+
+    name: str
+    version: str
+
+
+class StoreMetadata(pydantic.BaseModel):
+    """Description of the metadata store."""
+
+    version: int
+    backend: str
+    prefix: str
+    storage_options: pydantic.JsonValue
+    index_names: ItemsDict
+    indexed_objects: int
+    total_objects: int
+    timestamp: str
+    crawler: CrawlerOptions
+    the_schema: Annotated[
+        pydantic.JsonValue, pydantic.Field(serialization_alias="schema")
+    ]
 
 
 class Stream(NamedTuple):
@@ -203,6 +238,16 @@ class IndexStore:
     # Housekeeping functions
     # -------------------------------------------------------------------
 
+    @property
+    @abc.abstractmethod
+    def total_objects(self) -> int:
+        """Get the number of total objects in this store."""
+        raise NotImplementedError("This must be defined on backend level.")
+
+    def count_stale_objects(self, epoch: float) -> int:
+        """Count the number of stale (outdated objects)."""
+        return 0
+
     def sweep(self, epoch: float) -> None:
         """Delete all records whose epoch differs from *epoch*."""
 
@@ -259,6 +304,9 @@ class IndexStore:
 
     def catalogue_storage_options(self, path: Optional[str] = None) -> StorageOptions:
         """Construct the storage options for the catalogue."""
+        if self.has_catalogue_storage:
+            # A DB store deons't need storage options to be encoded.
+            return {}
         is_s3 = (path or "").startswith("s3://")
         opts: StorageOptions = {
             k: v
@@ -278,7 +326,7 @@ class IndexStore:
         opts |= {"anon": True} if is_s3 and not shadow_keys & opts.keys() else {}
         return opts
 
-    def write_catalogue_metadata(self, indexed_objects: int = 0) -> None:
+    def write_catalogue_metadata(self, payload: Dict[str, Any]) -> None:
         """Persist catalogue metadata inside the backend itself."""
         raise NotImplementedError(
             f"{type(self).__name__} does not support internal "
@@ -299,13 +347,21 @@ class BackendWriter:
     backend: ClassVar[str]
     _epoch_key: ClassVar[str] = IndexStore._epoch_key
 
-    @abc.abstractmethod
     def __init__(
         self,
         *streams: Stream,
         **storage_options: Any,
     ) -> None:
         """Each store writer must implement a __init__ method."""
+        self.indexed_objects = 0
+        self.streams = streams
+        self.storage_options = storage_options
+        self.__post_init__()
+
+    @abc.abstractmethod
+    def __post_init__(self) -> None:
+        """Set up the storage backend for writing."""
+        raise NotImplementedError("__post_init__ must be implemented.")
 
     @classmethod
     def as_daemon(
