@@ -257,6 +257,7 @@ class CatalogueWriter:
             batch_size_per_proc = max(batch_size_per_proc, 100)
             self.fs, _ = IndexStore.get_fs(store_uri, **storage_options)
             self.path = self.fs.unstrip_protocol(store_uri)
+            self.prefix = _store_path
             if not scheme and not os.path.isabs(_store_path):
                 _store_path = os.path.join(
                     os.path.abspath(os.path.dirname(store_uri)),
@@ -264,7 +265,7 @@ class CatalogueWriter:
                 )
         else:
             _store_path = self.path
-        self.prefix = _store_path
+            self.prefix = ""
         self.index_name = index_name
         cls: Type[IndexStore] = CatalogueBackends[self.backend].value
         self.store = cls(
