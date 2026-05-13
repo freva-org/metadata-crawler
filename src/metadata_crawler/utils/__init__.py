@@ -5,7 +5,6 @@ import logging
 import multiprocessing as mp
 import multiprocessing.context as mctx
 import os
-import sys
 import time
 from datetime import datetime, timedelta
 from importlib.metadata import entry_points
@@ -125,7 +124,12 @@ class FilesystemLike(Protocol):
 
 Counter: TypeAlias = ValueLike[int]
 PrintLock = mp.Lock()
-Console = rich.console.Console(force_terminal=sys.stdout.isatty(), stderr=True)
+Console = rich.console.Console(
+    force_terminal=logger.is_interactive_environment(),
+    force_jupyter=False,
+    soft_wrap=False,
+    stderr=True,
+)
 
 
 class MetadataCrawlerException(Exception):
