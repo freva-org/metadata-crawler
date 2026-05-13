@@ -45,11 +45,12 @@ def run_workload(
     storage_options = dict(_get_storage_option_from_env()) or None
     try:
         os.environ["MDC_MAX_FILES"] = str(num_files)
+        os.environ["MDC_SILENT"] = os.getenv("MDC_SILENT", "1")
         if task == "add":
             add(
                 config_file,
                 store=store,
-                batch_size=100_000,
+                batch_size=min(num_files, 100_000),
                 data_set=[data_set],
                 verbosity=0,
                 backend=backend,

@@ -495,6 +495,7 @@ async def async_add(
             num_files = data_col.ingested_objects
             files_discovered = data_col.crawled_files
             dt = timedelta_to_str(time.time() - st)
+        num_files = data_col.ingest_queue.total_files_discovered
         logger.info("Discovered: %s files", f"{files_discovered:10,.0f}")
         logger.info("Ingested: %s files", f"{num_files:10,.0f}")
         logger.info("Spend: %s", dt)

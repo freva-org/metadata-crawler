@@ -25,7 +25,6 @@ from __future__ import annotations
 import asyncio
 import json
 import multiprocessing as mp
-import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from typing import (
@@ -185,6 +184,7 @@ class PostgreSQLWriter(BackendWriter):
     """
 
     backend: ClassVar[str] = "PostgresQL"
+    has_catalogue_storage: ClassVar[bool] = True
 
     def __post_init__(self) -> None:
         try:
@@ -196,7 +196,7 @@ class PostgreSQLWriter(BackendWriter):
         unique_key = self.storage_options.pop("unique_key", "file")
         schema_json = self.storage_options.pop("schema_json", "{}")
         self._url = _get_storage_url(self.streams[0].path, **self.storage_options)
-        self._pending: int = 0
+        self._pending: Dict[str, int] = {s.name: 0 for s in self.streams}
         self._commit_interval: int = 10
 
         # --- SQLAlchemy: DDL only (create tables if needed) ---
@@ -214,9 +214,10 @@ class PostgreSQLWriter(BackendWriter):
         engine.dispose()
 
         # --- Raw psycopg3: pre-build upsert SQL, open connection ---
-        self._conn: pg.Connection[Any] = pg.connect(
-            _get_psycopg_url(self._url), autocommit=False
-        )
+        self._conns: Dict[str, pg.Connection[Any]] = {
+            s.name: pg.connect(_get_psycopg_url(self._url), autocommit=False)
+            for s in self.streams
+        }
         self._upsert_sql: Dict[str, str] = {}
         for name, table in tables.items():
             columns = [col.name for col in table.columns]
@@ -232,32 +233,22 @@ class PostgreSQLWriter(BackendWriter):
                 f"DO UPDATE SET {update_set}"
             )
 
-    def add(self, metadata_batch: List[Tuple[str, MetadataRecord]]) -> None:
-        """Upsert a batch using raw psycopg3 executemany."""
-        by_table: Dict[str, List[MetadataRecord]] = {
-            name: [] for name in self._upsert_sql
-        }
-        now = time.time()
-        for table_name, metadata in metadata_batch:
-            if table_name in by_table:
-                metadata[self._epoch_key] = now
-                by_table[table_name].append(metadata)
+    def _write_table(self, table_name: str, rows: List[MetadataRecord]) -> int:
+        conn = self._conns[table_name]
+        cursor = conn.cursor()
+        cursor.executemany(self._upsert_sql[table_name], rows)
+        self.indexed_objects += len(rows)
+        self._pending[table_name] += 1
+        if self._pending[table_name] >= self._commit_interval:
+            conn.commit()
+            self._pending[table_name] = 0
+        return len(rows)
 
-        cursor = self._conn.cursor()
-        for table_name, rows in by_table.items():
-            if not rows:
-                continue
-            cursor.executemany(self._upsert_sql[table_name], rows)
-            self.indexed_objects += len(rows)
-        self._pending += 1
-        if self._pending >= self._commit_interval:
-            self._conn.commit()
-            self._pending = 0
-
-    def close(self) -> None:
+    def _close(self) -> None:
         """Close the raw connection."""
-        self._conn.commit()
-        self._conn.close()
+        for conn in self._conns.values():
+            conn.commit()
+            conn.close()
 
 
 # ------------------------------------------------------------------
@@ -321,7 +312,7 @@ class PostgreSQL(IndexStore):
                 {k: json.loads(s.model_dump_json()) for k, s in self.schema.items()}
             )
             streams = (Stream(name=n, path=self._url) for n in self.index_names)
-            args = (self.queue, self._sent) + tuple(streams)
+            args = (self.queue, self._sent, self.counter) + tuple(streams)
             kwargs = {k: v for (k, v) in self.storage_options.items()}
             kwargs["unique_key"] = self._unique_key
             kwargs["schema_json"] = schema_json

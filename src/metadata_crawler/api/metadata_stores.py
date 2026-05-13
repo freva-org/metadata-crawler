@@ -245,13 +245,16 @@ class CatalogueWriter:
         _store_path = collection or table or data_store_prefix or "metadata"
         scheme, _, _ = _store_path.rpartition("://")
         self.silent = bool(int(os.getenv("MDC_SILENT", "0")))
-        self.no_sweep = no_sweep
         self.backend = backend or CatalogueReader.backend_from_store_url(store_uri)
+        self.no_sweep = no_sweep
         self.epoch = self._get_epoch(sweep_grace_period)
         # YAML catalogue setup -- only for file-based backends.
         self.path: Optional[str] = store_uri
         self.fs = None
+        n_procs = n_procs or min(mp.cpu_count(), 15)
+        batch_size_per_proc = int(batch_size / n_procs)
         if self.backend in ("intake",):
+            batch_size_per_proc = max(batch_size_per_proc, 100)
             self.fs, _ = IndexStore.get_fs(store_uri, **storage_options)
             self.path = self.fs.unstrip_protocol(store_uri)
             if not scheme and not os.path.isabs(_store_path):
@@ -261,7 +264,6 @@ class CatalogueWriter:
                 )
         else:
             _store_path = self.path
-
         self.prefix = _store_path
         self.index_name = index_name
         cls: Type[IndexStore] = CatalogueBackends[self.backend].value
@@ -278,8 +280,6 @@ class CatalogueWriter:
         self.queue: ConsumerQueueType = self._ctx.Queue()
         self._poison_pill = 13
         self.num_objects: Counter = self._ctx.Value("i", 0)
-        n_procs = n_procs or min(mp.cpu_count(), 15)
-        batch_size_per_proc = max(int(batch_size / n_procs), 100)
         self._tasks = [
             self._ctx.Process(
                 target=QueueConsumer.run_consumer_task,
@@ -377,7 +377,7 @@ class CatalogueWriter:
 
     async def close(self, create_catalogue: bool = True) -> None:
         """Close any connections."""
-        self.store.join()
+        self.store.close()
         total = self.store.total_objects
         stale = self.store.count_stale_objects(self.epoch)
         if total > 0 and stale / total > 0.75 and self.no_sweep is False:
@@ -390,7 +390,6 @@ class CatalogueWriter:
                 )
         elif self.no_sweep is False:
             self.store.sweep(self.epoch)
-        self.store.close()
         if create_catalogue:
             if self.store.has_catalogue_storage:
                 self.store.write_catalogue_metadata(
@@ -415,6 +414,11 @@ class CatalogueWriter:
             task.start()
 
     @property
+    def total_files_discovered(self) -> int:
+        """Get the total number of discovered files by this run."""
+        return self.store.counter.value
+
+    @property
     def metadata(self) -> StoreMetadata:
         """Define the metadata that will get added to the metadata store."""
         return StoreMetadata(
@@ -423,8 +427,8 @@ class CatalogueWriter:
             prefix=self.prefix,
             storage_options=self.store.catalogue_storage_options(self.prefix),
             index_names={"latest": self.index_name.latest, "all": self.index_name.all},
-            indexed_objects=self.ingested_objects,
-            total_objects=self.store.total_objects or self.ingested_objects,
+            indexed_objects=self.total_files_discovered,
+            total_objects=self.store.total_objects,
             timestamp=datetime.now().strftime("%c"),
             crawler={
                 "name": metadata_crawler.__name__,

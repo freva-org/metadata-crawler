@@ -7,6 +7,7 @@ import json
 import multiprocessing as mp
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from types import NoneType
 from typing import (
@@ -31,7 +32,7 @@ import pydantic
 from typing_extensions import TypedDict
 
 from ...logger import logger
-from ...utils import SimpleQueueLike
+from ...utils import Counter, SimpleQueueLike
 from ..config import SchemaField
 
 BATCH_SECS_THRESHOLD = 20
@@ -167,7 +168,6 @@ class IndexStore:
         shadow: Optional[Union[str, List[str]]] = None,
         **kwargs: Any,
     ) -> None:
-
         self.storage_options: StorageOptions = storage_options or {}
         self._shadow_options: List[str] = (
             shadow or [] if isinstance(shadow, (list, NoneType)) else [shadow]
@@ -188,6 +188,7 @@ class IndexStore:
             for k, col in schema.items()
             if getattr(getattr(col, "base_type", None), "value", None) == "timestamp"
         }
+        self.counter: Counter = self._ctx.Value("i", 0)
         self._init_storage(path, **kwargs)
 
     # ------------------------------------------------------------------
@@ -346,17 +347,27 @@ class BackendWriter:
 
     backend: ClassVar[str]
     _epoch_key: ClassVar[str] = IndexStore._epoch_key
+    has_catalogue_storage: ClassVar[bool] = False
 
     def __init__(
         self,
+        counter: Counter,
         *streams: Stream,
         **storage_options: Any,
     ) -> None:
         """Each store writer must implement a __init__ method."""
         self.indexed_objects = 0
+        self._counter = counter
         self.streams = streams
         self.storage_options = storage_options
+        self._write_pool = ThreadPoolExecutor(max_workers=len(self.streams) or 1)
         self.__post_init__()
+
+    def set_total_items_written(self) -> int:
+        """Get the number of total written items."""
+        with self._counter.get_lock():
+            self._counter.value = self.indexed_objects
+        return self.indexed_objects
 
     @abc.abstractmethod
     def __post_init__(self) -> None:
@@ -368,12 +379,13 @@ class BackendWriter:
         cls,
         queue: WriterQueueType,
         semaphore: int,
+        counter: Counter,
         *schemes: Stream,
         storage_options: Optional[StorageOptions] = None,
     ) -> None:
         """Start the writer process as a daemon."""
         try:
-            this = cls(*schemes, **(storage_options or {}))
+            this = cls(counter, *schemes, **(storage_options or {}))
         except Exception as error:
             logger.critical("Writer daemon failed to start: %s", error)
             raise SystemExit(1)
@@ -391,9 +403,31 @@ class BackendWriter:
         this.close()
 
     @abc.abstractmethod
+    def _write_table(self, table_name: str, rows: List[MetadataRecord]) -> int:
+        """Per backend implementation of the actual write/push."""
+        raise NotImplementedError("Backends must implement their writers.")
+
     def add(self, metadata_batch: List[Tuple[str, MetadataRecord]]) -> None:
         """Add a batch of metadata to the metadata store."""
+        by_table: Dict[str, List[MetadataRecord]] = {s.name: [] for s in self.streams}
+        now = time.time()
+        for table_name, metadata in metadata_batch:
+            if table_name in by_table and self.has_catalogue_storage:
+                metadata[self._epoch_key] = now
+            by_table[table_name].append(metadata)
+
+        futures = [
+            self._write_pool.submit(self._write_table, table_name, rows)
+            for table_name, rows in by_table.items()
+            if rows
+        ]
+        self.indexed_objects += sum([f.result() for f in futures])
 
     @abc.abstractmethod
+    def _close(self) -> None:
+        """Close the writer."""
+
     def close(self) -> None:
         """Close the writer."""
+        self.set_total_items_written()
+        self._close()

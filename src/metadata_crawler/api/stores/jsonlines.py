@@ -16,7 +16,6 @@ from typing import (
     List,
     Literal,
     Optional,
-    Tuple,
     Union,
 )
 
@@ -40,7 +39,6 @@ class JSONLineWriter(BackendWriter):
     backend: ClassVar[str] = "JSONLines"
 
     def __post_init__(self) -> None:
-
         self._comp_level: int = self.storage_options.pop("comp_level", 4)
         self._f: Dict[str, BinaryIO] = {}
         self._stream_dict: Dict[str, str] = {s.name: s.path for s in self.streams}
@@ -63,22 +61,13 @@ class JSONLineWriter(BackendWriter):
         """Compress a whole JSONL blob into a single gz member (fast)."""
         return gzip.compress(payload, compresslevel=self._comp_level)
 
-    def add(self, metadata_batch: List[Tuple[str, MetadataRecord]]) -> None:
-        """Add a batch of metadata to the gzip store."""
-        by_index: Dict[str, List[MetadataRecord]] = {
-            name: [] for name in self._stream_dict
-        }
-        for index_name, metadata in metadata_batch:
-            by_index[index_name].append(metadata)
-        for index_name, records in by_index.items():
-            if not records:
-                continue
-            payload = self._encode_records(records)
-            gz = self._gzip_once(payload)
-            self._f[index_name].write(gz)
-            self.indexed_objects += len(records)
+    def _write_table(self, table_name: str, rows: List[MetadataRecord]) -> int:
+        payload = self._encode_records(rows)
+        gz = self._gzip_once(payload)
+        self._f[table_name].write(gz)
+        return len(rows)
 
-    def close(self) -> None:
+    def _close(self) -> None:
         """Close the files."""
         for name, stream in self._f.items():
             try:
@@ -122,9 +111,9 @@ class JSONLines(IndexStore):
         _comp_level = int(kwargs.get("comp_level", "4"))
         self._proc: Optional[mp.process.BaseProcess] = None
         if mode == "w":
-            args = (self.queue, self._sent) + tuple(self._paths)
             kwargs = {k: v for (k, v) in self.storage_options.items()}
             kwargs["comp_level"] = _comp_level
+            args = (self.queue, self._sent, self.counter) + tuple(self._paths)
             self._proc = self._ctx.Process(
                 target=JSONLineWriter.as_daemon,
                 args=args,
@@ -151,7 +140,7 @@ class JSONLines(IndexStore):
     @property
     def total_objects(self) -> int:
         """The number of total objects is always the the indexed objects."""
-        return 0
+        return self.counter.value
 
     @classmethod
     def read_catalogue_metadata(cls, url: str, **kwargs: Any) -> MetadataRecord:

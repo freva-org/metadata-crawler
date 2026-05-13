@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import asyncio
 import multiprocessing as mp
-import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import (
     TYPE_CHECKING,
@@ -131,6 +130,7 @@ class MongoDBWriter(BackendWriter):
     """
 
     backend: ClassVar[str] = "MongoDB"
+    has_catalogue_storage: ClassVar[bool] = True
 
     def __post_init__(self) -> None:
         try:
@@ -148,35 +148,24 @@ class MongoDBWriter(BackendWriter):
         for col in self._collections.values():
             col.create_index(unique_key, unique=True)
 
-    def add(self, metadata_batch: List[Tuple[str, MetadataRecord]]) -> None:
-        """Upsert a batch into the appropriate collections."""
+    def _write_table(self, table_name: str, rows: List[MetadataRecord]) -> int:
         from pymongo import UpdateOne
 
-        by_col: Dict[str, List[MetadataRecord]] = {
-            name: [] for name in self._collections
-        }
-        now = time.time()
-        for col_name, metadata in metadata_batch:
-            if col_name in by_col:
-                by_col[col_name].append(metadata)
-                metadata[self._epoch_key] = now
-        for col_name, records in by_col.items():
-            if not records:
-                continue
-            ops = [
-                UpdateOne(
-                    {self._unique_key: doc[self._unique_key]},
-                    {"$set": doc},
-                    upsert=True,
-                )
-                for doc in records
-                if self._unique_key in doc
-            ]
-            if ops:
-                self._collections[col_name].bulk_write(ops, ordered=False)
-                self.indexed_objects += len(ops)
+        ops = [
+            UpdateOne(
+                {self._unique_key: doc[self._unique_key]},
+                {"$set": doc},
+                upsert=True,
+            )
+            for doc in rows
+            if self._unique_key in doc
+        ]
+        if ops:
+            self._collections[table_name].bulk_write(ops, ordered=False)
+            self.indexed_objects += len(ops)
+        return len(rows)
 
-    def close(self) -> None:
+    def _close(self) -> None:
         """Close the client connection."""
         self._client.close()
 
@@ -241,7 +230,7 @@ class MongoDB(IndexStore):
         self._proc: Optional[mp.process.BaseProcess] = None
         if self.mode == "w":
             streams = (Stream(name=n, path=self._uri) for n in self.index_names)
-            args = (self.queue, self._sent) + tuple(streams)
+            args = (self.queue, self._sent, self.counter) + tuple(streams)
             kwargs = {k: v for (k, v) in self.storage_options.items()}
             kwargs["unique_key"] = self._unique_key
             self._proc = self._ctx.Process(

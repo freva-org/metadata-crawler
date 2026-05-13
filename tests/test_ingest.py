@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
+from unittest.mock import MagicMock
 
 import intake
 import mock
@@ -61,12 +62,16 @@ def db_cleanup(request, db_storage_options):
     meta = _get_metadata()
     backend = request.param if hasattr(request, "param") else None
     data = _read_catalogues()
+    counter = MagicMock()
+    counter.value = 0
+    counter.get_lock.return_value = MagicMock()
 
     def _add_data():
         if backend in (None, "postgresql"):
             url = "postgresql://localhost:5432"
             s = [Stream(name=n, path=url) for n in ("latest", "files")]
             writer = PostgreSQLWriter(
+                counter,
                 *s,
                 username=db_storage_options["username"],
                 password=db_storage_options["password"],
@@ -79,12 +84,14 @@ def db_cleanup(request, db_storage_options):
                 for entry in map(_convert, batch):
                     writer.add([("latest", entry)])
                     writer.add([("files", entry)])
+            writer.close()
             PostgreSQL._write_metadata(engine, meta)
             engine.dispose()
         if backend in (None, "mongodb"):
             url = "mongodb://localhost:27017"
             s = [Stream(name=n, path=url) for n in ("latest", "files")]
             writer = MongoDBWriter(
+                counter,
                 *s,
                 username=db_storage_options["username"],
                 password=db_storage_options["password"],
@@ -96,7 +103,7 @@ def db_cleanup(request, db_storage_options):
                     writer.add([("latest", entry)])
                     writer.add([("files", entry)])
             MongoDB._write_metadata(writer._client, meta)
-            writer._client.close()
+            writer.close()
 
     def _cleanup():
         if backend in (None, "postgresql"):
