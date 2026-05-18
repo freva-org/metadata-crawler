@@ -1,20 +1,9 @@
 """Metadata Crawler API high level functions."""
 
-import asyncio
 from pathlib import Path
-from types import ModuleType
 from typing import Any, Dict, List, Literal, Optional, Union, cast, overload
 
 from tomlkit import TOMLDocument
-
-try:
-    import uvloop
-
-    use_uvloop = True
-except ImportError:
-
-    use_uvloop = False  # pragma: no cover
-
 
 from ._version import __version__
 from .api.config import ConfigMerger, DRSConfig
@@ -22,14 +11,9 @@ from .api.metadata_stores import CatalogueBackendType, IndexName
 from .data_collector import DataCollector
 from .logger import logger
 from .run import async_add, async_delete, async_index
+from .utils.loop import get_async_model
 
-async_model: ModuleType
-
-if use_uvloop:
-    async_model = uvloop
-    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-else:
-    async_model = asyncio  # pragma: no cover
+async_model = get_async_model()
 
 __all__ = [
     "logger",
@@ -42,6 +26,7 @@ __all__ = [
     "async_index",
     "async_delete",
     "async_add",
+    "async_model",
 ]
 
 

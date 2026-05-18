@@ -1,8 +1,12 @@
 """Logging utilities."""
 
+import asyncio
+import concurrent.futures
 import logging
 import logging.config
+import multiprocessing
 import os
+import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, Optional, cast
@@ -10,6 +14,8 @@ from typing import Any, Optional, cast
 import appdirs
 from rich.console import Console
 from rich.logging import RichHandler
+
+from .utils.loop import get_async_model
 
 THIS_NAME = "metadata-crawler"
 
@@ -49,7 +55,14 @@ class Logger(logging.Logger):
     logfmt: str = "%(name)s: %(message)s"
     filelogfmt: str = "%(asctime)s %(levelname)s: %(name)s - %(message)s"
     datefmt: str = "%Y-%m-%dT%H:%M:%S"
-    no_debug: list[str] = ["watchfiles", "httpcore", "pymongo", "pika"]
+    no_debug: list[str] = [
+        "watchfiles",
+        "httpcore",
+        "pymongo",
+        "pika",
+        "uvloop",
+        "asyncio",
+    ]
 
     def __init__(
         self,
@@ -66,14 +79,21 @@ class Logger(logging.Logger):
         self.file_format = logging.Formatter(self.filelogfmt, self.datefmt)
         self._logger_file_handle: Optional[RotatingFileHandler] = None
         self._logger_stream_handle = RichHandler(
-            rich_tracebacks=True,
+            rich_tracebacks=self.is_interactive_environment(),
             tracebacks_max_frames=10,
             tracebacks_extra_lines=5,
             show_path=True,
+            tracebacks_suppress=[
+                get_async_model(),
+                asyncio,
+                concurrent.futures,
+                multiprocessing,
+            ],
             console=Console(
                 soft_wrap=False,
                 force_jupyter=False,
                 stderr=True,
+                force_terminal=self.is_interactive_environment(),
             ),
         )
         self._logger_stream_handle.setFormatter(logger_format)
@@ -87,6 +107,12 @@ class Logger(logging.Logger):
             if os.getenv("MDC_LOG_INIT", "0") == "1"
             else None
         )
+
+    @staticmethod
+    def is_interactive_environment() -> bool:
+        """Decide whether we are in an interactive environment."""
+        _isatty = int(getattr(sys.stdout, "isatty", lambda: False)())
+        return bool(int(os.getenv("MDC_INTERACTIVE", str(_isatty))))
 
     def set_level(self, level: int) -> None:
         """Set the logger level to level."""
@@ -140,9 +166,7 @@ def get_level_from_verbosity(verbosity: int) -> int:
     return max(logging.CRITICAL - 10 * verbosity, -1)
 
 
-def apply_verbosity(
-    level: Optional[int] = None, suffix: Optional[str] = None
-) -> int:
+def apply_verbosity(level: Optional[int] = None, suffix: Optional[str] = None) -> int:
     """Set the logging level of the handlers to a certain level."""
     level = logger.level if level is None else level
     old_level = logger.level
