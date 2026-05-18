@@ -6,7 +6,8 @@ This document highlights major changes and additions across releases.
 v2605.0.0
 ---------
 * Enable glob pattern for indexing metadata stores.
-* Add support for storing meta data crawls into MongoDB and PostgreSQL
+* Add support for storing meta data crawls into MongoDB and PostgreSQL.
+* Enable/disable rich logging for headless modes.
 
 v2602.0.0
 ---------
