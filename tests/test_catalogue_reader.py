@@ -1,7 +1,27 @@
-import fsspec
-from unittest.mock import patch, MagicMock
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
-from metadata_crawler.api.metadata_stores import IndexStore  # adjust import
+import fsspec
+import pytest
+
+from metadata_crawler import add
+from metadata_crawler.api.stores import IndexStore  # adjust import
+
+
+class TestBackendSelection:
+    """ "Tests for the BackendEnum."""
+
+    def test_wrong_backend_type(
+        self, drs_config_path: Path, cat_file: Path, data_dir: Path
+    ) -> None:
+        """Test the right behaviour for selecting the wrong backend."""
+        with pytest.raises(ValueError):
+            add(
+                drs_config_path,
+                store=cat_file,
+                backend="foo",
+                data_object=[data_dir / "observations"],
+            )
 
 
 class TestGetFs:

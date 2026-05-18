@@ -24,8 +24,9 @@ from typing import (
 import tomlkit
 
 from .api.config import CrawlerSettings, DRSConfig
-from .api.metadata_stores import CatalogueWriter, IndexName
+from .api.metadata_stores import CatalogueWriter
 from .api.storage_backend import PathTemplate
+from .api.stores import IndexName
 from .logger import logger
 from .utils import (
     Counter,

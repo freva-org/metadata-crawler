@@ -15,7 +15,7 @@ from jinja2 import Template
 
 from metadata_crawler import add, index
 from metadata_crawler.api.config import DRSConfig
-from metadata_crawler.api.metadata_stores import DateTimeDecoder, DateTimeEncoder
+from metadata_crawler.api.stores import DateTimeDecoder, DateTimeEncoder
 from metadata_crawler.backends.posix import PosixPath
 from metadata_crawler.backends.swift import SwiftPath
 from metadata_crawler.utils import MetadataCrawlerException
@@ -111,11 +111,7 @@ def test_read_zarr_data(zarr_data: Path) -> None:
             Path("foo/muh_bar_zup.nc")
         )
     assert (
-        len(
-            config.index_schema["time_aggregation"].get_time_range(
-                [datetime.now()]
-            )
-        )
+        len(config.index_schema["time_aggregation"].get_time_range([datetime.now()]))
         == 2
     )
 
@@ -129,7 +125,7 @@ def test_get_search():
 
     assert len(_get_search(DRSConfig.load(conf).datasets)) == 1
     with pytest.raises(ValueError):
-        index("foo", conf)
+        index("foo", "foo.yml")
 
 
 def test_multi_config(drs_config_path: Path) -> None:
@@ -156,7 +152,7 @@ def test_benchmark_settings(drs_config_path: Path, cat_file: Path) -> None:
                 n_procs=1,
                 batch_size=3,
                 store=cat_file,
-                catalogue_backend="jsonlines",
+                catalogue_backend="intake",
                 data_set=["obs-fs"],
             )
     os.environ = env

@@ -15,7 +15,7 @@ import orjson
 
 from ..api.cli import cli_function, cli_parameter
 from ..api.index import BaseIndex
-from ..api.metadata_stores import IndexName
+from ..api.stores import IndexName
 from ..logger import logger
 
 
@@ -34,8 +34,8 @@ class SolrIndex(BaseIndex):
         encode_workers: int = 4
         self._uri: str = ""
         self.cpu_pool = ThreadPoolExecutor(max_workers=encode_workers)
-        self.producer_queue: asyncio.Queue[Tuple[str, Optional[bytes]]] = (
-            asyncio.Queue(maxsize=queue_max)
+        self.producer_queue: asyncio.Queue[Tuple[str, Optional[bytes]]] = asyncio.Queue(
+            maxsize=queue_max
         )
         self.connector = aiohttp.TCPConnector(
             ttl_dns_cache=300,
@@ -130,7 +130,12 @@ class SolrIndex(BaseIndex):
                 case "bbox":
                     metadata[k] = f"ENVELOPE({v[0]}, {v[1]}, {v[3]}, {v[2]})"
                 case "daterange":
-                    metadata[k] = f"[{v[0].isoformat()} TO {v[-1].isoformat()}]"
+                    metadata[k] = (
+                        f"[{v[0].strftime('%Y-%m-%dT%H:%M:%SZ')} "
+                        f"TO {v[-1].strftime('%Y-%m-%dT%H:%M:%SZ')}]"
+                    )
+                case "datetime":
+                    metadata[k] = v[0].strftime("%Y-%m-%dT%H:%M:%SZ")
 
         return metadata
 
@@ -197,11 +202,9 @@ class SolrIndex(BaseIndex):
         base_url = await self.solr_url(server, core + suffix)
         update_url = base_url.split("?", 1)[0]  # guard
         loop = asyncio.get_running_loop()
-        async for batch in self.get_metadata(core):
-            body = await loop.run_in_executor(
-                self.cpu_pool, self._encode_payload, batch
-            )
-            await self.producer_queue.put((update_url, body))
+        async for body in self.get_metadata(core):
+            enc = await loop.run_in_executor(self.cpu_pool, self._encode_payload, body)
+            await self.producer_queue.put((update_url, enc))
         commit_url = f"{update_url}?commit=true"
         async with session.post(
             commit_url,
@@ -210,9 +213,7 @@ class SolrIndex(BaseIndex):
         ) as resp:
             if resp.status >= 400:
                 text = await resp.text()
-                logger.warning(
-                    "COMMIT %s -> %i: %s", commit_url, resp.status, text
-                )
+                logger.warning("COMMIT %s -> %i: %s", commit_url, resp.status, text)
 
     async def __aexit__(
         self,
@@ -262,8 +263,7 @@ class SolrIndex(BaseIndex):
             timeout=self.timeout, connector=self.connector, raise_for_status=True
         ) as session:
             consumers = [
-                asyncio.create_task(self.consumer(session))
-                for _ in range(http_workers)
+                asyncio.create_task(self.consumer(session)) for _ in range(http_workers)
             ]
             async with asyncio.TaskGroup() as tg:
                 for core in self.index_names:

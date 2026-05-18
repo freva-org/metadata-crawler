@@ -21,7 +21,8 @@ from typing import (
 from ..logger import logger
 from ..utils import Console, IndexProgress
 from .config import SchemaField
-from .metadata_stores import CatalogueReader, IndexStore
+from .metadata_stores import CatalogueReader
+from .stores import IndexStore
 
 
 class BaseIndex:
@@ -38,8 +39,8 @@ class BaseIndex:
 
     Parameters
     ^^^^^^^^^^
-    catalogue_file:
-        Path to the intake catalogue
+    uri:
+        Uri to the metadata store.
     batch_size:
         The amount for metadata that should be gathered `before` ingesting
         it into the catalogue.
@@ -53,7 +54,7 @@ class BaseIndex:
 
     def __init__(
         self,
-        catalogue_file: Optional[Union[str, Path]] = None,
+        uri: Optional[Union[str, Path]] = None,
         batch_size: int = 2500,
         storage_options: Optional[Dict[str, Any]] = None,
         progress: Optional[IndexProgress] = None,
@@ -61,9 +62,9 @@ class BaseIndex:
     ) -> None:
         self._store: Optional[IndexStore] = None
         self.progress = progress or IndexProgress(total=-1)
-        if catalogue_file is not None:
+        if uri is not None:
             _reader = CatalogueReader(
-                catalogue_file=catalogue_file or "",
+                store_url=uri or "",
                 batch_size=batch_size,
                 storage_options=storage_options,
             )
@@ -90,9 +91,7 @@ class BaseIndex:
     @property
     def index_names(self) -> Tuple[str, str]:
         """Get the names of the indexes for latests and all data."""
-        return cast(
-            Tuple[str, str], getattr(self._store, "index_names", ("", ""))
-        )
+        return cast(Tuple[str, str], getattr(self._store, "index_names", ("", "")))
 
     async def get_metadata(
         self, index_name: str

@@ -38,9 +38,11 @@ dependencies = [
         "intake-esm",
         "pandas",
         "python-dateutil",
+        "psycopg[binary]",
         "numpy",
         "orjson",
         "pyarrow",
+        "pymongo",
         "h5netcdf",
         "h5py",
         "pydantic",
@@ -48,13 +50,13 @@ dependencies = [
         "rich",
         "rich-argparse",
         "rtoml",
+        "sqlalchemy",
         "tomlkit",
         "typing_extensions",
         "zarr",
         "xarray",
         "httpx",
         "uvloop ; sys_platform != 'win32'",
-        "motor",
 ]
 [project.optional-dependencies]
 dev = ["maturin", "tox"]
@@ -96,6 +98,7 @@ tests = [
     "pytest-asyncio",
     "pytest-cov",
     "pytest-env",
+    "pytest-mock",
     "requests",
     "pre-commit",
     "toml",
@@ -132,7 +135,7 @@ python-packages = ["metadata_crawler"]
 
 
 [tool.pytest.ini_options]
-env = ["MDC_LOG_INTERVAL=1", "RICH_TERMINAL_WIDTH=120"]
+env = ["MDC_LOG_INTERVAL=1", "RICH_TERMINAL_WIDTH=120", "MDC_STORAGE_OPTIONS="]
 
 [tool.coverage.run]
 branch = false
@@ -164,6 +167,7 @@ exclude_lines = [
   "except Exception:",
   "class Completer",
   "if 0:",
+  "if TYPE_CHECKING:",
   "if perf_file *:",
   "p_col = *",
   "f_col = *",
@@ -173,7 +177,7 @@ exclude_lines = [
 
 
 [tool.flake8]
-ignore = ["F405", "F403", "E704", "E203", "W503", "C901"]
+ignore = ["E704", "E203", "W503"]
 
 [tool.isort]
 known_first_party = ["metadata_crawler"]
@@ -248,7 +252,7 @@ setenv =
 commands =
     ; --- Python linting -----
     python3 -m isort --check --profile black -t py313 -l 79 src
-    python3 -m flake8 src --count --max-complexity=10 --ignore=E203,F405,F403,E704,W503,C901 --max-line-length=88 --statistics --show-source
+    python3 -m flake8 src --count --max-complexity=17 --ignore=E203,E704,W503 --max-line-length=88 --statistics --show-source
     codespell {posargs: --quiet-level=2} src/metadata_crawler
     python3 -m pydocstyle src/metadata_crawler
     bandit -r src/metadata_crawler --skip B110 --severity-level medium --confidence-level high

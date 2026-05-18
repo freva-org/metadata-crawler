@@ -13,9 +13,7 @@ from metadata_crawler.api.config import DRSConfig
 from metadata_crawler.utils import EmptyCrawl, MetadataCrawlerException
 
 
-def test_crawl_local_obs(
-    drs_config_path: Path, cat_file: Path, data_dir: Path
-) -> None:
+def test_crawl_local_obs(drs_config_path: Path, cat_file: Path, data_dir: Path) -> None:
     """Test crawling the local observations."""
     _lens = []
     add(
@@ -23,11 +21,12 @@ def test_crawl_local_obs(
         store=cat_file,
         n_procs=1,
         batch_size=3,
-        catalogue_backend="jsonlines",
+        catalogue_backend="intake",
         data_object=[data_dir / "observations"],
     )
     assert cat_file.exists()
     _lens.append(len(intake.open_catalog(cat_file).latest.read()))
+    # Test backwards compatible crawl
     add(
         drs_config_path,
         store=cat_file,
@@ -53,13 +52,12 @@ def test_crawl_local_obs_with_eval_conf(
         {"EVALUATION_SYSTEM_CONFIG_DIR": str(drs_config_path)},
         clear=True,
     ):
-
         add(
             drs_config_path,
             store=cat_file,
             n_procs=1,
             batch_size=3,
-            catalogue_backend="jsonlines",
+            catalogue_backend="intake",
             data_object=[data_dir / "observations"],
         )
         assert cat_file.exists()
@@ -125,7 +123,7 @@ def test_crawl_empty_set(drs_config_path: Path, cat_file: Path) -> None:
     with pytest.raises(MetadataCrawlerException):
         add(drs_config_path, store="foo.yaml", data_object=["/foo"])
     with pytest.raises(EmptyCrawl):
-        add(drs_config_path, data_set=["fool"], store="foo.yam")
+        add(drs_config_path, data_set=["fool"], store="foo.yml")
 
 
 def test_crawl_single_files(
@@ -183,7 +181,7 @@ def test_crawl_thresh_fail(drs_config_path: Path, cat_file: Path) -> None:
             drs_config_path,
             store=cat_file,
             data_set=["obs-fs-missing"],
-            catalogue_backend="jsonlines",
+            backend="intake",
             fail_under=10,
         )
     assert not cat_file.exists()

@@ -6,6 +6,7 @@ The software installs a console entry point named
 
 * ``add``  – Collect metadata into a temporary catalog.
 * ``config`` – Display general configuration
+* ``glance`` – Get an overview over the crawled metadata in a metadata store.
 * ``solr``   - Index and delete metadata to/from Apache solr.
 * ``mongo``  – Index and deleta metadata to/from MongoDB.
 * ``walk-intake`` – Convenience module to traverse and check intake catalogues.
@@ -16,7 +17,7 @@ some examples.
 Basic crawling
 ^^^^^^^^^^^^^^
 
-To harvest a directory of files into a JSON lines catalog (multiple config
+To harvest a directory of files into a meta data store (multiple config
 files are supported since `v2511.0.0`):
 
 .. code-block:: console
@@ -44,8 +45,59 @@ your DRS configuration instead of explicit file paths
 
 .. versionchanged:: 2511.0.0
 
-    The ``metadata-crawler add`` sub commands support multiple config files
-    and glob pattern of config files.
+   The ``metadata-crawler add`` sub commands support multiple config files
+   and glob pattern of config files.
+
+Crawling into databases
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. versionadded:: 2605.0.0
+
+    Instead of writing to file-based ``intake`` catalogues, metadata can be
+    crawled directly into a **MongoDB** or **PostgreSQL** database. Database
+    backends store catalogue metadata internally, so no YAML catalogue file
+    is needed. The backend is detected automatically from the URL scheme.
+
+**MongoDB:**
+
+.. code-block:: console
+
+   mdc add \
+       mongodb://localhost:27017 \
+       -c /path/to/drs_config.toml \
+       --data-object /path/to/data \
+       -s username metadata \
+       -s password secret \
+       -s database metadata
+
+**PostgreSQL:**
+
+.. code-block:: console
+
+   mdc add \
+       postgresql://localhost:5432/metadata \
+       -c /path/to/drs_config.toml \
+       --data-object /path/to/data \
+       -s username metadata \
+       -s password secret
+
+Credentials can also be provided via the ``MDC_STORAGE_OPTIONS``
+environment variable to keep them out of the command line and shell
+history:
+
+.. code-block:: console
+
+   export MDC_STORAGE_OPTIONS="username:metadata,password:secret"
+   mdc add mongodb://localhost:27017 -c /path/to/drs_config.toml --data-object /path/to/data
+
+The ``--table`` / ``--collection`` / ``--prefix`` flag controls the
+table or collection name prefix (defaults to ``metadata``).
+
+.. note::
+
+   Database backends require optional dependencies:
+   ``pymongo`` for MongoDB, ``sqlalchemy`` and ``psycopg`` for PostgreSQL.
+
 
 Indexing
 ^^^^^^^^

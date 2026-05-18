@@ -8,13 +8,23 @@ services:
       - "8983:8983"
     hostname: solr
 
+  postgresdb:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: metadata
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: metadata
+    ports:
+      - "5432:5432"
+    hostname: postgresdb
+
   mongodb:
     networks:
       - freva-rest
     image: ghcr.io/freva-org/freva-mongo:latest
     environment:
       API_MONGO_DB: metadata
-      API_MONGO_USER: mongo
+      API_MONGO_USER: metadata
       API_MONGO_PASSWORD: secret
     hostname: mongodb
     ports:

@@ -21,7 +21,7 @@ def test_crawl_obs(
         batch_size=3,
         n_procs=1,
         data_set=["obs-swift"],
-        catalogue_backend="jsonlines",
+        backend="intake",
     )
     assert cat_file.exists()
     cat = intake.open_catalog(cat_file)

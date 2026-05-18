@@ -59,7 +59,7 @@ Too long; didn't read (TL;DR)
   dataset attributes/vars
 - **Special rules**: conditionals and method/function calls (e.g. CMIP6 realm,
   time aggregation)
-- **Index backends**: JSONLines (intake), Apache Solr, MongoDB
+- **Index backends**: Apache Solr, MongoDB
 - **Support of dataset versions**: Dataset versions are stored separately.
   Data containing *all* dataset versions and the *latest* versions only.
 
@@ -86,18 +86,52 @@ and adjusted.
     the configuration by ``<key>-<value>`` pair queries.
 
 
-Harvest metadata into a catalogue
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Check the last metadata crawl
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+You can get a quick overview over the metadata store by inspecting it's
+content with the ``glance`` sub command:
 
 .. code-block:: console
 
+    mdc glance mongodb://localhost -s username mongo -s password secret
+
+
+
+Harvest metadata into a catalogue
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. versionadded:: 2605.0.0
+
+    Instead of writing to file-based ``intake`` catalogues, metadata can be
+    crawled directly into a **MongoDB** or **PostgreSQL** database. Database
+    backends store catalogue metadata internally, so no YAML catalogue file
+    is needed. The backend is detected automatically from the URL scheme.
+
+
+.. code-block:: console
+
+   # Intake
    mdc crawl cat.yaml -c drs_config.toml --dataset cmip6-fs --dataset obs-fs \
              --threads 4 --batch-size 100
 
+   # MongoDB
+   mdc crawl mongodb://username:password@server:27107/database -c drs_config.toml --dataset cmip6-fs --dataset obs-fs \
+             --threads 4 --batch-size 100
+
+   # PostgreSQL
+   mdc crawl postgresql://username:password@server:5432/database -c drs_config.toml --dataset cmip6-fs --dataset obs-fs \
+             --threads 4 --batch-size 100
+
+
+
 This reads dataset definitions from ``drs_config.toml`` and writes harvested
-metadata into a temporary **catalogue** file. You can specify one or
+metadata into a **metadata store**. You can specify one or
 more dataset names via ``--dataset`` or explicit paths via ``--data-object``.
-Catalogue formats include JSONLines (gzipped).
+Meta data store formats include **intake** (via gzipped JSONLines) **MongoDB**
+and **PostgreSQL**.
+
+
 
 Index catalogue entries
 ^^^^^^^^^^^^^^^^^^^^^^^^

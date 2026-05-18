@@ -7,7 +7,11 @@ from tomlkit import TOMLDocument
 
 from ._version import __version__
 from .api.config import ConfigMerger, DRSConfig
-from .api.metadata_stores import CatalogueBackendType, IndexName
+from .api.metadata_stores import (
+    CatalogueBackendType,
+    CatalogueReader,
+    IndexName,
+)
 from .data_collector import DataCollector
 from .logger import logger
 from .run import async_add, async_delete, async_index
@@ -22,12 +26,24 @@ __all__ = [
     "index",
     "add",
     "delete",
+    "glance_metadata",
     "get_config",
     "async_index",
     "async_delete",
     "async_add",
     "async_model",
 ]
+
+
+def glance_metadata(
+    store: Union[Path, str],
+    backend: Optional[CatalogueBackendType] = None,
+    **storage_options: Any,
+) -> Dict[str, Any]:
+    """Inspect the meta data for a given table."""
+    return CatalogueReader.read_catalogue_metadata(
+        store, backend=backend, **storage_options
+    )
 
 
 @overload
@@ -72,10 +88,11 @@ def get_config(
 
 def index(
     index_system: str,
-    *catalogue_files: Union[Path, str, List[str], List[Path]],
+    *metadata_stores: Union[Path, str, List[str], List[Path]],
     batch_size: int = 2500,
     verbosity: int = 0,
     log_suffix: Optional[str] = None,
+    backend: Optional[CatalogueBackendType] = None,
     **kwargs: Any,
 ) -> None:
     """Index metadata in the indexing system.
@@ -84,15 +101,24 @@ def index(
     ^^^^^^^^^^
 
     index_system:
-        The index server where the metadata is indexed.
-    catalogue_files:
-        Path to the file(s) where the metadata was stored.
+        The index store where the metadata is indexed.
+    metadata_stores:
+        Uri to the metadata store(s).
     batch_size:
         If the index system supports batch-sizes, the size of the batches.
     verbosity:
         Set the verbosity level.
     log_suffix:
         Add a suffix to the log file output.
+    backend: str
+        Backend to be used for the metadata store. If None given (default)
+        the backend will be guessed from the storage uri
+
+        .. versionchanged:: 2605.0.0
+
+           Added ``"mongodb"`` and ``"postgresql"`` backends.
+
+
 
     Other Parameters
     ^^^^^^^^^^^^^^^^
@@ -116,10 +142,11 @@ def index(
     async_model.run(
         async_index(
             index_system,
-            *catalogue_files,
+            *metadata_stores,
             batch_size=batch_size,
             verbosity=verbosity,
             log_suffix=log_suffix,
+            backend=backend,
             **kwargs,
         )
     )
@@ -176,8 +203,11 @@ def add(
     store: Optional[Union[str, Path]] = None,
     data_object: Optional[Union[str, List[str]]] = None,
     data_set: Optional[Union[str, List[str]]] = None,
-    data_store_prefix: str = "metadata",
-    catalogue_backend: CatalogueBackendType = "jsonlines",
+    catalogue_backend: Optional[CatalogueBackendType] = None,
+    backend: Optional[CatalogueBackendType] = None,
+    data_store_prefix: Optional[str] = None,
+    collection: Optional[str] = None,
+    table: Optional[str] = None,
     batch_size: int = 25_000,
     comp_level: int = 4,
     storage_options: Optional[Dict[str, Any]] = None,
@@ -185,6 +215,8 @@ def add(
     latest_version: str = IndexName().latest,
     all_versions: str = IndexName().all,
     n_procs: Optional[int] = None,
+    no_sweep: bool = False,
+    sweep_grace_period: int = 5,
     verbosity: int = 0,
     log_suffix: Optional[str] = None,
     password: bool = False,
@@ -216,12 +248,55 @@ def add(
         Datasets that should be crawled. The datasets need to be defined
         in the drs-config file. By default all datasets are crawled.
         Names can contain wildcards such as ``xces-*``.
-    data_store_prefix:
-        Absolute path or relative path to intake catalogue source
     data_dir:
         Instead of defining datasets are are to be crawled you can crawl
         data based on their directories. The directories must be a root dirs
         given in the drs-config file. By default all root dirs are crawled.
+    data_store_prefix:
+        Name or path of the metadata store.  For the *jsonlines*
+        backend this is a filesystem path prefix for the ``.json.gz``
+        files (resolved relative to *yaml_path* unless absolute).
+        For database backends it serves as the default collection or
+        table name.  Defaults to ``"metadata"``.
+    collection:
+        Alias for *data_store_prefix* — preferred when using the
+        *mongodb* backend.  Maps directly to the MongoDB collection
+        name.
+    table:
+        Alias for *data_store_prefix* — preferred when using the
+        *sql* backend.  Maps directly to the SQL table name.
+    backend:
+        Backend to be used for the metadata store. If None given (default)
+        the backend will be guessed from the storage uri
+
+        .. versionchanged:: 2605.0.0
+
+           Added ``"mongodb"`` and ``"postgresql"`` backends.
+
+
+
+    catalogue_backend:
+        Alias for ``backend``
+    no_sweep:
+        Skip removal of stale records after crawling.
+        By default, database backends (MongoDB, PostgreSQL)
+        remove entries older than the grace period "
+        (set via ``sweep_grace_period``).
+        Use this flag for partial or incremental crawls
+        where not all data sources are being re-discovered.
+
+        .. versionadded:: 2605.0.0
+
+
+    sweep_grace_period:
+        Number of days to keep records before they become eligible
+        for sweeping. Records older than this grace period are
+        removed after a crawl. Overrides the MDC_GRACE_DAYS
+        environment variable. Defaults to 5 days.
+
+        .. versionadded:: 2605.0.0
+
+
     bach_size:
         Batch size that is used to collect the meta data. This can affect
         performance.
@@ -232,8 +307,6 @@ def add(
     shadow:
         'Shadow' this storage options. This is useful to hide secrets in public
         data catalogues.
-    catalogue_backend:
-        Intake catalogue backend
     latest_version:
         Name of the core holding 'latest' metadata.
     all_versions:
@@ -276,8 +349,9 @@ def add(
             batch_size=batch_size,
             comp_level=comp_level,
             password=password,
-            catalogue_backend=catalogue_backend,
             data_store_prefix=data_store_prefix,
+            table=table,
+            collection=collection,
             shadow=shadow,
             latest_version=latest_version,
             all_versions=all_versions,
@@ -286,6 +360,10 @@ def add(
             verbosity=verbosity,
             log_suffix=log_suffix,
             fail_under=fail_under,
+            backend=backend,
+            catalogue_backend=catalogue_backend,
+            no_sweep=no_sweep,
+            sweep_grace_period=sweep_grace_period,
             **kwargs,
         )
     )

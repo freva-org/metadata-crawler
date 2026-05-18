@@ -1,13 +1,17 @@
 """Test of cftime_utils."""
 
+from __future__ import annotations
+
+import json
+from datetime import datetime
+
 import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
 
-from metadata_crawler.utils.cftime_utils import (
-    infer_cmor_like_time_frequency,
-)
+from metadata_crawler.api.stores import DateTimeDecoder, DateTimeEncoder
+from metadata_crawler.utils.cftime_utils import infer_cmor_like_time_frequency
 
 
 def _make_ds_from_times(
@@ -40,6 +44,28 @@ def _make_ds_from_times(
     ds = ds.set_coords(coord_name)
     ds.coords[coord_name].attrs = attrs or {}
     return ds
+
+
+class TestDateTimeCodecs:
+    """Cover DateTimeEncoder/Decoder edge cases."""
+
+    def test_encoder_non_datetime_raises(self) -> None:
+        """Line 59: super().default(obj) for unsupported type."""
+        with pytest.raises(TypeError):
+            json.dumps({"v": {1, 2, 3}}, cls=DateTimeEncoder)
+
+    def test_decoder_nested_dict(self) -> None:
+        """Lines 73-74: dict branch in _decode_datetime."""
+        raw = '{"outer": {"ts": "2024-06-01T00:00:00Z"}}'
+        result = json.loads(raw, cls=DateTimeDecoder)
+        assert isinstance(result["outer"]["ts"], datetime)
+
+    def test_decoder_passthrough_int(self) -> None:
+        """Line 80: return obj for non-str/list/dict."""
+        raw = '{"count": 42, "flag": true}'
+        result = json.loads(raw, cls=DateTimeDecoder)
+        assert result["count"] == 42
+        assert result["flag"] is True
 
 
 # ----------------------------------------------------------------------

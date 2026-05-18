@@ -26,12 +26,17 @@ from typing import (
     get_type_hints,
 )
 
+import yaml
 from rich_argparse import ArgumentDefaultsRichHelpFormatter
 
-from metadata_crawler import add, delete, get_config, index
+from metadata_crawler import add, delete, get_config, glance_metadata, index
 
 from ._version import __version__
-from .api.metadata_stores import CatalogueBackends, IndexName
+from .api.metadata_stores import (
+    CatalogueBackends,
+    CatalogueBackendType,
+)
+from .api.stores import IndexName
 from .backends.intake import IntakePath
 from .logger import (
     THIS_NAME,
@@ -42,9 +47,7 @@ from .utils import exception_handler, load_plugins
 
 StorageScalar = Union[str, int, float, bool]
 StorageOptions = Dict[str, StorageScalar]
-KwargValue = Union[
-    str, int, float, Path, StorageOptions, List[str], List[int], None
-]
+KwargValue = Union[str, int, float, Path, StorageOptions, List[str], List[int], None]
 
 
 def walk_catalogue(
@@ -84,10 +87,22 @@ def _flatten(inp: Union[List[str], List[List[str]]]) -> List[str]:
     return out
 
 
+def _get_storage_option_from_env() -> List[Tuple[str, str]]:
+    """Construct storage options from environment vars."""
+    options: List[Tuple[str, str]] = []
+    for env, _, var in [
+        s.strip().partition(":")
+        for s in os.getenv("MDC_STORAGE_OPTIONS", "").split(",")
+        if s.strip()
+    ]:
+        options.append((env, var))
+    return options
+
+
 def _process_storage_option(option: str) -> Union[str, bool, int, float]:
 
-    if option.lower() in ("false", "true"):
-        return option.lower() == "true"
+    if option.lower() in ("false", "true", "yes", "y"):
+        return option.lower() in ["true", "yes", "y"]
     try:
         return int(option)
     except ValueError:
@@ -113,6 +128,23 @@ def display_config(
         print(dumps(cfg.merged_doc, indent=3))
 
 
+def _glance_metadata(
+    store: Union[str, Path],
+    json: bool = False,
+    backend: Optional[CatalogueBackendType] = None,
+    verbose: int = 0,
+    **kwargs: Any,
+) -> None:
+    """Display the metadata content of a catalogue/database."""
+    meta = dumps(
+        glance_metadata(store, backend=backend, **kwargs.get("storage_options", {}))
+    )
+    if json:
+        print(meta)
+    else:
+        print(yaml.dump(yaml.safe_load(meta), default_flow_style=False))
+
+
 class ArgParse:
     """Command line interface definition.
 
@@ -125,9 +157,7 @@ class ArgParse:
     kwargs: Optional[Dict[str, KwargValue]] = None
     verbose: int = 0
     epilog: str = (
-        "See also "
-        "https://metadata-crawler.readthedocs.io"
-        " for a detailed documentation."
+        "See also https://metadata-crawler.readthedocs.io for a detailed documentation."
     )
 
     def __init__(self) -> None:
@@ -154,6 +184,7 @@ class ArgParse:
         self._add_config_parser()
         self._add_walk_catalogue()
         self._add_crawler_subcommand()
+        self._add_inspect()
         self._index_submcommands()
 
     def _add_config_parser(self) -> None:
@@ -172,9 +203,7 @@ class ArgParse:
             action="append",
             default=None,
         )
-        parser.add_argument(
-            "--json", help="Print in json format.", action="store_true"
-        )
+        parser.add_argument("--json", help="Print in json format.", action="store_true")
         parser.add_argument(
             "--no-comments",
             "--drop-comments",
@@ -204,24 +233,29 @@ class ArgParse:
         parser.add_argument(
             "store",
             type=str,
-            help="Path to the intake catalogue",
+            help="Url or path to the metadata store",
         )
         parser.add_argument(
+            "--backend",
             "--catalogue-backend",
             "-cb",
             type=str,
-            help="Source type of the catalogue backend.",
+            help="Source type of the storage backend.",
             choices=CatalogueBackends.__members__.keys(),
-            default=list(CatalogueBackends.__members__.keys())[0],
+            default=os.getenv("MDC_BACKEND"),
         )
         parser.add_argument(
             "--data-store-prefix",
             "--prefix",
+            "--collection",
+            "--table",
             type=str,
             help=(
-                "Set the path prefix for the metadata store, this can either be"
-                " an absolute path or if absolute path  is given a path prefix"
-                " relative to the yaml catalogue file."
+                "Name or location of the metadata store. "
+                "For jsonlines: a path prefix for the .json.gz files "
+                "(relative to the catalogue YAML or absolute). "
+                "For mongodb: the collection name. "
+                "For sql: the table name."
             ),
             default="metadata",
         )
@@ -256,7 +290,7 @@ class ArgParse:
             help="Objects (directories or catalogue files) that are processed.",
             default=None,
             action="append",
-        ),
+        )
         parser.add_argument(
             "-ds",
             "--data-set",
@@ -269,11 +303,34 @@ class ArgParse:
             action="append",
         )
         parser.add_argument(
+            "--no-sweep",
+            action="store_true",
+            default=False,
+            help=(
+                "Skip removal of stale records after crawling. "
+                "By default, database backends (MongoDB, PostgreSQL) "
+                "remove entries older than the grace period "
+                "(set via --sweep-grace-period). "
+                "Use this flag for partial or incremental crawls "
+                "where not all data sources are being re-discovered."
+            ),
+        )
+        parser.add_argument(
+            "--sweep-grace-period",
+            type=int,
+            default=os.getenv("MDC_GRACE_DAYS", "5"),
+            help=(
+                "Number of days to keep records before they become eligible "
+                "for sweeping. Records older than this grace period are "
+                "removed after a crawl. Overrides the MDC_GRACE_DAYS "
+                "environment variable. Defaults to 5 days."
+            ),
+        )
+        parser.add_argument(
             "-p",
             "--password",
             help=(
-                "Ask for a password and set it to the DRS_STORAGE_PASSWD "
-                "env variable."
+                "Ask for a password and set it to the DRS_STORAGE_PASSWD env variable."
             ),
             action="store_true",
         )
@@ -304,6 +361,7 @@ class ArgParse:
             type=int,
         )
         parser.add_argument(
+            "--storage-option",
             "--storage_option",
             "-s",
             help=(
@@ -332,9 +390,7 @@ class ArgParse:
         self._add_general_config_to_parser(parser)
         parser.set_defaults(apply_func=add)
 
-    def _add_general_config_to_parser(
-        self, parser: argparse.ArgumentParser
-    ) -> None:
+    def _add_general_config_to_parser(self, parser: argparse.ArgumentParser) -> None:
         """Add the most common arguments to a given parser."""
         parser.add_argument(
             "-v",
@@ -349,6 +405,48 @@ class ArgParse:
             help="Add a suffix to the log file output.",
             default=None,
         )
+
+    def _add_inspect(self) -> None:
+        """Add an inspect subcommand for table metadata inspection."""
+        parser = self.subparsers.add_parser(
+            "glance",
+            description="Inspect/glance the table metadata.",
+            help="Inspect/glance the table metadata",
+            formatter_class=ArgumentDefaultsRichHelpFormatter,
+            epilog=self.epilog,
+        )
+        parser.add_argument(
+            "store",
+            type=str,
+            help="Path/Url to the intake catalogue",
+        )
+        parser.add_argument(
+            "--backend",
+            "--catalogue-backend",
+            "-cb",
+            type=str,
+            help="Source type of the storage backend.",
+            choices=CatalogueBackends.__members__.keys(),
+            default=os.getenv("MDC_BACKEND"),
+        )
+        parser.add_argument(
+            "--storage-option",
+            "--storage_option",
+            "-s",
+            help=(
+                "Set additional storage options for adding metadata to the"
+                "metadata store"
+            ),
+            action="append",
+            nargs=2,
+        )
+        parser.add_argument(
+            "--json",
+            help="Parse output as JSON string.",
+            action="store_true",
+        )
+        self._add_general_config_to_parser(parser)
+        parser.set_defaults(apply_func=_glance_metadata)
 
     def _add_walk_catalogue(self) -> None:
         """Add a subcommand for walking an intake catalogue."""
@@ -366,6 +464,7 @@ class ArgParse:
             help="Path/Url to the intake catalogue",
         )
         parser.add_argument(
+            "--storage-option",
             "--storage_option",
             "-s",
             help=(
@@ -418,6 +517,7 @@ class ArgParse:
                     help="Set the batch size for indexing.",
                 )
                 parser.add_argument(
+                    "--storage-option",
                     "--storage_option",
                     "-s",
                     help=(
@@ -426,6 +526,15 @@ class ArgParse:
                     ),
                     action="append",
                     nargs=2,
+                )
+                parser.add_argument(
+                    "--backend",
+                    "--catalogue-backend",
+                    "-cb",
+                    type=str,
+                    help="Source type of the storage backend.",
+                    choices=CatalogueBackends.__members__.keys(),
+                    default=os.getenv("MDC_BACKEND"),
                 )
                 params = inspect.signature(method).parameters
                 annotations = get_type_hints(method, include_extras=True)
@@ -441,11 +550,7 @@ class ArgParse:
                         base_type, *extras = get_args(ann)
                         # find the dict emitted by cli_parameter()
                         cli_meta = next(
-                            (
-                                e
-                                for e in extras
-                                if isinstance(e, dict) and "args" in e
-                            ),
+                            (e for e in extras if isinstance(e, dict) and "args" in e),
                             None,
                         )
 
@@ -462,9 +567,7 @@ class ArgParse:
                     # if we found a cli_meta, wire it up
                     if cli_meta:
                         arg_names = cli_meta["args"]
-                        add_kwargs = {
-                            k: v for k, v in cli_meta.items() if k != "args"
-                        }
+                        add_kwargs = {k: v for k, v in cli_meta.items() if k != "args"}
 
                         # preserve any explicit default
                         if (
@@ -476,24 +579,18 @@ class ArgParse:
                         # enforce the base type if supplied
                         if base_type and "type" not in add_kwargs:
                             add_kwargs["type"] = base_type
-                        parser.add_argument(
-                            *arg_names, dest=param_name, **add_kwargs
-                        )
+                        parser.add_argument(*arg_names, dest=param_name, **add_kwargs)
                 if name == "index":
                     parser.add_argument(
-                        "catalogue_files",
+                        "metadata_stores",
                         help="File path to the metadata store.",
                         type=str,
                         nargs="*",
                     )
 
-                    parser.set_defaults(
-                        apply_func=partial(index, index_system=plugin)
-                    )
+                    parser.set_defaults(apply_func=partial(index, index_system=plugin))
                 else:
-                    parser.set_defaults(
-                        apply_func=partial(delete, index_system=plugin)
-                    )
+                    parser.set_defaults(apply_func=partial(delete, index_system=plugin))
                 self._add_general_config_to_parser(parser)
 
     def parse_args(self, argv: list[str]) -> argparse.Namespace:
@@ -517,11 +614,12 @@ class ArgParse:
                 "apply_func",
                 "verbose",
                 "version",
+                "storage-option",
                 "storage_option",
                 "shadow",
             )
         }
-        storage_option_pairs: List[Tuple[str, str]] = (
+        storage_option_pairs: List[Tuple[str, str]] = _get_storage_option_from_env() + (
             getattr(args, "storage_option", None) or []
         )
         so: StorageOptions = {}
