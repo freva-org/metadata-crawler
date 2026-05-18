@@ -165,6 +165,7 @@ def db_storage_options() -> Dict[str, str]:
         "username": "metadata",
         "password": "secret",
         "database": "metadata",
+        "db_schema": "public",
     }
 
 
@@ -195,17 +196,19 @@ def mongo_client(
 
 @pytest.fixture(scope="function")
 def pg_cursor(db_storage_options: Dict[str, str]) -> Iterator[psycopg.Cursor]:
+    db_schema = db_storage_options.get("db_schema", "public")
     conn = psycopg.connect(
         host="localhost",
         port=5432,
         user=db_storage_options["username"],
         password=db_storage_options["password"],
         dbname=db_storage_options["database"],
+        options=f"-csearch_path={db_schema}",
     )
     cur = conn.cursor()
 
     def _del_content():
-        cur.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+        cur.execute(f"SELECT tablename FROM pg_tables WHERE schemaname = '{db_schema}'")
         tables = [row[0] for row in cur.fetchall()]
         for table in tables:
             cur.execute(f"DELETE FROM {table}")

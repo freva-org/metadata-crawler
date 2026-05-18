@@ -40,6 +40,7 @@ from typing import (
     Tuple,
     Union,
 )
+from urllib.parse import parse_qs, urlparse
 
 from ...logger import logger
 from ..config import BaseType, SchemaField
@@ -59,6 +60,7 @@ _IMPORT_ERR = (
     "The postgresql storage backend requires 'sqlalchemy' and 'psycopg'. "
     "Install them with:  pip install sqlalchemy psycopg"
 )
+_DEFAULT_DB_SCHEMA = "metadata_crawler"
 
 # ------------------------------------------------------------------
 # Schema helpers
@@ -118,6 +120,12 @@ def _build_table(
 # ------------------------------------------------------------------
 # URL helpers
 # ------------------------------------------------------------------
+def _get_storage_options(url: str, key: str = "search_path") -> str:
+    """Get storage options from url."""
+    for opt in parse_qs(urlparse(url).query).get("options", []):
+        if key in opt:
+            return opt.split("=", 1)[-1]
+    return ""  # pragma: no cover
 
 
 def _get_storage_url(url: str, hide_password: bool = False, **kwargs: Any) -> str:
@@ -139,13 +147,20 @@ def _get_storage_url(url: str, hide_password: bool = False, **kwargs: Any) -> st
     username = kwargs.get("username") or kwargs.get("user")
     password = kwargs.get("password") or kwargs.get("passwd")
     database = kwargs.get("database") or kwargs.get("db")
+    db_schema = kwargs.get("db_schema") or kwargs.get("pg_schema") or _DEFAULT_DB_SCHEMA
+
     if username:
         parsed = parsed.set(username=username)
     if password:
         parsed = parsed.set(password=password)
     if database:
         parsed = parsed.set(database=database)
-
+    if db_schema and "options" not in parsed.query:
+        parsed = parsed.update_query_dict(
+            {
+                "options": f"-csearch_path={db_schema}",
+            }
+        )
     return parsed.render_as_string(hide_password=hide_password)
 
 
@@ -196,12 +211,15 @@ class PostgreSQLWriter(BackendWriter):
         unique_key = self.storage_options.pop("unique_key", "file")
         schema_json = self.storage_options.pop("schema_json", "{}")
         self._url = _get_storage_url(self.streams[0].path, **self.storage_options)
+        self._db_schema = _get_storage_options(self._url).partition(",")[0]
         self._pending: Dict[str, int] = {s.name: 0 for s in self.streams}
         self._commit_interval: int = 10
 
         # --- SQLAlchemy: DDL only (create tables if needed) ---
         engine: sa.Engine = sa.create_engine(self._url, pool_pre_ping=True)
-        sa_meta: sa.MetaData = sa.MetaData()
+        with engine.begin() as conn:
+            conn.execute(sa.schema.CreateSchema(self._db_schema, if_not_exists=True))
+        sa_meta: sa.MetaData = sa.MetaData(schema=self._db_schema)
         schema: Dict[str, SchemaField] = {
             k: SchemaField(**v) for k, v in json.loads(schema_json).items()
         }
@@ -305,6 +323,7 @@ class PostgreSQL(IndexStore):
     def _init_storage(self, path: str, **kwargs: Any) -> None:
         """Set up PostgreSQL connection state instead of fsspec."""
         self._url: str = _get_storage_url(path, **self.storage_options)
+        self._db_schema = _get_storage_options(self._url).partition(",")[0]
         self._unique_key: str = self._resolve_unique_key()
         self._proc: Optional[mp.process.BaseProcess] = None
         if self.mode == "w":
@@ -341,7 +360,9 @@ class PostgreSQL(IndexStore):
         return self._proc
 
     @classmethod
-    def _write_metadata(cls, engine: "sa.Engine", payload: Dict[str, Any]) -> None:
+    def _write_metadata(
+        cls, engine: "sa.Engine", payload: Dict[str, Any], db_schema: str
+    ) -> None:
         try:
             import sqlalchemy as sa
             from sqlalchemy.dialects.postgresql import insert
@@ -350,7 +371,7 @@ class PostgreSQL(IndexStore):
         value = json.dumps(payload)
         meta_table: sa.Table = sa.Table(
             cls._CATALOGUE_TABLE,
-            sa.MetaData(),
+            sa.MetaData(schema=db_schema),
             sa.Column("key", sa.Text(), primary_key=True),
             sa.Column("value", sa.Text()),
         )
@@ -371,7 +392,7 @@ class PostgreSQL(IndexStore):
             raise ImportError(_IMPORT_ERR) from None
         engine: sa.Engine = sa.create_engine(self._url, pool_pre_ping=True)
         try:
-            self._write_metadata(engine, payload)
+            self._write_metadata(engine, payload, self._db_schema)
         finally:
             engine.dispose()
 
@@ -443,13 +464,14 @@ class PostgreSQL(IndexStore):
         loop = asyncio.get_running_loop()
         batch_size = self.batch_size
         url = self._url
+
         full_table_name = index_name
 
         def _open() -> Tuple[
             "sa.Engine", Optional["sa.Connection"], Optional["sa.CursorResult[Any]"]
         ]:
             engine: sa.Engine = sa.create_engine(url, pool_pre_ping=True)
-            sa_meta: sa.MetaData = sa.MetaData()
+            sa_meta: sa.MetaData = sa.MetaData(schema=self._db_schema)
             sa_meta.reflect(bind=engine)
             table = sa_meta.tables.get(full_table_name)
             if table is None:
