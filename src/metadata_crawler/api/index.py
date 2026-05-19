@@ -106,7 +106,7 @@ class BaseIndex:
         if self._store:
             batch = []
             num_items = 0
-            logger.info("Indexing %s", index_name)
+            logger.debug("Indexing %s", index_name)
             async for batch in self._store.read(index_name):
                 yield batch
                 self.progress.update(len(batch))

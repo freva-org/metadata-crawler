@@ -191,7 +191,6 @@ class SolrIndex(BaseIndex):
         server: str,
         core: str,
         suffix: str,
-        http_workers: int = 8,
     ) -> None:
         """Zero-copy-ish, backpressured, bounded-concurrency indexer.
 
@@ -273,7 +272,6 @@ class SolrIndex(BaseIndex):
                             server or "",
                             core,
                             suffix=index_suffix or "",
-                            http_workers=http_workers,
                         )
                     )
             for _ in range(http_workers):

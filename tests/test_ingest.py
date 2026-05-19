@@ -53,8 +53,7 @@ def db_cleanup(request, db_storage_options):
     """Clean the relevant database before and after the test."""
     from metadata_crawler.api.stores.base import Stream
     from metadata_crawler.api.stores.mongodb import MongoDB, MongoDBWriter
-    from metadata_crawler.api.stores.postgresql import (PostgreSQL,
-                                                        PostgreSQLWriter)
+    from metadata_crawler.api.stores.postgresql import PostgreSQL, PostgreSQLWriter
 
     cur_dir = os.getcwd()
     os.chdir(Path(__file__).parent / "mock_crawls")
@@ -85,7 +84,7 @@ def db_cleanup(request, db_storage_options):
                     writer.add([("latest", entry)])
                     writer.add([("files", entry)])
             writer.close()
-            PostgreSQL._write_metadata(engine, meta)
+            PostgreSQL._write_metadata(engine, meta, "metadata_crawler")
             engine.dispose()
         if backend in (None, "mongodb"):
             url = "mongodb://localhost:27017"
