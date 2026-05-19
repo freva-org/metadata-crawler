@@ -39,6 +39,7 @@ from typing import (
     Optional,
     Tuple,
     Union,
+    cast,
 )
 from urllib.parse import parse_qs, urlparse
 
@@ -425,14 +426,19 @@ class PostgreSQL(IndexStore):
         with _open_db_connection(url, **kwargs) as conn:
             result: "sa.CursorResult[Tuple[str]]" = conn.execute(
                 sa.text(
-                    f"SELECT value FROM {db_schema}.{cls._CATALOGUE_TABLE} WHERE key = 'metadata'"
+                    (
+                        f"SELECT value FROM {db_schema}.{cls._CATALOGUE_TABLE} "
+                        "WHERE key = 'metadata'"
+                    )
                 )
             )
             row = result.fetchone()
-            payload = None if row is None else json.loads(row[0])
+            payload = cast(
+                Optional[MetadataRecord], None if row is None else json.loads(row[0])
+            )
         if payload is None:
             raise ValueError(
-                f"No catalogue metadata found in table '{cls._CATALOGUE_TABLE}'"
+                f"No catalogue metadata found in table '{db_schema}.{cls._CATALOGUE_TABLE}'"
             )
         return payload
 
