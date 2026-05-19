@@ -418,19 +418,18 @@ class PostgreSQL(IndexStore):
         except ImportError:
             raise ImportError(_IMPORT_ERR) from None
         payload: Optional[MetadataRecord] = None
-
-        try:
-            with _open_db_connection(url, **kwargs) as conn:
-                result: "sa.CursorResult[Tuple[str]]" = conn.execute(
-                    sa.text(
-                        f"SELECT value FROM {cls._CATALOGUE_TABLE} "
-                        "WHERE key = 'metadata'"
-                    )
+        db_schema = kwargs.get("db_schema") or kwargs.get(
+            "pg_schema", _DEFAULT_DB_SCHEMA
+        )
+        db_schema = _get_storage_options(url).partition(",")[0] or db_schema
+        with _open_db_connection(url, **kwargs) as conn:
+            result: "sa.CursorResult[Tuple[str]]" = conn.execute(
+                sa.text(
+                    f"SELECT value FROM {db_schema}.{cls._CATALOGUE_TABLE} WHERE key = 'metadata'"
                 )
-                row = result.fetchone()
-                payload = None if row is None else json.loads(row[0])
-        except Exception as error:
-            logger.warning(error)
+            )
+            row = result.fetchone()
+            payload = None if row is None else json.loads(row[0])
         if payload is None:
             raise ValueError(
                 f"No catalogue metadata found in table '{cls._CATALOGUE_TABLE}'"
