@@ -457,6 +457,7 @@ class PostgreSQL(IndexStore):
         """
         try:
             import sqlalchemy as sa
+            from sqlalchemy.exc import NoSuchTableError
         except ImportError:
             raise ImportError(_IMPORT_ERR) from None
 
@@ -464,18 +465,24 @@ class PostgreSQL(IndexStore):
         batch_size = self.batch_size
         url = self._url
 
-        full_table_name = index_name
-
         def _open() -> Tuple[
             "sa.Engine", Optional["sa.Connection"], Optional["sa.CursorResult[Any]"]
         ]:
             engine: sa.Engine = sa.create_engine(url, pool_pre_ping=True)
             sa_meta: sa.MetaData = sa.MetaData(schema=self._db_schema)
             sa_meta.reflect(bind=engine)
-            table = sa_meta.tables.get(full_table_name)
-            if table is None:
+            try:
+                table = sa.Table(
+                    index_name,
+                    sa_meta,
+                    schema=self._db_schema,
+                    autoload_with=engine,
+                )
+            except NoSuchTableError:
                 engine.dispose()
+                logger.critical("Cloud not find table %s", index_name)
                 return engine, None, None
+
             conn = engine.connect()
             result = conn.execute(sa.select(table))
             return engine, conn, result
