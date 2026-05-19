@@ -438,7 +438,8 @@ class PostgreSQL(IndexStore):
             )
         if payload is None:
             raise ValueError(
-                f"No catalogue metadata found in table '{db_schema}.{cls._CATALOGUE_TABLE}'"
+                "No catalogue metadata found in table "
+                f"'{db_schema}.{cls._CATALOGUE_TABLE}'"
             )
         return payload
 
