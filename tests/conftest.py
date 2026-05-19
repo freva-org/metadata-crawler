@@ -165,7 +165,7 @@ def db_storage_options() -> Dict[str, str]:
         "username": "metadata",
         "password": "secret",
         "database": "metadata",
-        "db_schema": "public",
+        "db_schema": "metadata_crawler",
     }
 
 
@@ -196,7 +196,7 @@ def mongo_client(
 
 @pytest.fixture(scope="function")
 def pg_cursor(db_storage_options: Dict[str, str]) -> Iterator[psycopg.Cursor]:
-    db_schema = db_storage_options.get("db_schema", "public")
+    db_schema = db_storage_options.get("db_schema", "metadata_crawler")
     conn = psycopg.connect(
         host="localhost",
         port=5432,
