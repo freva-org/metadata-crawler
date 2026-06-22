@@ -88,13 +88,18 @@ services:
         condition: service_healthy
 
   swift:
-    image: openstackswift/saio:latest
+    image: openstackswift/saio:py3
     hostname: swift
     networks: [freva-rest]
     ports:
       - "8081:8080"
+    security_opt:
+      - seccomp=unconfined
+    environment:
+      PYTHONWARNINGS: "ignore::DeprecationWarning,ignore::UserWarning"
+      S6_LOGGING: "0"
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://swift:8080/info"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/info"]
       interval: 5s
       timeout: 3s
       retries: 30
