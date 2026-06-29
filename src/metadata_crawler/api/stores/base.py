@@ -173,7 +173,8 @@ class IndexStore:
             shadow or [] if isinstance(shadow, (list, NoneType)) else [shadow]
         )
         self._ctx: mp.context.SpawnContext = mp.get_context("spawn")
-        self.queue: WriterQueueType = self._ctx.SimpleQueue()
+        _writer_qsize = int(os.getenv("MDC_WRITER_QUEUE_SIZE", "0")) or 64
+        self.queue: WriterQueueType = self._ctx.Queue(maxsize=_writer_qsize)
         self._sent: int = 42
         self.schema: Dict[str, SchemaField] = schema
         self.batch_size: int = batch_size

@@ -24,9 +24,9 @@ class ThreadContext:
         """Alias for Queue."""
         return Queue()
 
-    def Queue(self) -> Queue[Any]:
+    def Queue(self, maxsize: int = 0) -> Queue[Any]:
         """Alias for Queue."""
-        return Queue()
+        return Queue(maxsize=maxsize)
 
     def Process(self, *args: Any, **kwargs: Any) -> Thread:
         """Alias for Thread."""
@@ -173,7 +173,6 @@ def db_storage_options() -> Dict[str, str]:
 def mongo_client(
     db_storage_options: Dict[str, str],
 ) -> Iterator[pymongo.database.Database]:
-
     client = pymongo.MongoClient(
         "mongodb://localhost:27017",
         username=db_storage_options["username"],

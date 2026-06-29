@@ -52,6 +52,7 @@ class S3Path(PathTemplate):
                 asynchronous=True,
                 loop=loop,
                 skip_instance_cache=True,
+                use_listings_cache=False,
                 **self.storage_options,
             )
             self._client._loop = loop
@@ -100,11 +101,13 @@ class S3Path(PathTemplate):
             E.g.: '*.zarr|*.nc|*.hdf5'
         """
         client = await self._get_client()
+        path = str(path)
         if await self.is_file(path):
-            yield MetadataType(path=str(path), metadata={})
+            yield MetadataType(path=path, metadata={})
         else:
-            for suffix in self.suffixes:
-                for content in await client._glob(f"{path}/**/*{suffix}"):
+            suffixes = tuple(self.suffixes)
+            for content in await client._find(path, withdirs=True):
+                if content.endswith(suffixes):
                     yield MetadataType(path=f"/{content}", metadata={})
 
     def path(self, path: Union[str, pathlib.Path]) -> str:
@@ -120,9 +123,7 @@ class S3Path(PathTemplate):
         str:
             URI of the object store
         """
-        return cast(
-            str, fsspec.filesystem("s3", **self.storage_options).url(str(path))
-        )
+        return cast(str, fsspec.filesystem("s3", **self.storage_options).url(str(path)))
 
     def uri(self, path: Union[str, pathlib.Path]) -> str:
         """Get the uri of the object store.
