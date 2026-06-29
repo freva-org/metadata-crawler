@@ -8,6 +8,7 @@ bridges crawling with writing.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import multiprocessing as mp
 import os
@@ -278,7 +279,10 @@ class CatalogueWriter:
             **kwargs,
         )
         self._ctx = mp.get_context("spawn")
-        self.queue: ConsumerQueueType = self._ctx.Queue()
+        _ingest_qsize = int(os.getenv("MDC_INGEST_QUEUE_SIZE", "0")) or max(
+            batch_size * 2, 10_000
+        )
+        self.queue: ConsumerQueueType = self._ctx.Queue(maxsize=_ingest_qsize)
         self._poison_pill = 13
         self.num_objects: Counter = self._ctx.Value("i", 0)
         self._tasks = [
@@ -355,7 +359,7 @@ class CatalogueWriter:
             Name of the catalogue, if applicable. This variable depends on
             the cataloguing system. For example apache solr would use a ``core``.
         """
-        self.queue.put((name, drs_type, inp))
+        await asyncio.to_thread(self.queue.put, (name, drs_type, inp))
 
     @property
     def ingested_objects(self) -> int:
