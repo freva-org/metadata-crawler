@@ -152,6 +152,12 @@ type        = "string"
 multi_valued = true
 default     = "mean"
 
+[drs_settings.index_schema.data_type]
+key         = "data_type"
+type        = "string"
+multi_valued = false
+default     = "model-data"
+
 
 # 3) Global special rules
 [drs_settings.special.time_aggregation]
@@ -191,6 +197,7 @@ user              = "user"
 fs_type           = "__fstype__"
 bbox              = "bbox"
 time_aggregation  = "time_aggregation"
+data_type         = "data_type"
 
 [drs_settings.dialect.freva.path_specs]
 dir_parts  = [
