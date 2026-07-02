@@ -121,6 +121,71 @@ For MongoDB, supply the database URL and name:
        --url mongodb://localhost:27017 \
        --database metadata
 
+
+Blue/green index rotation
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. versionadded:: 2607.0.0
+
+   The ``index`` command can rotate its target atomically, so queries never
+   see a half-built index during a re-index.
+
+Passing ``--rotate`` (alias ``--blue-green``) indexes into a fresh, empty
+core/collection and only promotes it into production once indexing has
+finished and passed a sanity check. The previously live data is dropped in
+the same atomic step, giving a zero-downtime re-index:
+
+.. code-block:: console
+
+   # Apache Solr
+   metadata-crawler solr index \
+       /tmp/catalog.yml \
+       --server localhost:8983 \
+       --rotate \
+       --configset freva \
+       --min-docs 1
+
+   # MongoDB
+   metadata-crawler mongo index \
+       /tmp/catalog.yml \
+       --url mongodb://localhost:27017 \
+       --database metadata \
+       --rotate \
+       --min-docs 1
+
+How it works:
+
+* A uniquely named temporary index (the ``latest``/``files`` names with a
+  timestamp suffix) is created and populated.
+* After a commit the new index is validated. If any target holds fewer than
+  ``--min-docs`` documents the rotation is **aborted**, the temporary index is
+  dropped, and the live index is left untouched.
+* Otherwise the temporary index is promoted atomically — for Solr a ``SWAP``
+  followed by ``UNLOAD`` of the old core, for MongoDB a ``renameCollection``
+  with ``dropTarget`` — and the previous data is removed. On a first
+  deployment (no live index yet) the new index is simply renamed into place.
+
+Options:
+
+``--rotate`` / ``--blue-green``
+    Enable the rotation. Without it, ``index`` writes into the live
+    ``latest``/``files`` targets directly.
+``--configset`` *(Solr only, default* ``freva`` *)*
+    The Solr configset used to create the temporary cores. It must already
+    exist on the Solr server.
+``--min-docs`` *(default* ``1`` *)*
+    Abort the rotation if a freshly built index holds fewer than this many
+    documents. Guards against promoting an empty or half-crawled index over
+    good production data.
+``--index-suffix``
+    Override the auto-generated temporary-index suffix. Rarely needed; the
+    default timestamp keeps back-to-back rotations from colliding.
+
+.. note::
+
+   For Solr the ``--configset`` must be available on the server or core
+   creation fails. MongoDB needs no configset.
+
 Deleting
 ^^^^^^^^
 
