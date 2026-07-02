@@ -576,8 +576,14 @@ class ArgParse:
                         ):
                             add_kwargs["default"] = param.default
 
-                        # enforce the base type if supplied
-                        if base_type and "type" not in add_kwargs:
+                        # enforce the base type if supplied (but not when an
+                        # explicit action like ``store_true`` is set -- argparse
+                        # rejects ``type`` together with those actions)
+                        if (
+                            base_type
+                            and "type" not in add_kwargs
+                            and "action" not in add_kwargs
+                        ):
                             add_kwargs["type"] = base_type
                         parser.add_argument(*arg_names, dest=param_name, **add_kwargs)
                 if name == "index":

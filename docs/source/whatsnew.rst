@@ -3,6 +3,15 @@ What's new
 
 This document highlights major changes and additions across releases.
 
+
+v2607.0.0
+---------
+* Blue/green (zero-downtime) index rotation for Solr and MongoDB via
+  ``mdc <backend> index --rotate``. Indexes into a fresh core/collection,
+  validates it (``--min-docs``), then swaps it into production atomically and
+  drops the old data. Aborts without touching the live index if the new one is
+  short.
+
 v2605.0.0
 ---------
 * Enable glob pattern for indexing metadata stores.

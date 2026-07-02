@@ -1,17 +1,15 @@
-description: metadata_crawler (v2605.0.0) at Tue May 12 08:06:38 2026
+description: metadata_crawler (v2605.0.0) at Thu Jul  2 11:27:42 2026
 metadata:
   version: 1
   backend: intake
   prefix: fs
-  storage_options:
-    username: metadata
-    password: secret
+  storage_options: {}
   index_names:
     latest: latest
     all: files
-  indexed_objects: 48
-  total_objects: 48
-  timestamp: Tue May 12 08:06:38 2026
+  indexed_objects: 96
+  total_objects: 96
+  timestamp: Thu Jul  2 11:27:42 2026
   crawler:
     name: metadata_crawler
     version: v2605.0.0
@@ -306,24 +304,31 @@ metadata:
       indexed: true
       name: time_aggregation
       unique: false
+    data_type:
+      key: data_type
+      type: string
+      required: false
+      default: model-data
+      length: null
+      base_type: string
+      multi_valued: false
+      indexed: true
+      name: data_type
+      unique: false
 sources:
   latest:
     description: Latest metadata versions.
     driver: intake.source.jsonfiles.JSONLinesFileSource
     args:
-      urlpath: fs-latest.json.gz
+      urlpath: ./fs-latest.json.gz
       compression: gzip
       text_mode: true
-      storage_options:
-        username: metadata
-        password: secret
+      storage_options: {}
   files:
     description: All metadata versions only.
     driver: intake.source.jsonfiles.JSONLinesFileSource
     args:
-      urlpath: fs-files.json.gz
+      urlpath: ./fs-files.json.gz
       compression: gzip
       text_mode: true
-      storage_options:
-        username: metadata
-        password: secret
+      storage_options: {}

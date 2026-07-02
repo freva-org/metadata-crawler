@@ -152,6 +152,11 @@ type        = "string"
 multi_valued = true
 default     = "mean"
 
+[drs_settings.index_schema.data_type]
+key         = "data_type"
+type        = "string"
+multi_valued = false
+default      = "model-data"
 
 # 3) Global special rules
 [drs_settings.special.time_aggregation]
