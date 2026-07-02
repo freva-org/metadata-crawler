@@ -16,6 +16,7 @@ import re
 import select
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from enum import Enum, EnumType
 from multiprocessing import sharedctypes
@@ -283,6 +284,9 @@ class CatalogueWriter:
             batch_size * 2, 10_000
         )
         self.queue: ConsumerQueueType = self._ctx.Queue(maxsize=_ingest_qsize)
+        self._put_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="mdc-ingest-put"
+        )
         self._poison_pill = 13
         self.num_objects: Counter = self._ctx.Value("i", 0)
         self._tasks = [
@@ -359,7 +363,10 @@ class CatalogueWriter:
             Name of the catalogue, if applicable. This variable depends on
             the cataloguing system. For example apache solr would use a ``core``.
         """
-        await asyncio.to_thread(self.queue.put, (name, drs_type, inp))
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(
+            self._put_executor, self.queue.put, (name, drs_type, inp)
+        )
 
     @property
     def ingested_objects(self) -> int:
