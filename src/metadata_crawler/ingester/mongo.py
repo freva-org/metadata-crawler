@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import re
+import time
+from datetime import datetime
 from functools import cached_property
 from typing import (
     TYPE_CHECKING,
@@ -141,14 +143,77 @@ class MongoIndex(BaseIndex):
                 type=str,
             ),
         ] = None,
+        rotate: Annotated[
+            bool,
+            cli_parameter(
+                "--rotate",
+                "--blue-green",
+                action="store_true",
+                help=(
+                    "Blue/green deploy: index into fresh collections, then "
+                    "atomically rename them onto the live collections, dropping "
+                    "the old ones."
+                ),
+            ),
+        ] = False,
+        min_docs: Annotated[
+            int,
+            cli_parameter(
+                "--min-docs",
+                help=(
+                    "Abort the rotation (dropping the new collections) if a "
+                    "freshly indexed collection holds fewer than this many "
+                    "documents."
+                ),
+                type=int,
+            ),
+        ] = 1,
     ) -> None:
         """Add metadata to the mongoDB metadata server."""
         db = await self._prep_db_connection(database, url or "")
+        suffix = index_suffix or ""
+        if rotate and not suffix:
+            suffix = datetime.now().strftime("_%Y%m%dT%H%M%S%f")
         async with asyncio.TaskGroup() as tg:
             for collection in self.index_names:
                 tg.create_task(
-                    self._index_collection(db, collection, suffix=index_suffix or "")
+                    self._index_collection(db, collection, suffix=suffix)
                 )
+        if rotate:
+            await self._rotate(db, suffix, min_docs)
+
+    async def _rotate(
+        self, db: "AsyncDatabase[MetadataRecord]", suffix: str, min_docs: int
+    ) -> None:
+        """Validate freshly indexed collections and promote them atomically.
+
+        Both new collections are validated *before* any rename, so a bad index
+        leaves the live collections untouched. ``renameCollection`` with
+        ``dropTarget=True`` swaps a new collection onto its live name and drops
+        the old data in a single atomic step (the unique index is carried over
+        with the rename). The renames happen one collection at a time; a failure
+        between them leaves a mixed state, which is surfaced as an error.
+
+        The document counts use ``estimated_document_count`` (O(1) collection
+        metadata); it is exact around zero and only approximate for very large
+        collections, which is sufficient for a post-index health gate.
+        """
+        counts = {
+            collection: await db[collection + suffix].estimated_document_count()
+            for collection in self.index_names
+        }
+        logger.info("Indexed docs per new collection: %s", counts)
+        if any(n < min_docs for n in counts.values()):
+            for collection in self.index_names:
+                await db[collection + suffix].drop()
+            raise SystemExit(
+                f"Rotation aborted: doc counts {counts} below "
+                f"--min-docs={min_docs}; new collections dropped, "
+                "live collections untouched."
+            )
+        for collection in self.index_names:
+            await db[collection + suffix].rename(collection, dropTarget=True)
+            logger.info("Promoted %s -> %s", collection + suffix, collection)
 
     async def close(self) -> None:
         """Close the mongoDB connection."""
