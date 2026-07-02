@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import re
-import time
 from datetime import datetime
 from functools import cached_property
 from typing import (
@@ -176,9 +175,7 @@ class MongoIndex(BaseIndex):
             suffix = datetime.now().strftime("_%Y%m%dT%H%M%S%f")
         async with asyncio.TaskGroup() as tg:
             for collection in self.index_names:
-                tg.create_task(
-                    self._index_collection(db, collection, suffix=suffix)
-                )
+                tg.create_task(self._index_collection(db, collection, suffix=suffix))
         if rotate:
             await self._rotate(db, suffix, min_docs)
 

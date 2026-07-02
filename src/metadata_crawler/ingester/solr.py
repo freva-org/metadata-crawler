@@ -6,8 +6,8 @@ import asyncio
 import logging
 import os
 import time
-from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from types import TracebackType
 from typing import Annotated, Any, Dict, List, Optional, Tuple, Type, cast
 
@@ -77,10 +77,7 @@ class SolrIndex(BaseIndex):
         if await self._core_exists(session, core):
             logger.debug("Core %s already exists, not creating", core)
             return
-        url = (
-            f"{self._uri}/admin/cores?action=CREATE"
-            f"&name={core}&configSet={configset}"
-        )
+        url = f"{self._uri}/admin/cores?action=CREATE&name={core}&configSet={configset}"
         async with session.get(url) as resp:
             if resp.status >= 400:
                 raise RuntimeError(
@@ -101,7 +98,9 @@ class SolrIndex(BaseIndex):
             url, data=b"[]", headers={"Content-Type": "application/json"}
         ) as resp:
             if resp.status >= 400:
-                logger.warning("COMMIT %s -> %i: %s", core, resp.status, await resp.text())
+                logger.warning(
+                    "COMMIT %s -> %i: %s", core, resp.status, await resp.text()
+                )
 
     async def _count_docs(self, session: aiohttp.ClientSession, core: str) -> int:
         """Return the number of documents in ``core`` (0 if it is unreachable)."""
@@ -115,8 +114,7 @@ class SolrIndex(BaseIndex):
     async def _unload_core(self, session: aiohttp.ClientSession, core: str) -> None:
         """Unload ``core`` and delete its instance dir (best effort)."""
         url = (
-            f"{self._uri}/admin/cores?action=UNLOAD&core={core}"
-            "&deleteInstanceDir=true"
+            f"{self._uri}/admin/cores?action=UNLOAD&core={core}&deleteInstanceDir=true"
         )
         async with session.get(url) as resp:
             if resp.status >= 400:
