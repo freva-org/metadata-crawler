@@ -6,6 +6,7 @@ This document highlights major changes and additions across releases.
 
 v2607.0.0
 ---------
+* Always display trace back on exit status 1
 * Blue/green (zero-downtime) index rotation for Solr and MongoDB via
   ``mdc <backend> index --rotate``. Indexes into a fresh core/collection,
   validates it (``--min-docs``), then swaps it into production atomically and
