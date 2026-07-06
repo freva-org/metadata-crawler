@@ -24,7 +24,13 @@ def test_crawl_s3_obs(
         storage_options=storage_options,
     )
     cat = intake.open_catalog(cat_file, storage_options=storage_options)
-    assert len(cat.latest.read()) > 0
+    df = cat.latest.read()
+    assert len(df) > 0
+    # path/uri must be stable, endpoint independent values -
+    # not presigned/endpoint URLs that expire or hide the bucket.
+    assert df["file"].str.startswith("/test/").all()
+    assert df["uri"].str.startswith("s3://test/").all()
+    assert not df["uri"].str.contains("X-Amz").any()
 
 
 def test_crawl_s3_dir(
@@ -90,9 +96,12 @@ def test_crawl_s3_cmip6(
         storage_options=storage_options,
     )
     cat = intake.open_catalog(cat_file, storage_options=storage_options)
-    assert len(cat.latest.read()) > 0
+    df = cat.latest.read()
+    assert len(df) > 0
     # There are versioned datasets so latest should not have all the entries
-    assert len(cat.latest.read()) < len(cat.files.read())
+    assert len(df) < len(cat.files.read())
+    assert df["file"].str.startswith("/test/").all()
+    assert df["uri"].str.startswith("s3://test/").all()
 
 
 def test_crawl_single_s3_file(
