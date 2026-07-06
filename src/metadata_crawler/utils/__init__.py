@@ -1,7 +1,6 @@
 """Random utility functions."""
 
 import difflib
-import logging
 import multiprocessing as mp
 import multiprocessing.context as mctx
 import os
@@ -300,13 +299,7 @@ def load_plugins(group: str) -> Dict[str, Any]:
 
 def exception_handler(exception: BaseException) -> None:
     """Handle raising exceptions appropriately."""
-    msg = str(exception)
-    if logger.level >= logging.INFO:
-        msg += " - increase verbosity for more information"
-        exc_info = None
-    else:
-        exc_info = exception
-    logger.critical(msg, exc_info=exc_info)
+    logger.critical("Fatal error: %s", str(exception), exc_info=exception)
     raise SystemExit(1)
 
 
