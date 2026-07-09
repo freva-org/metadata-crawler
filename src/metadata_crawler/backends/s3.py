@@ -75,7 +75,7 @@ class S3Path(PathTemplate):
         client = await self._get_client()
         path = str(path)
         if await self.is_file(path):
-            yield path
+            yield self.uri(path)
         else:
             for _content in await client._lsdir(path):
                 size: int = _content.get("size") or 0
@@ -103,12 +103,12 @@ class S3Path(PathTemplate):
         client = await self._get_client()
         path = str(path)
         if await self.is_file(path):
-            yield MetadataType(path=path, metadata={})
+            yield MetadataType(path=self.uri(path), metadata={})
         else:
             suffixes = tuple(self.suffixes)
             for content in await client._find(path, withdirs=True):
                 if content.endswith(suffixes):
-                    yield MetadataType(path=f"/{content}", metadata={})
+                    yield MetadataType(path=self.uri(f"/{content}"), metadata={})
 
     def path(self, path: Union[str, pathlib.Path]) -> str:
         """Get the full path (including any schemas/netlocs).
@@ -123,8 +123,7 @@ class S3Path(PathTemplate):
         str:
             URI of the object store
         """
-        stripped = S3FileSystem._strip_protocol(str(path)).lstrip("/")
-        return f"/{stripped}"
+        return self.uri(path)
 
     def uri(self, path: Union[str, pathlib.Path]) -> str:
         """Get the uri of the object store.
@@ -139,4 +138,5 @@ class S3Path(PathTemplate):
         str:
             URI of the object store
         """
-        return f"s3://{self.path(path).lstrip('/')}"
+        stripped = S3FileSystem._strip_protocol(str(path)).lstrip("/")
+        return f"s3://{stripped}"
