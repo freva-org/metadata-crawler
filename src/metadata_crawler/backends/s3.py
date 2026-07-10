@@ -123,7 +123,8 @@ class S3Path(PathTemplate):
         str:
             URI of the object store
         """
-        return self.uri(path)
+        stripped = S3FileSystem._strip_protocol(str(path)).lstrip("/")
+        return f"/{stripped}"
 
     def uri(self, path: Union[str, pathlib.Path]) -> str:
         """Get the uri of the object store.
@@ -138,5 +139,4 @@ class S3Path(PathTemplate):
         str:
             URI of the object store
         """
-        stripped = S3FileSystem._strip_protocol(str(path)).lstrip("/")
-        return f"s3://{stripped}"
+        return f"s3://{self.path(path)}"
