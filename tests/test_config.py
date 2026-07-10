@@ -17,6 +17,7 @@ from metadata_crawler import add, index
 from metadata_crawler.api.config import DRSConfig
 from metadata_crawler.api.stores import DateTimeDecoder, DateTimeEncoder
 from metadata_crawler.backends.posix import PosixPath
+from metadata_crawler.backends.s3 import S3Path
 from metadata_crawler.backends.swift import SwiftPath
 from metadata_crawler.utils import MetadataCrawlerException
 
@@ -158,6 +159,55 @@ def test_benchmark_settings(drs_config_path: Path, cat_file: Path) -> None:
     os.environ = env
     assert cat_file.exists()
     len(intake.open_catalog(cat_file).latest.read()) < 10
+
+
+@pytest.mark.parametrize(
+    "inp, exp_path, exp_uri",
+    [
+        ("mybucket", "/mybucket", "s3:///mybucket"),
+        ("s3:///mybucket", "/mybucket", "s3:///mybucket"),
+        ("s3:///mybucket/", "/mybucket", "s3:///mybucket"),
+        ("/mybucket/pre/fix", "/mybucket/pre/fix", "s3:///mybucket/pre/fix"),
+        ("s3:///mybucket/pre/fix", "/mybucket/pre/fix", "s3:///mybucket/pre/fix"),
+        ("mybucket/pre/fix", "/mybucket/pre/fix", "s3:///mybucket/pre/fix"),
+    ],
+)
+def test_s3_path_normalisation(inp: str, exp_path: str, exp_uri: str) -> None:
+    """S3 ``path``/``uri`` normalise without generating presigned URLs.
+
+    Regression test: ``S3Path.path`` used to call ``S3FileSystem.url``,
+    which presigns a GET request and raises ``ParamValidationError``
+    (``Invalid length for parameter Key, value: 0``) for bucket-only
+    paths, and put the bucket into the netloc for virtual-hosted style
+    endpoints so that ``strip_protocol`` silently dropped it.
+    """
+    backend = S3Path(anon=True)
+    assert backend.path(inp) == exp_path
+    assert backend.path(Path(exp_path)) == exp_path
+    assert backend.uri(inp) == exp_uri
+
+
+def test_s3_max_directory_tree_level_bucket_root() -> None:
+    """Crawling an S3 dataset rooted at the bucket root must not fail.
+
+    Regression test: ``DRSConfig.max_directory_tree_level`` passes the
+    dataset ``root_path`` through ``backend.path`` which used to fail
+    with ``botocore.exceptions.ParamValidationError`` when the root
+    path had no object key (bucket root).
+    """
+    conf = Template(CONFIG).render(
+        vars="{var = '{vars}', attr = 'short_name', default = '__name__' }",
+        fs_type="s3",
+        path="s3://mybucket",
+    )
+    cfg = DRSConfig.load(conf)
+    # The template dialect has dir_parts = ["foo"] and no version facet.
+    pos, is_versioned = cfg.max_directory_tree_level("s3://mybucket", "bar")
+    assert (pos, is_versioned) == (1, False)
+    # Path shapes of root_path and search_dir are consistent now, so
+    # descending one level reduces the remaining tree level by one.
+    pos, _ = cfg.max_directory_tree_level("s3://mybucket/foo", "bar")
+    assert pos == 0
 
 
 @pytest.mark.asyncio

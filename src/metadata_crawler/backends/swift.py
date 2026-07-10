@@ -29,9 +29,9 @@ class SwiftPath(PathTemplate):
         self.os_user_id = self.storage_options.get("os_user_id", self._user)
         self.os_project_id = self.storage_options.get("os_project_id")
         self.os_auth_token = self.storage_options.get("os_auth_token") or None
-        self._os_storage_url = self.storage_options.get(
-            "os_storage_url", ""
-        ).rstrip("/")
+        self._os_storage_url = self.storage_options.get("os_storage_url", "").rstrip(
+            "/"
+        )
         self.os_auth_url = self.storage_options.get(
             "os_auth_url", self._guess_tempauth_url(self._os_storage_url)
         )
@@ -182,11 +182,7 @@ class SwiftPath(PathTemplate):
             for data in await self._read_json(str(path)):
                 new_path = self._get_dir_from_path(data)
                 if new_path:
-                    out = (
-                        str(path).lstrip("/")
-                        + "/"
-                        + pathlib.PosixPath(new_path).name
-                    )
+                    out = str(path).lstrip("/") + "/" + pathlib.PosixPath(new_path).name
                     yield out
         except (FileNotFoundError, PermissionError):
             pass
@@ -208,7 +204,9 @@ class SwiftPath(PathTemplate):
             if dir_name:
                 # if it's an actual object named foo.zarr, treat as zarr store
                 if self._is_zarr_like_match(dir_name, glob_pattern):
-                    yield MetadataType(path=dir_name.rstrip("/"), metadata={})
+                    yield MetadataType(
+                        path=self.path(dir_name.rstrip("/")), metadata={}
+                    )
                 else:
                     async for md in self.rglob(dir_name, glob_pattern):
                         yield md
@@ -216,7 +214,7 @@ class SwiftPath(PathTemplate):
                 if pathlib.PosixPath(name).suffix in self.suffixes and fnmatch(
                     name, glob_pattern
                 ):
-                    yield MetadataType(path=name, metadata={})
+                    yield MetadataType(path=self.path(name), metadata={})
 
     def get_fs_and_path(self, uri: str) -> Tuple[fsspec.AbstractFileSystem, str]:
         """Return (fs, path) suitable for xarray.

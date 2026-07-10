@@ -830,7 +830,7 @@ class DRSConfig(BaseModel, TemplateMixin):
         fmt = path.rsplit(".", 1)[1] if "." in path else ""
 
         precomputed: Dict[str, Any] = {
-            "path": backend.path(path),
+            "path": path,
             "uri": backend.uri(path),
             "storage": backend.fs_type(path),
             "dataset": standard,
