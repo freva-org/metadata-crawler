@@ -81,7 +81,7 @@ class PosixPath(PathTemplate):
             glob_pattern,
             list(self.suffixes) or None,
         ):
-            yield MetadataType(path=p, metadata={})
+            yield MetadataType(path=self.path(p), metadata={})
 
     def path(self, path: Union[str, pathlib.Path]) -> str:
         """Get the full path (including any schemas/netlocs).
