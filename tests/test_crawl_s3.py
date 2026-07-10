@@ -28,8 +28,8 @@ def test_crawl_s3_obs(
     assert len(df) > 0
     # path/uri must be stable, endpoint independent values -
     # not presigned/endpoint URLs that expire or hide the bucket.
-    assert df[0]["file"].startswith("s3://test/")
-    assert df[0]["uri"].startswith("s3://test/")
+    assert df[0]["file"].startswith("s3:///test/")
+    assert df[0]["uri"].startswith("s3:///test/")
     assert "X-Amz" not in df[0]["uri"]
 
 
@@ -98,8 +98,8 @@ def test_crawl_s3_cmip6(drs_config_path: Path, storage_options: Dict[str, str]) 
     assert len(df) > 0
     # There are versioned datasets so latest should not have all the entries
     assert len(df) < len(cat.files.read())
-    assert df[0]["file"].startswith("s3://test/")
-    assert df[0]["uri"].startswith("s3://test/")
+    assert df[0]["file"].startswith("s3:///test/")
+    assert df[0]["uri"].startswith("s3:///test/")
 
 
 def test_crawl_single_s3_file(
