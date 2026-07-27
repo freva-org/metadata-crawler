@@ -5,7 +5,7 @@ This document highlights major changes and additions across releases.
 
 v2607.2.0
 ---------
-* S3 recieves ``http`` urls for access based file  attributes.
+* S3 receives ``http`` urls for access based file  attributes.
 
 
 v2607.1.0
