@@ -164,12 +164,12 @@ def test_benchmark_settings(drs_config_path: Path, cat_file: Path) -> None:
 @pytest.mark.parametrize(
     "inp, exp_path, exp_uri",
     [
-        ("mybucket", "/mybucket", "s3:///mybucket"),
-        ("s3:///mybucket", "/mybucket", "s3:///mybucket"),
-        ("s3:///mybucket/", "/mybucket", "s3:///mybucket"),
-        ("/mybucket/pre/fix", "/mybucket/pre/fix", "s3:///mybucket/pre/fix"),
-        ("s3:///mybucket/pre/fix", "/mybucket/pre/fix", "s3:///mybucket/pre/fix"),
-        ("mybucket/pre/fix", "/mybucket/pre/fix", "s3:///mybucket/pre/fix"),
+        ("mybucket", "/mybucket", "s3://mybucket"),
+        ("s3://mybucket", "/mybucket", "s3://mybucket"),
+        ("s3://mybucket/", "/mybucket", "s3://mybucket"),
+        ("/mybucket/pre/fix", "/mybucket/pre/fix", "s3://mybucket/pre/fix"),
+        ("s3://mybucket/pre/fix", "/mybucket/pre/fix", "s3://mybucket/pre/fix"),
+        ("mybucket/pre/fix", "/mybucket/pre/fix", "s3://mybucket/pre/fix"),
     ],
 )
 def test_s3_path_normalisation(inp: str, exp_path: str, exp_uri: str) -> None:

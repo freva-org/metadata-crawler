@@ -14,6 +14,7 @@ def test_crawl_s3_obs(
 ) -> None:
     """Test crawling s3."""
     cat_file = "s3://test/metadata_crawler/tests/data.yml"
+    endpoint_url = storage_options["endpoint_url"]
     add(
         drs_config_path,
         store=cat_file,
@@ -22,14 +23,15 @@ def test_crawl_s3_obs(
         n_procs=1,
         data_set=["obs-s3"],
         storage_options=storage_options,
+        verbosity=5,
     )
     cat = intake.open_catalog(cat_file, storage_options=storage_options)
     df = cat.latest.read()
     assert len(df) > 0
     # path/uri must be stable, endpoint independent values -
     # not presigned/endpoint URLs that expire or hide the bucket.
-    assert df[0]["file"].startswith("s3:///test/")
-    assert df[0]["uri"].startswith("s3:///test/")
+    assert df[0]["file"].startswith(endpoint_url)
+    assert df[0]["uri"].startswith("s3://test/")
     assert "X-Amz" not in df[0]["uri"]
 
 
@@ -82,7 +84,7 @@ def test_crawl_s3_single_file(
 
 def test_crawl_s3_cmip6(drs_config_path: Path, storage_options: Dict[str, str]) -> None:
     cat_file = "s3://test/metadata_crawler/tests/cmip6-s3.yml"
-
+    endpoint_url = storage_options["endpoint_url"]
     add(
         drs_config_path,
         store=cat_file,
@@ -98,8 +100,8 @@ def test_crawl_s3_cmip6(drs_config_path: Path, storage_options: Dict[str, str]) 
     assert len(df) > 0
     # There are versioned datasets so latest should not have all the entries
     assert len(df) < len(cat.files.read())
-    assert df[0]["file"].startswith("s3:///test/")
-    assert df[0]["uri"].startswith("s3:///test/")
+    assert df[0]["file"].startswith(endpoint_url)
+    assert df[0]["uri"].startswith("s3://test/")
 
 
 def test_crawl_single_s3_file(
@@ -133,7 +135,28 @@ def test_crawl_s3_zarr(drs_config_path: Path, cat_file: Path) -> None:
         store=cat_file,
         n_procs=1,
         batch_size=3,
+        verbosity=5,
     )
     assert cat_file.is_file()
     cat = intake.open_catalog(cat_file)
     assert len(cat.latest.read()) > 0
+
+
+async def test_access_uri() -> None:
+    """Test for the access uri."""
+    from metadata_crawler.backends.s3 import S3Path
+
+    s3_path_1 = S3Path(endpoint_url="https://s3.foo.bar")
+    s3_path_2 = S3Path(client_kwargs={"endpoint_url": "https://s3.foo.bar"})
+    s3_path_3 = S3Path()
+    s3_path_4 = S3Path(endpoint_url="https://amazonaws.com.cn")
+
+    assert (await s3_path_1._access_uri("/foo/bar.nc")).startswith("http")
+    assert (await s3_path_1._access_uri("/foo/bar.nc")) == (
+        await s3_path_2._access_uri("/foo/bar.nc")
+    )
+
+    assert (await s3_path_3._access_uri("/foo/bar.nc")).startswith("s3")
+    assert (await s3_path_3._access_uri("/foo/bar.nc")) == (
+        await s3_path_4._access_uri("/foo/bar.nc")
+    )

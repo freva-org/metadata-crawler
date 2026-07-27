@@ -42,9 +42,7 @@ class BasePath(abc.ABCMeta):
     """Every storage backend class should be of this type."""
 
 
-class PathTemplate(
-    abc.ABC, PathMixin, TemplateMixin, LookupMixin, metaclass=BasePath
-):
+class PathTemplate(abc.ABC, PathMixin, TemplateMixin, LookupMixin, metaclass=BasePath):
     """Base class for interacting with different storage systems.
 
     This class defines fundamental methods that should be implemented
@@ -139,13 +137,13 @@ class PathTemplate(
         engine = kwargs.setdefault("engine", _get_engine(path) or None)
 
         if engine == "zarr":
-            dset: xr.Dataset = xr.open_zarr(fs.get_mapper(path))
+            dset: xr.Dataset = xr.open_zarr(fs.get_mapper(self.uri(path)))
             return dset
         if fs.protocol[0] == "file" and engine == "h5netcdf":
             return h5netcdf.File(path)
         if fs.protocol[0] == "file":
             return xr.open_mfdataset(path, **kwargs)
-        with fs.open(path, "rb") as stream:
+        with fs.open(self.uri(path), "rb") as stream:
             return xr.open_dataset(stream, **kwargs)
 
     def read_attr(

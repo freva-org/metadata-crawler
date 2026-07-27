@@ -2,7 +2,8 @@
 
 import asyncio
 import pathlib
-from typing import AsyncIterator, Optional, Tuple, Union, cast
+from typing import AsyncIterator, Dict, Optional, Tuple, Union, cast
+from urllib.parse import quote, unquote
 
 import fsspec
 from s3fs import S3FileSystem
@@ -19,6 +20,14 @@ class S3Path(PathTemplate):
     def __post_init__(self) -> None:
         self._client: Optional[S3FileSystem] = None
         self.storage_options = self.storage_options or {"anon": True}
+        client_kwargs: Dict[str, str] = self.storage_options.get("client_kwargs", {})
+        endpoint = (
+            client_kwargs.get("endpoint_url", self.storage_options.get("endpoint_url"))
+            or ""
+        )
+        host = endpoint.split("://", 1)[-1]
+        self._endpoint: str = "" if "amazonaws" in host else endpoint.rstrip("/")
+        self._netloc = self._endpoint.rpartition("://")[-1]
 
     async def close(self) -> None:
         """Close the connection."""
@@ -59,6 +68,14 @@ class S3Path(PathTemplate):
 
             await self._client.set_session()
         return self._client
+
+    async def _access_uri(self, path: str) -> str:
+        if not self._endpoint:
+            return self.uri(path)
+        stripped = self.path(path).lstrip("/")
+        bucket, _, obj = stripped.partition("/")
+        key = quote(obj, safe="/")
+        return f"{self._endpoint}/{bucket}/{key}"
 
     async def is_file(self, path: Union[str, pathlib.Path]) -> bool:
         """Check if a given path is a file object on the storage system."""
@@ -103,15 +120,17 @@ class S3Path(PathTemplate):
         client = await self._get_client()
         path = str(path)
         if await self.is_file(path):
-            yield MetadataType(path=self.uri(path), metadata={})
+            yield MetadataType(path=await self._access_uri(path), metadata={})
         else:
             suffixes = tuple(self.suffixes)
             for content in await client._find(path, withdirs=True):
                 if content.endswith(suffixes):
-                    yield MetadataType(path=self.uri(f"/{content}"), metadata={})
+                    yield MetadataType(
+                        path=await self._access_uri(f"/{content}"), metadata={}
+                    )
 
     def path(self, path: Union[str, pathlib.Path]) -> str:
-        """Get the full path (including any schemas/netlocs).
+        """Get the full path (without any schemas/netlocs).
 
         Parameters
         ^^^^^^^^^^
@@ -121,10 +140,13 @@ class S3Path(PathTemplate):
         Returns
         ^^^^^^^
         str:
-            URI of the object store
+            Path of the object store
         """
-        stripped = S3FileSystem._strip_protocol(str(path)).lstrip("/")
-        return f"/{stripped}"
+        scheme, p = fsspec.core.split_protocol(str(path))
+        path = p.lstrip("/")
+        if scheme and scheme.startswith("http"):
+            p = unquote(p).removeprefix(self._netloc)
+        return f"/{p.lstrip('/').rstrip('/')}"
 
     def uri(self, path: Union[str, pathlib.Path]) -> str:
         """Get the uri of the object store.
@@ -139,4 +161,5 @@ class S3Path(PathTemplate):
         str:
             URI of the object store
         """
-        return f"s3://{self.path(path)}"
+        path = self.path(path).lstrip("/").rstrip("/")
+        return f"s3://{path}"

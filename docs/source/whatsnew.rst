@@ -3,6 +3,11 @@ What's new
 
 This document highlights major changes and additions across releases.
 
+v2607.2.0
+---------
+* S3 receives ``http`` urls for access based file  attributes.
+
+
 v2607.1.0
 ---------
 * Use ``s3://`` style URL for s3 based resources.
