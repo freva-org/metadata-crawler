@@ -3,7 +3,7 @@ What's new
 
 This document highlights major changes and additions across releases.
 
-v2607.3.0
+v2608.0.0
 ---------
 * Bug fixes for solr core rotation in blue/green deployment.
 
