@@ -3,6 +3,11 @@ What's new
 
 This document highlights major changes and additions across releases.
 
+v2608.1.0
+---------
+* Enable streaming for DB batches.
+
+
 v2608.0.0
 ---------
 * Bug fixes for solr core rotation in blue/green deployment.
