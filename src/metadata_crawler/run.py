@@ -16,7 +16,6 @@ from typing import (
     Sequence,
     Tuple,
     Union,
-    cast,
 )
 
 import tomlkit
@@ -146,7 +145,7 @@ async def async_call(
     **kwargs: Any,
 ) -> None:
     """Add / Delete metadata from index."""
-    env = cast(os._Environ[str], os.environ.copy())
+    env = dict(os.environ)
     old_level = apply_verbosity(verbosity, suffix=log_suffix)
 
     try:
@@ -164,18 +163,24 @@ async def async_call(
             raise ValueError(msg) from None
         storage_options = kwargs.pop("storage_options", {})
         progress.start()
-        for _uri in uris or [""]:
-            async with cls(
-                batch_size=batch_size,
-                uri=_uri or None,
-                storage_options=storage_options,
-                progress=progress,
-            ) as obj:
-                func = getattr(obj, method)
-                await func(**kwargs)
+        # NB: *all* store uris are handed to a single ingester instance. The
+        # ingester is responsible for reading them as one stream. Calling the
+        # method once per uri would repeat every set-up/tear-down step it
+        # performs - for blue/green targets that means one create + rotate per
+        # store, which both throws away all but the last store's data and
+        # collides on the second rotation of a reused index suffix.
+        async with cls(
+            batch_size=batch_size,
+            uri=list(uris or []) or None,
+            storage_options=storage_options,
+            progress=progress,
+        ) as obj:
+            func = getattr(obj, method)
+            await func(**kwargs)
 
     finally:
-        os.environ = env
+        os.environ.clear()
+        os.environ.update(env)
         progress.stop()
         logger.set_level(old_level)
 
@@ -441,7 +446,12 @@ async def async_add(
         )
 
     """
-    env = cast(os._Environ[str], os.environ.copy())
+    # NB: a snapshot, not a replacement. Rebinding ``os.environ`` to a plain
+    # dict on restore drops the ``_Environ`` wrapper, so ``putenv`` stops
+    # being called and child processes no longer see later changes - and any
+    # variable set while the snapshot was taken leaks out of whatever context
+    # manager set it, for the lifetime of the process.
+    env = dict(os.environ)
     old_level = apply_verbosity(verbosity, suffix=log_suffix)
     eval_env_dir = os.getenv("EVALUATION_SYSTEM_CONFIG_DIR")
     cfg_files_fallback = (eval_env_dir,) if eval_env_dir else ()
@@ -514,5 +524,6 @@ async def async_add(
                 await data_col.ingest_queue.delete()
                 raise EmptyCrawl("Could not fulfill discovery threshold!") from None
     finally:
-        os.environ = env
+        os.environ.clear()
+        os.environ.update(env)
         logger.set_level(old_level)

@@ -12,6 +12,7 @@ from typing import (
     List,
     Optional,
     Self,
+    Sequence,
     Tuple,
     Type,
     Union,
@@ -40,7 +41,9 @@ class BaseIndex:
     Parameters
     ^^^^^^^^^^
     uri:
-        Uri to the metadata store.
+        Uri to the metadata store, or a sequence of uris. All stores are read
+        into the *same* index target, which is what makes a single blue/green
+        rotation cover the whole ingest.
     batch_size:
         The amount for metadata that should be gathered `before` ingesting
         it into the catalogue.
@@ -54,22 +57,38 @@ class BaseIndex:
 
     def __init__(
         self,
-        uri: Optional[Union[str, Path]] = None,
+        uri: Optional[Union[str, Path, Sequence[Union[str, Path]]]] = None,
         batch_size: int = 2500,
         storage_options: Optional[Dict[str, Any]] = None,
         progress: Optional[IndexProgress] = None,
         **kwargs: Any,
     ) -> None:
-        self._store: Optional[IndexStore] = None
+        self._stores: List[IndexStore] = []
         self.progress = progress or IndexProgress(total=-1)
-        if uri is not None:
+        for _uri in self._normalise_uris(uri):
             _reader = CatalogueReader(
-                store_url=uri or "",
+                store_url=_uri,
                 batch_size=batch_size,
                 storage_options=storage_options,
             )
-            self._store = _reader.store
+            self._stores.append(_reader.store)
         self.__post_init__()
+
+    @staticmethod
+    def _normalise_uris(
+        uri: Optional[Union[str, Path, Sequence[Union[str, Path]]]],
+    ) -> List[str]:
+        """Coerce the ``uri`` argument into a list of non-empty store uris."""
+        if uri is None:
+            return []
+        if isinstance(uri, (str, Path)):
+            uri = [uri]
+        return [str(_uri) for _uri in uri if _uri is not None and str(_uri)]
+
+    @property
+    def _store(self) -> Optional[IndexStore]:
+        """First metadata store, used as the schema / index-name reference."""
+        return self._stores[0] if self._stores else None
 
     def __post_init__(self) -> None: ...
 
@@ -90,29 +109,48 @@ class BaseIndex:
 
     @property
     def index_names(self) -> Tuple[str, str]:
-        """Get the names of the indexes for latests and all data."""
-        return cast(Tuple[str, str], getattr(self._store, "index_names", ("", "")))
+        """Get the names of the indexes for latests and all data.
+
+        All configured stores must agree; indexing stores with different
+        index names into one target would silently mix them up.
+        """
+        names = {
+            cast(Tuple[str, str], getattr(store, "index_names", ("", "")))
+            for store in self._stores
+        }
+        if len(names) > 1:
+            raise ValueError(
+                "The metadata stores disagree on their index names "
+                f"({sorted(names)}); refusing to index them into one target."
+            )
+        return names.pop() if names else ("", "")
 
     async def get_metadata(
         self, index_name: str
     ) -> AsyncIterator[List[Dict[str, Any]]]:
         """Get the metadata of an index in batches.
 
+        Batches of *all* configured metadata stores are chained, so a caller
+        sees one continuous stream per index name.
+
         Parameters
         ^^^^^^^^^^
         index_name:
             Name of the index that should be read.
         """
-        if self._store:
-            batch = []
-            num_items = 0
-            logger.debug("Indexing %s", index_name)
-            async for batch in self._store.read(index_name):
+        if not self._stores:
+            return
+        num_items = 0
+        for store in self._stores:
+            logger.debug("Reading index %s from %s", index_name, store)
+            async for batch in store.read(index_name):
                 yield batch
                 self.progress.update(len(batch))
                 num_items += len(batch)
-            msg = f"Indexed {num_items:10,.0f} items for index {index_name}"
-            Console.print(msg) if Console.is_terminal else print(msg)
+        # NB: this counts the records *read from the stores*, not the records
+        # accepted by the index system. The ingester reports the latter.
+        msg = f"Read {num_items:10,.0f} items for index {index_name}"
+        Console.print(msg) if Console.is_terminal else print(msg)
 
     @abc.abstractmethod
     async def delete(self, **kwargs: Any) -> None:
