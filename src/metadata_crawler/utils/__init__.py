@@ -354,6 +354,7 @@ class IndexProgress:
         self.text = text
         self._done = 0
         self._task: TaskID = TaskID(0)
+        self._started = False
         self._total = total
         self._start = self._last_log = time.time()
         self._progress = Progress()
@@ -368,11 +369,13 @@ class IndexProgress:
                 f"[green] {self.text}", total=self._total or None
             )
             self._progress.start()
+            self._started = True
 
     def stop(self) -> None:
         """Stop the progress bar."""
         if self._interactive:
             self._progress.stop()
+            self._started = False
         else:
             self._text_update()
 
@@ -394,8 +397,11 @@ class IndexProgress:
         self._done += inc
 
         if self._interactive is True:
-            desc = f"{self.text} [{self._done:>10d}]" if self._done == 0 else None
-            self._progress.update(self._task, advance=inc, description=desc)
+            # ``_task`` only exists once ``start`` has added it; updating an
+            # unstarted (or already stopped) bar must count, not raise.
+            if self._started:
+                desc = f"{self.text} [{self._done:>10d}]" if self._done == 0 else None
+                self._progress.update(self._task, advance=inc, description=desc)
             return
 
         frac = self._done / max(self._total, 1)

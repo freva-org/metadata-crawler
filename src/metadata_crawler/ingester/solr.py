@@ -31,6 +31,9 @@ class SolrIndex(BaseIndex):
         )
         self.semaphore = asyncio.Event()
         self.max_http_workers: int = 0
+        self.failed_batches: int = 0
+        self.posted_batches: int = 0
+        self.first_error: Optional[str] = None
         queue_max: int = 128
         encode_workers: int = 4
         self._uri: str = ""
@@ -41,7 +44,6 @@ class SolrIndex(BaseIndex):
         self.connector = aiohttp.TCPConnector(
             ttl_dns_cache=300,
             use_dns_cache=True,
-            enable_cleanup_closed=True,
         )
 
     def _ensure_uri(self, server: str) -> str:
@@ -61,22 +63,68 @@ class SolrIndex(BaseIndex):
         self._ensure_uri(server)
         return f"{self._uri}/{core}/update/json?commit=true"
 
-    async def _core_exists(self, session: aiohttp.ClientSession, core: str) -> bool:
-        """Return ``True`` if a core of that name is currently loaded."""
-        url = f"{self._uri}/admin/cores?action=STATUS&core={core}"
+    async def _core_status(self, session: aiohttp.ClientSession) -> Dict[str, Any]:
+        """Return the STATUS map of *every* core known to the container."""
+        url = f"{self._uri}/admin/cores?action=STATUS"
         async with session.get(url) as resp:
             if resp.status >= 400:
-                return False
+                raise RuntimeError(
+                    f"Core STATUS failed ({resp.status}): {await resp.text()}"
+                )
             data = orjson.loads(await resp.read())
-        return bool(data.get("status", {}).get(core, {}).get("name"))
+        return cast(Dict[str, Any], data.get("status", {}))
+
+    @staticmethod
+    def _instance_dir_name(instance_dir: Any) -> str:
+        """Basename of an ``instanceDir`` as reported by Solr."""
+        return os.path.basename(str(instance_dir or "").rstrip("/\\"))
+
+    @staticmethod
+    def _dir_owner(status: Dict[str, Any], core: str) -> Optional[str]:
+        """Name of the core occupying ``<solr.home>/<core>``, if any.
+
+        Solr derives the instance directory of a new core from its *name*, so
+        a directory can be occupied by a core that is registered under a
+        different name. That is exactly what a completed rotation leaves
+        behind: ``SWAP`` renames the cores but not their directories, so the
+        live core ends up owning ``<live>_<suffix>``.
+        """
+        for name, info in status.items():
+            if SolrIndex._instance_dir_name(info.get("instanceDir")) == core:
+                return cast(str, info.get("name") or name)
+        return None
+
+    async def _core_exists(self, session: aiohttp.ClientSession, core: str) -> bool:
+        """Return ``True`` if a core of that name is currently loaded."""
+        status = await self._core_status(session)
+        return bool(status.get(core, {}).get("name"))
 
     async def _create_core(
         self, session: aiohttp.ClientSession, core: str, configset: str
-    ) -> None:
-        """Create an (empty) core from ``configset`` unless it already exists."""
-        if await self._core_exists(session, core):
+    ) -> bool:
+        """Create an (empty) core from ``configset`` unless it already exists.
+
+        Returns ``True`` if this call created the core, so the caller knows
+        which cores it owns and has to clean up if the run aborts.
+
+        Both the name and the instance directory are checked from a single
+        STATUS response. Checking only the name (as a plain ``STATUS&core=``
+        does) disagrees with what CREATE enforces and turns a reused suffix
+        into an opaque HTTP 400 half an hour into the run.
+        """
+        status = await self._core_status(session)
+        if status.get(core, {}).get("name"):
             logger.debug("Core %s already exists, not creating", core)
-            return
+            return False
+        owner = self._dir_owner(status, core)
+        if owner is not None:
+            raise RuntimeError(
+                f"Refusing to create core {core!r}: its instance directory is "
+                f"already owned by core {owner!r}. The index suffix has "
+                "already been rotated into production; a suffix must be "
+                "unique per rotation (use a fresh --index-suffix, or none at "
+                "all and let one be generated)."
+            )
         url = f"{self._uri}/admin/cores?action=CREATE&name={core}&configSet={configset}"
         async with session.get(url) as resp:
             if resp.status >= 400:
@@ -84,6 +132,23 @@ class SolrIndex(BaseIndex):
                     f"CREATE {core} failed ({resp.status}): {await resp.text()}"
                 )
         logger.info("Created core %s (configSet=%s)", core, configset)
+        return True
+
+    async def _drop_cores(self, cores: List[str]) -> None:
+        """Unload cores this run created, skipping any that are already gone.
+
+        Called when a run aborts after core creation. Without it a failed run
+        leaves its instance directories behind, and the next run that reaches
+        for the same suffix collides with them.
+        """
+        if not cores:
+            return
+        async with aiohttp.ClientSession(timeout=self.timeout) as admin:
+            status = await self._core_status(admin)
+            for core in cores:
+                if status.get(core, {}).get("name"):
+                    logger.info("Dropping core %s after a failed run", core)
+                    await self._unload_core(admin, core)
 
     async def _commit(self, session: aiohttp.ClientSession, core: str) -> None:
         """Hard-commit ``core`` and wait for the new searcher to be ready.
@@ -98,16 +163,28 @@ class SolrIndex(BaseIndex):
             url, data=b"[]", headers={"Content-Type": "application/json"}
         ) as resp:
             if resp.status >= 400:
-                logger.warning(
-                    "COMMIT %s -> %i: %s", core, resp.status, await resp.text()
+                # A failed commit means the documents are not searchable and
+                # the doc counts the rotation gate is about to read are
+                # meaningless. Never continue past this.
+                raise RuntimeError(
+                    f"COMMIT {core} failed ({resp.status}): {await resp.text()}"
                 )
 
     async def _count_docs(self, session: aiohttp.ClientSession, core: str) -> int:
-        """Return the number of documents in ``core`` (0 if it is unreachable)."""
+        """Return the number of documents in ``core``.
+
+        An unreachable core raises rather than counting as empty: "somebody
+        swapped my core away" and "I indexed nothing" need different answers,
+        and reporting both as ``0`` sends the rotation gate to blame the doc
+        count for what is actually a missing core.
+        """
         url = f"{self._uri}/{core}/select?q=*:*&rows=0&wt=json"
         async with session.get(url) as resp:
             if resp.status >= 400:
-                return 0
+                raise RuntimeError(
+                    f"Cannot count documents in {core} ({resp.status}): "
+                    f"{await resp.text()}"
+                )
             data = orjson.loads(await resp.read())
         return int(data.get("response", {}).get("numFound", 0))
 
@@ -118,8 +195,14 @@ class SolrIndex(BaseIndex):
         )
         async with session.get(url) as resp:
             if resp.status >= 400:
-                logger.warning(
-                    "UNLOAD %s -> %i: %s", core, resp.status, await resp.text()
+                # Not fatal on its own, but the instance directory is now an
+                # orphan that will make a later CREATE of the same name fail.
+                logger.error(
+                    "UNLOAD %s -> %i: %s. Its instance directory may be left "
+                    "behind and will collide with a future core of that name.",
+                    core,
+                    resp.status,
+                    await resp.text(),
                 )
 
     async def _flip_core(
@@ -253,7 +336,7 @@ class SolrIndex(BaseIndex):
         url: str,
         body: bytes,
     ) -> None:
-        """POST one batch with minimal overhead and simple retries."""
+        """POST one batch, recording - never swallowing - any failure."""
         status = 500
         t0 = time.perf_counter()
         try:
@@ -261,15 +344,21 @@ class SolrIndex(BaseIndex):
                 url, data=body, headers={"Content-Type": "application/json"}
             ) as resp:
                 status = resp.status
-                await resp.read()
-
+                payload = await resp.read()
+            if status >= 400:
+                self._record_failure(
+                    f"POST {url} -> {status}: {payload.decode('utf-8', 'replace')}"
+                )
+                return
         except Exception as error:
+            self._record_failure(f"POST {url} raised {error!r}")
             logger.log(
                 logging.WARNING,
                 error,
                 exc_info=logger.level < logging.INFO,
             )
             return
+        self.posted_batches += 1
         logger.debug(
             "POST %s -> %i (index time: %.3f)",
             url,
@@ -277,8 +366,22 @@ class SolrIndex(BaseIndex):
             time.perf_counter() - t0,
         )
 
+    def _record_failure(self, message: str) -> None:
+        """Book a rejected batch so ``index`` can refuse to rotate."""
+        self.failed_batches += 1
+        if self.first_error is None:
+            self.first_error = message
+        logger.warning("Batch rejected by solr: %s", message)
+
     async def consumer(self, session: aiohttp.ClientSession) -> None:
-        """Consume the metadata read by the porducers."""
+        """Consume the metadata read by the porducers.
+
+        A consumer only ever leaves this loop on its sentinel. Letting one die
+        early would strand a sentinel in the queue and block the drain, and
+        would deadlock the producers once the bounded queue fills up, so
+        unexpected errors are booked as failed batches and the worker carries
+        on.
+        """
         while True:
             update_url, body = await self.producer_queue.get()
             if body is self.senteniel:
@@ -286,6 +389,8 @@ class SolrIndex(BaseIndex):
                 break
             try:
                 await self._post_chunk(session, update_url, cast(bytes, body))
+            except Exception as error:  # pragma: no cover - defensive
+                self._record_failure(f"consumer crashed on {update_url}: {error!r}")
             finally:
                 self.producer_queue.task_done()
 
@@ -387,20 +492,65 @@ class SolrIndex(BaseIndex):
                 type=int,
             ),
         ] = 1,
+        max_failed_batches: Annotated[
+            int,
+            cli_parameter(
+                "--max-failed-batches",
+                help=(
+                    "Number of batches solr may reject before the run is "
+                    "considered failed. The default of 0 means any rejected "
+                    "batch aborts before anything is committed or rotated."
+                ),
+                type=int,
+            ),
+        ] = 0,
     ) -> None:
         """Add metadata to the apache solr metadata server."""
         server = server or ""
         suffix = index_suffix or ""
         if rotate and not suffix:
             suffix = datetime.now().strftime("_%Y%m%dT%H%M%S%f")
+        if rotate and index_suffix:
+            logger.warning(
+                "Rotating into an explicitly given index suffix (%s). The "
+                "suffix must be unique per rotation: reusing it after a "
+                "successful rotation, or sharing it with a concurrent run "
+                "against the same solr, will collide on the core instance "
+                "directory.",
+                index_suffix,
+            )
+        created: List[str] = []
         if rotate:
             self._ensure_uri(server)
             async with aiohttp.ClientSession(timeout=self.timeout) as admin:
                 for core in self.index_names:
-                    await self._create_core(admin, core + suffix, configset)
+                    if await self._create_core(admin, core + suffix, configset):
+                        created.append(core + suffix)
+        try:
+            await self._index(server, suffix, http_workers, max_failed_batches)
+            if rotate:
+                await self._rotate(suffix, min_docs)
+        except BaseException:
+            # Anything from here on leaves the live cores as they were, so the
+            # only thing to tidy up is what this run created.
+            await self._drop_cores(created)
+            raise
+
+    async def _index(
+        self,
+        server: str,
+        suffix: str,
+        http_workers: int,
+        max_failed_batches: int,
+    ) -> None:
+        """Stream every store into ``<core><suffix>`` and commit the result."""
         async with aiohttp.ClientSession(
-            timeout=self.timeout, connector=self.connector, raise_for_status=True
+            timeout=self.timeout, connector=self.connector
         ) as session:
+            # NB: no raise_for_status here. Every response is inspected
+            # explicitly so solr's error body (which is what tells you about
+            # schema drift) makes it into the log rather than being reduced to
+            # an exception type.
             consumers = [
                 asyncio.create_task(self.consumer(session)) for _ in range(http_workers)
             ]
@@ -416,14 +566,42 @@ class SolrIndex(BaseIndex):
                     )
             for _ in range(http_workers):
                 await self.producer_queue.put(("", self.senteniel))
-            await self.producer_queue.join()
+            # Awaiting the consumers (rather than ``queue.join()``) drains the
+            # queue just the same - a consumer only stops at its sentinel, and
+            # the sentinels are queued behind every batch - but it cannot hang
+            # if a worker went away.
             await asyncio.gather(*consumers)
+            self._check_write_failures(max_failed_batches)
             # Every batch is now POSTed; commit each core so the documents are
             # actually visible (and warmed) before we count / flip.
             for core in self.index_names:
                 await self._commit(session, core + suffix)
-        if rotate:
-            await self._rotate(suffix, min_docs)
+            async with aiohttp.ClientSession(timeout=self.timeout) as admin:
+                for core in self.index_names:
+                    logger.info(
+                        "Core %s holds %i documents",
+                        core + suffix,
+                        await self._count_docs(admin, core + suffix),
+                    )
+
+    def _check_write_failures(self, max_failed_batches: int) -> None:
+        """Abort if solr rejected more batches than we are willing to lose.
+
+        The item counts reported while reading come from the metadata stores,
+        not from solr, so without this gate a run in which every single POST
+        was rejected still reports hundreds of thousands of "indexed" items
+        and only shows up as an empty core at rotation time.
+        """
+        logger.info(
+            "Posted %i batches, %i rejected", self.posted_batches, self.failed_batches
+        )
+        if self.failed_batches > max_failed_batches:
+            raise RuntimeError(
+                f"solr rejected {self.failed_batches} of "
+                f"{self.failed_batches + self.posted_batches} batches "
+                f"(--max-failed-batches={max_failed_batches}); nothing was "
+                f"committed or rotated. First error: {self.first_error}"
+            )
 
     async def _rotate(self, suffix: str, min_docs: int) -> None:
         """Validate the freshly indexed cores and swap them into production.
@@ -446,8 +624,21 @@ class SolrIndex(BaseIndex):
                     f"Rotation aborted: doc counts {counts} below "
                     f"--min-docs={min_docs}; new cores dropped, live cores untouched."
                 )
-            for core in self.index_names:
-                await self._flip_core(admin, core, core + suffix)
+            flipped: List[str] = []
+            try:
+                for core in self.index_names:
+                    await self._flip_core(admin, core, core + suffix)
+                    flipped.append(core)
+            except Exception:
+                pending = [c for c in self.index_names if c not in flipped]
+                logger.error(
+                    "Rotation left a mixed state: %s now serve the new index, "
+                    "%s still serve the previous one. Re-run with a fresh "
+                    "--index-suffix once the cause is fixed.",
+                    ", ".join(flipped) or "no cores",
+                    ", ".join(pending),
+                )
+                raise
             logger.info(
                 "Blue/green rotation complete; live cores: %s",
                 ", ".join(self.index_names),

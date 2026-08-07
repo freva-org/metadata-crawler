@@ -276,7 +276,7 @@ class TestIngestSolr:
                 stores.append(str(store))
             else:
                 stores = [f"{backend}://{u}:{p}@localhost:{ports[backend]}/{db}"]
-        with mock.patch.dict(os.environ, {"MDC_INTERACTIVE": "1"}, clear=True):
+        with mock.patch.dict(os.environ, {"MDC_INTERACTIVE": "1"}, clear=False):
             index(
                 "solr",
                 *stores,
@@ -432,6 +432,69 @@ class TestBlueGreenSolr:
         cores = _solr_cores(base)
         assert f"files{suffix}" not in cores
         assert f"latest{suffix}" not in cores
+
+    def test_rotate_covers_every_store(self, bg_solr, mock_dir: Path) -> None:
+        """All stores of one run share a single rotation.
+
+        Rotating per store would leave only the last catalogue live - and,
+        with a pinned suffix, would not get that far: the second rotation
+        collides with the instance dir the first one swapped into place.
+        """
+        base, configset, suffix = bg_solr
+        catalogues = [str(mock_dir / f"{ds}-cat.yml") for ds in ("fs", "s3", "swift")]
+        index(
+            "solr",
+            *catalogues,
+            server=base,
+            batch_size=50,
+            rotate=True,
+            index_suffix=suffix,
+            configset=configset,
+            min_docs=1,
+        )
+        for dataset in ("obs-fs", "obs-s3", "obs-swift"):
+            assert _solr_num_q(base, "latest", f'dataset:"{dataset}"') > 0, dataset
+
+    def test_reused_suffix_is_refused(self, bg_solr, mock_dir: Path) -> None:
+        """A suffix that has already been rotated must not be reused.
+
+        After the SWAP the live core owns ``<name><suffix>`` as its instance
+        dir while no core carries that *name* any more, so a name-only
+        existence check waves the CREATE through and Solr answers 400. The
+        ingester has to catch this itself, and say why.
+        """
+        base, configset, suffix = bg_solr
+        options: Dict[str, Any] = dict(
+            server=base,
+            batch_size=50,
+            rotate=True,
+            index_suffix=suffix,
+            configset=configset,
+            min_docs=1,
+        )
+        index("solr", str(mock_dir / "fs-cat.yml"), **options)
+        before = {c: _solr_num_q(base, c) for c in ("files", "latest")}
+
+        with pytest.raises(RuntimeError, match="--index-suffix"):
+            index("solr", str(mock_dir / "fs-cat.yml"), **options)
+
+        assert {c: _solr_num_q(base, c) for c in ("files", "latest")} == before
+
+    def test_generated_suffix_allows_back_to_back_rotations(
+        self, solr_server: str, solr_configset: str, mock_dir: Path
+    ) -> None:
+        """Without --index-suffix consecutive runs never collide."""
+        for _ in range(2):
+            index(
+                "solr",
+                str(mock_dir / "fs-cat.yml"),
+                server=solr_server,
+                batch_size=50,
+                rotate=True,
+                configset=solr_configset,
+                min_docs=1,
+            )
+        assert _solr_num_q(solr_server, "latest") > 0
 
 
 class TestBlueGreenMongo:

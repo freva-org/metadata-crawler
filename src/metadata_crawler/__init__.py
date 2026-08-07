@@ -193,7 +193,11 @@ def delete(
     """
     async_model.run(
         async_delete(
-            index_system, batch_size=batch_size, log_suffix=log_suffix, **kwargs
+            index_system,
+            batch_size=batch_size,
+            verbosity=verbosity,
+            log_suffix=log_suffix,
+            **kwargs,
         )
     )
 

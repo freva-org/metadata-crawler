@@ -18,9 +18,10 @@ class TestSchemaDrift:
     def _solr(schema: Dict[str, Any]) -> Any:
         from metadata_crawler.ingester.solr import SolrIndex
 
-        # bypass __init__; _convert only reads self.index_schema -> _store.schema
+        # bypass __init__; _convert only reads self.index_schema, which is
+        # served by the first entry of ``_stores``
         inst = SolrIndex.__new__(SolrIndex)
-        inst._store = SimpleNamespace(schema=schema)
+        inst._stores = [SimpleNamespace(schema=schema)]
         return inst
 
     def test_unknown_fields_pass_through(self) -> None:

@@ -122,6 +122,11 @@ class Logger(logging.Logger):
                 log_level = min(level, logging.CRITICAL)
             handler.setLevel(log_level)
         self.setLevel(level)
+        # ``setLevel`` clears the enabled-cache of every logger the manager
+        # knows about - but this one is instantiated directly rather than
+        # through ``logging.getLogger``, so it never entered ``loggerDict``
+        # and its own cache would keep answering with the previous level.
+        self._cache.clear()  # type: ignore[attr-defined]
         self.level = level
 
     def error(
@@ -140,7 +145,12 @@ class Logger(logging.Logger):
         suffix: Optional[str] = None,
         level: int = logging.CRITICAL,
     ) -> None:
-        """Add a file log handle to the logger."""
+        """Add a file log handle to the logger.
+
+        Any previously attached file handle is replaced. ``apply_verbosity``
+        calls this on every invocation, so appending would leave a long-lived
+        process with one open file handle per call.
+        """
         suffix = suffix or os.getenv("MDC_LOG_SUFFIX", "")
         base_name = f"{THIS_NAME}-{suffix}" if suffix else THIS_NAME
         log_dir = Path(os.getenv("MDC_LOG_DIR", appdirs.user_log_dir(THIS_NAME)))
@@ -155,6 +165,10 @@ class Logger(logging.Logger):
         )
         logger_file_handle.setFormatter(self.file_format)
         logger_file_handle.setLevel(self.level)
+        if self._logger_file_handle is not None:
+            self.removeHandler(self._logger_file_handle)
+            self._logger_file_handle.close()
+        self._logger_file_handle = logger_file_handle
         self.addHandler(logger_file_handle)
 
 
