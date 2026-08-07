@@ -452,6 +452,13 @@ class PostgreSQL(IndexStore):
         Uses synchronous :mod:`sqlalchemy` in a single-thread executor,
         fetching one batch at a time so memory stays bounded.
 
+        The connection is put into server-side-cursor mode
+        (``stream_results``). Without it the driver buffers the *entire*
+        result set client-side before ``execute`` returns, so ``batch_size``
+        would only control how the already-resident rows are handed out - a
+        table of tens of millions of records is then a multi-gigabyte
+        allocation before the first batch is ever yielded.
+
         Parameters
         ^^^^^^^^^^
         index_name:
@@ -473,7 +480,7 @@ class PostgreSQL(IndexStore):
         url = self._url
 
         def _open() -> Tuple[
-            "sa.Engine", Optional["sa.Connection"], Optional["sa.CursorResult[Any]"]
+            "sa.Engine", Optional["sa.Connection"], Optional["sa.MappingResult"]
         ]:
             engine: sa.Engine = sa.create_engine(url, pool_pre_ping=True)
             sa_meta: sa.MetaData = sa.MetaData(schema=self._db_schema)
@@ -490,21 +497,25 @@ class PostgreSQL(IndexStore):
                 logger.critical("Cloud not find table %s", index_name)
                 return engine, None, None
 
-            conn = engine.connect()
+            conn = engine.connect().execution_options(
+                stream_results=True,
+                max_row_buffer=batch_size,
+            )
             result = conn.execute(sa.select(table))
-            return engine, conn, result
+            return engine, conn, result.mappings()
 
         def _next_batch(
-            result: "sa.CursorResult[Any]",
+            mappings: "sa.MappingResult",
         ) -> Optional[List[MetadataRecord]]:
+            rows = mappings.fetchmany(batch_size)
+            if not rows:
+                return None
             batch: List[MetadataRecord] = []
-            for row in result.mappings():
+            for row in rows:
                 record = {str(k): v for k, v in row.items()}
                 record.pop(self._epoch_key, None)
                 batch.append(record)
-                if len(batch) >= batch_size:
-                    return batch
-            return batch or None
+            return batch
 
         def _close(engine: "sa.Engine", conn: Optional["sa.Connection"]) -> None:
             if conn is not None:
@@ -512,12 +523,12 @@ class PostgreSQL(IndexStore):
             engine.dispose()
 
         with ThreadPoolExecutor(max_workers=1) as pool:
-            engine, conn, result = await loop.run_in_executor(pool, _open)
-            if result is None:
+            engine, conn, mappings = await loop.run_in_executor(pool, _open)
+            if mappings is None:
                 return
             try:
                 while True:
-                    batch = await loop.run_in_executor(pool, _next_batch, result)
+                    batch = await loop.run_in_executor(pool, _next_batch, mappings)
                     if batch is None:
                         break
                     yield batch
