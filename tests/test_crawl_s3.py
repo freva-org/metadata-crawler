@@ -334,6 +334,52 @@ class TestTrailingSlash:
         assert [d async for d in store.iterdir("bucket/pre")] == ["bucket/pre/sub"]
 
 
+class TestIterdirOnFile:
+    """``iterdir`` handed a concrete object yields that object, not a listing.
+
+    ``_iter_content`` calls ``iterdir`` on whatever the walk turned up, so it
+    has to tolerate a plain key.  s3 has no real directories: a listing of an
+    object prefix would come back empty and the file would be dropped
+    silently.
+    """
+
+    NC = "reanalysis/healpix/era5land/legacy/era5land_2020.nc"
+
+    async def test_yields_the_file_itself(self, store: S3Path) -> None:
+        assert [d async for d in store.iterdir(self.NC)] == [f"s3://{self.NC}"]
+
+    async def test_does_not_list(self, store: S3Path, client: FakeS3Client) -> None:
+        [d async for d in store.iterdir(self.NC)]
+        assert client.lsdir_calls == []
+
+    @pytest.mark.parametrize("suffix", ["", "/", "//"])
+    async def test_normalised_before_the_file_check(
+        self, store: S3Path, suffix: str
+    ) -> None:
+        """A trailing slash must not turn the object into a missing prefix."""
+        found = [d async for d in store.iterdir(f"s3://{self.NC}{suffix}")]
+        assert found == [f"s3://{self.NC}"]
+
+    async def test_uri_is_used_for_a_custom_endpoint(self) -> None:
+        """The file branch yields a ``uri``, which stays endpoint independent."""
+        store = S3Path(endpoint_url="https://s3.waterpark.dkrz.de")
+        store._client = FakeS3Client(ZARR_BUCKET)  # type: ignore[assignment]
+        assert [d async for d in store.iterdir(self.NC)] == [f"s3://{self.NC}"]
+
+    async def test_zarr_store_is_not_treated_as_a_file(self, store: S3Path) -> None:
+        """A zarr store is a prefix, so ``iterdir`` still lists its members."""
+        zarr = "reanalysis/healpix/era5land/PT1H/era5land_hp10.zarr"
+        found = [d async for d in store.iterdir(zarr)]
+        assert found == [
+            f"{zarr}/.zmetadata",
+            f"{zarr}/t2m",
+            f"{zarr}/tp",
+        ]
+
+    async def test_missing_path_lists_nothing(self, store: S3Path) -> None:
+        assert [d async for d in store.iterdir("reanalysis/nope.nc")] == []
+
+
 class TestPruning:
     """The walk must stop at a data store, not descend into it."""
 
@@ -390,6 +436,52 @@ class TestPruning:
         store._client = FakeS3Client(ZARR_BUCKET)  # type: ignore[assignment]
         found = await collect(store, "reanalysis/healpix/era5land")
         assert found == ["s3://reanalysis/healpix/era5land/legacy/era5land_2020.nc"]
+
+
+class TestIterdirOnFile:
+    """``iterdir`` handed a concrete object yields that object, not a listing.
+
+    ``_iter_content`` calls ``iterdir`` on whatever the walk turned up, so it
+    has to tolerate a plain key.  s3 has no real directories: a listing of an
+    object prefix would come back empty and the file would be dropped
+    silently.
+    """
+
+    NC = "reanalysis/healpix/era5land/legacy/era5land_2020.nc"
+
+    async def test_yields_the_file_itself(self, store: S3Path) -> None:
+        assert [d async for d in store.iterdir(self.NC)] == [f"s3://{self.NC}"]
+
+    async def test_does_not_list(self, store: S3Path, client: FakeS3Client) -> None:
+        [d async for d in store.iterdir(self.NC)]
+        assert client.lsdir_calls == []
+
+    @pytest.mark.parametrize("suffix", ["", "/", "//"])
+    async def test_normalised_before_the_file_check(
+        self, store: S3Path, suffix: str
+    ) -> None:
+        """A trailing slash must not turn the object into a missing prefix."""
+        found = [d async for d in store.iterdir(f"s3://{self.NC}{suffix}")]
+        assert found == [f"s3://{self.NC}"]
+
+    async def test_uri_is_used_for_a_custom_endpoint(self) -> None:
+        """The file branch yields a ``uri``, which stays endpoint independent."""
+        store = S3Path(endpoint_url="https://s3.waterpark.dkrz.de")
+        store._client = FakeS3Client(ZARR_BUCKET)  # type: ignore[assignment]
+        assert [d async for d in store.iterdir(self.NC)] == [f"s3://{self.NC}"]
+
+    async def test_zarr_store_is_not_treated_as_a_file(self, store: S3Path) -> None:
+        """A zarr store is a prefix, so ``iterdir`` still lists its members."""
+        zarr = "reanalysis/healpix/era5land/PT1H/era5land_hp10.zarr"
+        found = [d async for d in store.iterdir(zarr)]
+        assert found == [
+            f"{zarr}/.zmetadata",
+            f"{zarr}/t2m",
+            f"{zarr}/tp",
+        ]
+
+    async def test_missing_path_lists_nothing(self, store: S3Path) -> None:
+        assert [d async for d in store.iterdir("reanalysis/nope.nc")] == []
 
 
 class TestGlobPattern:
