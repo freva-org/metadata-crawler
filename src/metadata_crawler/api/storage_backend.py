@@ -133,18 +133,18 @@ class PathTemplate(abc.ABC, PathMixin, TemplateMixin, LookupMixin, metaclass=Bas
             suffix = file_name.rpartition(".")[-1]
             return engines.get(suffix, "")
 
-        kwargs = read_kws.copy()
-        engine = kwargs.setdefault("engine", _get_engine(path) or None)
+        kwargs = {k: v for (k, v) in read_kws.items() if k != "engine"}
+        engine = read_kws.get("engine", _get_engine(path) or None)
 
         if engine == "zarr":
-            dset: xr.Dataset = xr.open_zarr(fs.get_mapper(self.uri(path)))
+            dset: xr.Dataset = xr.open_zarr(fs.get_mapper(self.uri(path)), **kwargs)
             return dset
         if fs.protocol[0] == "file" and engine == "h5netcdf":
             return h5netcdf.File(path)
         if fs.protocol[0] == "file":
-            return xr.open_mfdataset(path, **kwargs)
+            return xr.open_mfdataset(path, engine=engine, **kwargs)
         with fs.open(self.uri(path), "rb") as stream:
-            return xr.open_dataset(stream, **kwargs)
+            return xr.open_dataset(stream, engine=engine, **kwargs)
 
     def read_attr(
         self, attribute: str, path: Union[str, pathlib.Path], **read_kws: Any
