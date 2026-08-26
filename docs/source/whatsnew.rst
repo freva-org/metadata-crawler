@@ -3,6 +3,10 @@ What's new
 
 This document highlights major changes and additions across releases.
 
+v2608.2.0
+---------
+* Use keyword arguments for ``xarray.open_zarr`` when opening zarr stores.
+
 v2608.1.0
 ---------
 * Enable streaming for DB batches.
