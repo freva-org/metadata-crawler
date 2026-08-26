@@ -2,6 +2,7 @@
 
 import asyncio
 import pathlib
+from fnmatch import fnmatch
 from typing import AsyncIterator, Dict, Optional, Tuple, Union, cast
 from urllib.parse import quote, unquote
 
@@ -28,6 +29,18 @@ class S3Path(PathTemplate):
         host = endpoint.split("://", 1)[-1]
         self._endpoint: str = "" if "amazonaws" in host else endpoint.rstrip("/")
         self._netloc = self._endpoint.rpartition("://")[-1]
+
+    @staticmethod
+    def _norm(path: Union[str, pathlib.Path]) -> str:
+        """Normalise a path before handing it to a private s3fs method.
+
+        ``S3FileSystem.split_path`` deliberately *restores* a trailing slash
+        onto the key (``key += trail``), so ``_lsdir("bucket/pre/")`` lists
+        with the prefix ``pre//`` and returns nothing.  The public
+        ``ls``/``find`` wrappers call ``_strip_protocol`` first, which is why
+        they behave.  Every call into a ``_``-method has to do the same.
+        """
+        return cast(str, S3FileSystem._strip_protocol(str(path))).rstrip("/")
 
     async def close(self) -> None:
         """Close the connection."""
@@ -80,24 +93,24 @@ class S3Path(PathTemplate):
     async def is_file(self, path: Union[str, pathlib.Path]) -> bool:
         """Check if a given path is a file object on the storage system."""
         client = await self._get_client()
-        return cast(bool, await client._isfile(str(path)))
+        return cast(bool, await client._isfile(self._norm(path)))
 
     async def is_dir(self, path: Union[str, pathlib.Path]) -> bool:
         """Check if a given path is a directory object on the storage system."""
         client = await self._get_client()
-        return cast(bool, await client._isdir(str(path)))
+        return cast(bool, await client._isdir(self._norm(path)))
 
     async def iterdir(self, path: Union[str, pathlib.Path]) -> AsyncIterator[str]:
         """Retrieve sub directories of directory."""
         client = await self._get_client()
-        path = str(path)
+        path = self._norm(path)
         if await self.is_file(path):
             yield self.uri(path)
         else:
             for _content in await client._lsdir(path):
                 size: int = _content.get("size") or 0
                 if _content.get("type", "") == "directory" or size > 0:
-                    yield _content.get("name", "")
+                    yield (_content.get("name") or "").rstrip("/")
 
     async def rglob(
         self, path: Union[str, pathlib.Path], glob_pattern: str = "*"
@@ -118,16 +131,37 @@ class S3Path(PathTemplate):
             E.g.: '*.zarr|*.nc|*.hdf5'
         """
         client = await self._get_client()
-        path = str(path)
-        if await self.is_file(path):
-            yield MetadataType(path=await self._access_uri(path), metadata={})
-        else:
-            suffixes = tuple(self.suffixes)
-            for content in await client._find(path, withdirs=True):
-                if content.endswith(suffixes):
-                    yield MetadataType(
-                        path=await self._access_uri(f"/{content}"), metadata={}
-                    )
+        root = self._norm(path)
+        suffixes = tuple(s.lower() for s in self.suffixes)
+        patterns = [p.strip() for p in glob_pattern.split("|") if p.strip()] or ["*"]
+
+        def _matches(name: str) -> bool:
+            rel = name[len(root) :].lstrip("/")
+            base = rel.rpartition("/")[-1]
+            return any(fnmatch(rel, p) or fnmatch(base, p) for p in patterns)
+
+        # A directory-like store (``*.zarr``) *is* the dataset - never descend
+        # into it.  This mirrors the posix/rust backend, which short-circuits
+        # on ``is_file || is_zarr`` before starting to walk.
+        if root.lower().endswith(suffixes) or await self.is_file(root):
+            yield MetadataType(path=await self._access_uri(f"/{root}"), metadata={})
+            return
+
+        stack = [root]
+        while stack:
+            current = stack.pop()
+            for entry in await client._lsdir(current):
+                name = (entry.get("name") or "").rstrip("/")
+                if not name or name == current:
+                    continue
+                if name.lower().endswith(suffixes):
+                    if _matches(name):
+                        yield MetadataType(
+                            path=await self._access_uri(f"/{name}"), metadata={}
+                        )
+                    continue  # prune: never walk inside a data store
+                if entry.get("type", "") == "directory":
+                    stack.append(name)
 
     def path(self, path: Union[str, pathlib.Path]) -> str:
         """Get the full path (without any schemas/netlocs).
