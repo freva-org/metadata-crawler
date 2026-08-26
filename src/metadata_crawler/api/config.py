@@ -127,26 +127,42 @@ class SchemaField(BaseModel):
 
     @staticmethod
     def get_time_range(
-        time_stamp: Optional[Union[str, List[str]]],
+        time_stamp: Optional[Union[str, List[Any]]],
     ) -> List[datetime]:
-        """Convert a from to time range to a begin or end time step."""
+        """Convert a from to time range to a begin or end time step.
+
+        The returned range is always monotonically increasing.  Solr rejects a
+        ``daterange`` whose start lies after its end, and inverted input does
+        occur in practice: ``<start>-<end>`` file names written the wrong way
+        round, descending time coordinates, or a hand written ``default``.
+        """
         time_stamp = time_stamp or ""
         if isinstance(time_stamp, str):
             start_str, _, end_str = (
                 time_stamp.replace(":", "").replace("_", "-").partition("-")
             )
             time_stamp = [start_str or "fx", end_str or "fx"]
-        for n, ts in enumerate(time_stamp):
-            if hasattr(ts, "isoformat"):
-                time_stamp[n] = ts.isoformat()
-            time_stamp[n] = str(ts) or "fx"
-        start = convert_str_to_timestamp(
-            time_stamp[0], alternative="0001-01-01T00:00"
-        )
-        end = convert_str_to_timestamp(
-            time_stamp[-1], alternative="9999-12-31T23:59"
-        )
-        return [start, end]
+        # Build a new list: ``time_stamp`` may be a value of the metadata dict
+        # and must not be turned into strings underneath the caller.
+        parts: List[str] = []
+        for ts in time_stamp:
+            isoformat = getattr(ts, "isoformat", None)
+            parts.append(
+                (isoformat() if callable(isoformat) else str(ts)) or "fx"
+            )
+        start = convert_str_to_timestamp(parts[0], alternative="0001-01-01T00:00")
+        end = convert_str_to_timestamp(parts[-1], alternative="9999-12-31T23:59")
+        if start > end:
+            # Re-convert with the bounds swapped rather than swapping the two
+            # results, so an open end keeps its meaning: a missing start
+            # widens to 00:00, a missing end to 23:59.
+            start = convert_str_to_timestamp(
+                parts[-1], alternative="0001-01-01T00:00"
+            )
+            end = convert_str_to_timestamp(
+                parts[0], alternative="9999-12-31T23:59"
+            )
+        return [min(start, end), max(start, end)]
 
 
 class MetadataSource(StrEnum):
