@@ -6,6 +6,7 @@ This document highlights major changes and additions across releases.
 v2608.2.0
 ---------
 * S3: stop at ``.zarr`` suffix when crawling.
+* S3: strip trailing ``/`` when listing dirs.
 
   v2608.1.0
 ---------
