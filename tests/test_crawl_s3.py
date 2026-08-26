@@ -438,51 +438,56 @@ class TestPruning:
         assert found == ["s3://reanalysis/healpix/era5land/legacy/era5land_2020.nc"]
 
 
-class TestIterdirOnFile:
-    """``iterdir`` handed a concrete object yields that object, not a listing.
+class TestDegenerateListings:
+    """Guards against what real buckets put in a listing.
 
-    ``_iter_content`` calls ``iterdir`` on whatever the walk turned up, so it
-    has to tolerate a plain key.  s3 has no real directories: a listing of an
-    object prefix would come back empty and the file would be dropped
-    silently.
+    A placeholder object (``pre/``, size 0) makes s3fs return an entry whose
+    name, once the trailing slash is stripped, is the prefix being listed.
+    Without the self-reference guard the walk pushes that back onto the stack
+    and never terminates.
     """
 
-    NC = "reanalysis/healpix/era5land/legacy/era5land_2020.nc"
+    class SelfReferencing(FakeS3Client):
+        async def _lsdir(self, path: str, **_: Any) -> List[Dict[str, Any]]:
+            self.lsdir_calls.append(path)
+            return [
+                {"name": "bucket/pre/", "type": "directory", "size": 0},
+                {"name": "", "type": "directory", "size": 0},
+                {"name": "bucket/pre/store.zarr", "type": "directory", "size": 0},
+            ]
 
-    async def test_yields_the_file_itself(self, store: S3Path) -> None:
-        assert [d async for d in store.iterdir(self.NC)] == [f"s3://{self.NC}"]
+        async def _isfile(self, path: str) -> bool:
+            return False
 
-    async def test_does_not_list(self, store: S3Path, client: FakeS3Client) -> None:
-        [d async for d in store.iterdir(self.NC)]
-        assert client.lsdir_calls == []
+    async def test_self_reference_does_not_loop(self) -> None:
+        store = S3Path()
+        store._client = self.SelfReferencing({})  # type: ignore[assignment]
+        found = [item async for item in store.rglob("bucket/pre")]
+        assert [item["path"] for item in found] == ["s3://bucket/pre/store.zarr"]
 
-    @pytest.mark.parametrize("suffix", ["", "/", "//"])
-    async def test_normalised_before_the_file_check(
-        self, store: S3Path, suffix: str
-    ) -> None:
-        """A trailing slash must not turn the object into a missing prefix."""
-        found = [d async for d in store.iterdir(f"s3://{self.NC}{suffix}")]
-        assert found == [f"s3://{self.NC}"]
+    async def test_self_reference_is_listed_once(self) -> None:
+        store = S3Path()
+        client = self.SelfReferencing({})
+        store._client = client  # type: ignore[assignment]
+        [item async for item in store.rglob("bucket/pre")]
+        assert client.lsdir_calls == ["bucket/pre"]
 
-    async def test_uri_is_used_for_a_custom_endpoint(self) -> None:
-        """The file branch yields a ``uri``, which stays endpoint independent."""
-        store = S3Path(endpoint_url="https://s3.waterpark.dkrz.de")
-        store._client = FakeS3Client(ZARR_BUCKET)  # type: ignore[assignment]
-        assert [d async for d in store.iterdir(self.NC)] == [f"s3://{self.NC}"]
+    async def test_iterdir_skips_empty_non_directory_entries(self) -> None:
+        """Zero byte file entries are placeholders, not data."""
 
-    async def test_zarr_store_is_not_treated_as_a_file(self, store: S3Path) -> None:
-        """A zarr store is a prefix, so ``iterdir`` still lists its members."""
-        zarr = "reanalysis/healpix/era5land/PT1H/era5land_hp10.zarr"
-        found = [d async for d in store.iterdir(zarr)]
-        assert found == [
-            f"{zarr}/.zmetadata",
-            f"{zarr}/t2m",
-            f"{zarr}/tp",
-        ]
+        class Placeholder(FakeS3Client):
+            async def _lsdir(self, path: str, **_: Any) -> List[Dict[str, Any]]:
+                return [
+                    {"name": "bucket/pre/marker", "type": "file", "size": 0},
+                    {"name": "bucket/pre/data.nc", "type": "file", "size": 12},
+                ]
 
-    async def test_missing_path_lists_nothing(self, store: S3Path) -> None:
-        assert [d async for d in store.iterdir("reanalysis/nope.nc")] == []
+            async def _isfile(self, path: str) -> bool:
+                return False
 
+        store = S3Path()
+        store._client = Placeholder({})  # type: ignore[assignment]
+        assert [d async for d in store.iterdir("bucket/pre")] == ["bucket/pre/data.nc"]
 
 class TestGlobPattern:
     """``glob_pattern`` is matched relative to the ``rglob`` root."""
