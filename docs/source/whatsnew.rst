@@ -3,6 +3,10 @@ What's new
 
 This document highlights major changes and additions across releases.
 
+v2608.2.0
+---------
+* Make time range increase monotonically
+
 v2608.1.0
 ---------
 * Enable streaming for DB batches.
