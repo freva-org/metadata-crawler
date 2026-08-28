@@ -263,34 +263,8 @@ def test_reading_data_attributes(
     assert sw.read_attr("ensemble", path) == "r1i1p1"
 
 
-pytest.mark.parametrize(
-    ("fixture_name", "engine", "xr_method", "expected_kwargs"),
-    [
-        (
-            "zarr_data",
-            "zarr",
-            "open_zarr",
-            {
-                "consolidated": True,
-                "decode_times": False,
-            },
-        ),
-        (
-            "netcdf_file",
-            "h5netcdf",
-            "open_dataset",
-            {
-                "engine": "h5netcdf",
-                "consolidated": True,
-                "decode_times": False,
-            },
-        ),
-    ],
-)
-
-
 @pytest.mark.parametrize(
-    ("fixture_name", "engine", "xr_method", "protocol", "read_kwargs"),
+    ("fixture_name", "engine", "xr_method", "read_kwargs"),
     [
         (
             "zarr_data",
