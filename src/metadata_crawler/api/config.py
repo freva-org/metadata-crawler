@@ -52,6 +52,9 @@ from .mixin import TemplateMixin
 from .storage_backend import Metadata, MetadataType
 
 DocT = TypeVar("DocT", tomlkit.TOMLDocument, Dict[str, Any])
+DATE_PART = r"[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2}(?:T[0-9]+)?)?)?"
+DATE_RANGE_RE = re.compile(rf"(?P<start>{DATE_PART})-(?P<end>{DATE_PART})")
+NORMALIZE = str.maketrans({":": None, "_": "-"})
 
 
 class BaseType(str, Enum):
@@ -138,30 +141,28 @@ class SchemaField(BaseModel):
         """
         time_stamp = time_stamp or ""
         if isinstance(time_stamp, str):
-            start_str, _, end_str = (
-                time_stamp.replace(":", "").replace("_", "-").partition("-")
-            )
+            normalized = time_stamp.translate(NORMALIZE)
+            date_range = DATE_RANGE_RE.fullmatch(normalized)
+            if date_range:
+                start_str = date_range["start"]
+                end_str = date_range["end"]
+            else:
+                start_str, _, end_str = normalized.partition("-")
             time_stamp = [start_str or "fx", end_str or "fx"]
         # Build a new list: ``time_stamp`` may be a value of the metadata dict
         # and must not be turned into strings underneath the caller.
         parts: List[str] = []
         for ts in time_stamp:
             isoformat = getattr(ts, "isoformat", None)
-            parts.append(
-                (isoformat() if callable(isoformat) else str(ts)) or "fx"
-            )
+            parts.append((isoformat() if callable(isoformat) else str(ts)) or "fx")
         start = convert_str_to_timestamp(parts[0], alternative="0001-01-01T00:00")
         end = convert_str_to_timestamp(parts[-1], alternative="9999-12-31T23:59")
         if start > end:
             # Re-convert with the bounds swapped rather than swapping the two
             # results, so an open end keeps its meaning: a missing start
             # widens to 00:00, a missing end to 23:59.
-            start = convert_str_to_timestamp(
-                parts[-1], alternative="0001-01-01T00:00"
-            )
-            end = convert_str_to_timestamp(
-                parts[0], alternative="9999-12-31T23:59"
-            )
+            start = convert_str_to_timestamp(parts[-1], alternative="0001-01-01T00:00")
+            end = convert_str_to_timestamp(parts[0], alternative="9999-12-31T23:59")
         return [min(start, end), max(start, end)]
 
 
@@ -207,9 +208,7 @@ class ConfigMerger(Generic[DocT]):
 
     def __init__(
         self,
-        *user_paths_or_config: Union[
-            Path, str, Dict[str, Any], tomlkit.TOMLDocument
-        ],
+        *user_paths_or_config: Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument],
         preserve_comments: bool = True,
     ):
         # parse both documents
@@ -243,14 +242,12 @@ class ConfigMerger(Generic[DocT]):
                     )
                 )
             elif isinstance(user_path_or_config, (str, Path)):
-                paths_or_cfg = glob.glob(
-                    str(user_path_or_config), recursive=False
-                ) or [str(user_path_or_config)]
+                paths_or_cfg = glob.glob(str(user_path_or_config), recursive=False) or [
+                    str(user_path_or_config)
+                ]
                 for path_or_cfg in paths_or_cfg:
                     if os.path.isfile(path_or_cfg):
-                        _configs.append(
-                            Path(path_or_cfg).read_text(encoding="utf-8")
-                        )
+                        _configs.append(Path(path_or_cfg).read_text(encoding="utf-8"))
                     # We have most likely a string representing a config.
                     elif not os.path.exists(path_or_cfg):
                         _configs.append(str(user_path_or_config))
@@ -267,22 +264,17 @@ class ConfigMerger(Generic[DocT]):
 
     def _merge_tables(
         self,
-        base: Union[
-            Dict[str, Any], tomlkit.TOMLDocument, Table, OutOfOrderTableProxy
-        ],
+        base: Union[Dict[str, Any], tomlkit.TOMLDocument, Table, OutOfOrderTableProxy],
         override: Union[
             Dict[str, Any], Table, tomlkit.TOMLDocument, OutOfOrderTableProxy
         ],
     ) -> None:
-
         for key, value in override.items():
             if key not in base:
                 base[key] = value
                 continue
             if isinstance(value, (Table, OutOfOrderTableProxy, dict)):
-                self._merge_tables(
-                    cast(Union[Table, Dict[str, Any]], base[key]), value
-                )
+                self._merge_tables(cast(Union[Table, Dict[str, Any]], base[key]), value)
             else:
                 base[key] = value
 
@@ -320,18 +312,12 @@ class PathSpecs(BaseModel):
     file_parts: Optional[List[str]] = None
     file_sep: str = "_"
 
-    def _get_metadata_from_dir(
-        self, data: Dict[str, Any], rel_path: Path
-    ) -> None:
+    def _get_metadata_from_dir(self, data: Dict[str, Any], rel_path: Path) -> None:
         dir_parts = rel_path.parent.parts
 
         if self.dir_parts and len(dir_parts) == len(self.dir_parts):
             data.update(
-                {
-                    k: v
-                    for (k, v) in zip(self.dir_parts, dir_parts)
-                    if k not in data
-                }
+                {k: v for (k, v) in zip(self.dir_parts, dir_parts) if k not in data}
             )
         elif self.dir_parts:
             raise MetadataCrawlerException(
@@ -341,18 +327,14 @@ class PathSpecs(BaseModel):
                 )
             ) from None
 
-    def _get_metadata_from_filename(
-        self, data: Dict[str, Any], rel_path: Path
-    ) -> None:
+    def _get_metadata_from_filename(self, data: Dict[str, Any], rel_path: Path) -> None:
         if self.file_parts is None:
             return
         file_parts = rel_path.name.split(self.file_sep)
         _parts: Dict[str, str] = {}
         if len(file_parts) == len(self.file_parts):
             _parts = dict(zip(self.file_parts, file_parts))
-        elif (
-            len(file_parts) == len(self.file_parts) - 1 and "fx" in rel_path.name
-        ):
+        elif len(file_parts) == len(self.file_parts) - 1 and "fx" in rel_path.name:
             _parts = dict(zip(self.file_parts[:-1], file_parts))
         else:
             raise MetadataCrawlerException(
@@ -383,7 +365,6 @@ class DataSpecs(BaseModel):
     def _set_global_attributes(
         self, dset: "xarray.Dataset", out: Dict[str, Any]
     ) -> None:
-
         for facet, attr in self.globals.items():
             if attr == "__variable__":
                 out[facet] = list(getattr(dset, "data_vara", dset.variables))
@@ -395,9 +376,7 @@ class DataSpecs(BaseModel):
     ) -> None:
         data_vars = list(getattr(dset, "data_vars", dset.variables))
 
-        def get_val(
-            rule: VarAttrRule, vnames: Union[str, List[str]]
-        ) -> List[Any]:
+        def get_val(rule: VarAttrRule, vnames: Union[str, List[str]]) -> List[Any]:
             if isinstance(vnames, str):
                 vnames = [dv for dv in data_vars if fnmatch(dv, vnames)]
             attr_list: List[Any] = []
@@ -418,18 +397,11 @@ class DataSpecs(BaseModel):
             else:
                 out[facet] = vals
 
-    def _apply_stats_rules(
-        self, dset: "xarray.Dataset", out: Dict[str, Any]
-    ) -> None:
-
+    def _apply_stats_rules(self, dset: "xarray.Dataset", out: Dict[str, Any]) -> None:
         for facet, rule in self.stats.items():
             coords: Optional[List[str]] = None
             if rule.coords:
-                coords = (
-                    rule.coords
-                    if isinstance(rule.coords, list)
-                    else [rule.coords]
-                )
+                coords = rule.coords if isinstance(rule.coords, list) else [rule.coords]
             match rule.stat:
                 case "bbox":
                     lat = rule.lat or (coords[0] if coords else "lat")
@@ -455,7 +427,6 @@ class DataSpecs(BaseModel):
                         out[facet] = [arr.min(), arr.max()]
 
                 case "min" | "max" | "minmax":
-
                     coord = coords[0] if coords else None
                     var_name = rule.var if rule.var else coord
                     out[facet] = rule.default
@@ -469,9 +440,7 @@ class DataSpecs(BaseModel):
                             out[facet] = [arr.min(), arr.max()]
                 case "timedelta":
                     coord = coords[0] if coords else None
-                    out[facet] = infer_cmor_like_time_frequency(
-                        dset, rule.var or coord
-                    )
+                    out[facet] = infer_cmor_like_time_frequency(dset, rule.var or coord)
 
     def extract_from_data(self, dset: xarray.Dataset) -> Dict[str, Any]:
         """Extract metadata from the data."""
@@ -497,9 +466,7 @@ class Datasets(BaseModel):
 
     @field_validator("storage_options", mode="after")
     @classmethod
-    def _render_storage_options(
-        cls, storage_options: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def _render_storage_options(cls, storage_options: Dict[str, Any]) -> Dict[str, Any]:
         tmpl = TemplateMixin()
         return cast(Dict[str, Any], tmpl.render_templates(storage_options, {}))
 
@@ -651,12 +618,10 @@ class DRSConfig(BaseModel, TemplateMixin):
                 if parent:
                     if parent not in merged:
                         raise MetadataCrawlerException(
-                            f"'{name}' inherits from unknown " f"'{parent}'"
+                            f"'{name}' inherits from unknown '{parent}'"
                         )
                     # take parent base, then overlay this dialect
-                    base = deepcopy(
-                        merged[parent]
-                    )  # shallow copy of parent raw dict
+                    base = deepcopy(merged[parent])  # shallow copy of parent raw dict
                     # remove inherits_from to avoid cycles
                     child = deepcopy(cfg)
                     child.pop("inherits_from", None)
@@ -695,9 +660,7 @@ class DRSConfig(BaseModel, TemplateMixin):
                 case "conditional":
                     _rule = textwrap.dedent(rule.condition or "").strip()
                     s_cond = self.render_templates(_rule, data)
-                    cond = eval(
-                        s_cond, {}, getattr(self, "_model_dict", {})
-                    )  # nosec
+                    cond = eval(s_cond, {}, getattr(self, "_model_dict", {}))  # nosec
                     result = rule.true if cond else rule.false
                 case "lookup":
                     args = cast(List[str], self.render_templates(rule.tree, data))
@@ -723,9 +686,7 @@ class DRSConfig(BaseModel, TemplateMixin):
         """Extract the metadata from the path."""
         drs_type = self.datasets[standard].drs_format
         root_path = strip_protocol(
-            self.datasets[standard].backend.path(
-                self.datasets[standard].root_path
-            )
+            self.datasets[standard].backend.path(self.datasets[standard].root_path)
         )
         _path = strip_protocol(self.datasets[standard].backend.path(path))
         rel_path = _path.with_suffix("").relative_to(root_path)
@@ -761,17 +722,11 @@ class DRSConfig(BaseModel, TemplateMixin):
         to the file level.
         """
         root_path = strip_protocol(
-            self.datasets[drs_type].backend.path(
-                self.datasets[drs_type].root_path
-            )
+            self.datasets[drs_type].backend.path(self.datasets[drs_type].root_path)
         )
-        search_dir = strip_protocol(
-            self.datasets[drs_type].backend.path(search_dir)
-        )
+        search_dir = strip_protocol(self.datasets[drs_type].backend.path(search_dir))
         standard = self.datasets[drs_type].drs_format
-        version = cast(
-            str, self.dialect[standard].facets.get("version", "version")
-        )
+        version = cast(str, self.dialect[standard].facets.get("version", "version"))
         is_versioned = True
         dir_parts = self.dialect[standard].path_specs.dir_parts or []
         try:
@@ -792,9 +747,7 @@ class DRSConfig(BaseModel, TemplateMixin):
             return False
         complete = True
         preset = {**self._defaults[standard], **self.dialect[standard].special}
-        facets = (
-            k for k, v in self.index_schema.items() if not v.key.startswith("__")
-        )
+        facets = (k for k, v in self.index_schema.items() if not v.key.startswith("__"))
         for facet in self.dialect[standard].facets or facets:
             if facet not in data and facet not in preset:
                 complete = False
@@ -808,18 +761,14 @@ class DRSConfig(BaseModel, TemplateMixin):
                 break
             match source:
                 case MetadataSource.path:
-                    inp.metadata.update(
-                        self._metadata_from_path(inp.path, standard)
-                    )
+                    inp.metadata.update(self._metadata_from_path(inp.path, standard))
                 case MetadataSource.data:
                     with catch_warnings(action="ignore", category=RuntimeWarning):
                         with self.datasets[standard].backend.open_dataset(
                             inp.path, **self.dialect[standard].data_specs.read_kws
                         ) as ds:
                             inp.metadata.update(
-                                self.dialect[
-                                    standard
-                                ].data_specs.extract_from_data(ds)
+                                self.dialect[standard].data_specs.extract_from_data(ds)
                             )
         self._apply_special_rules(
             standard, drs_type, inp, self.dialect[standard].special

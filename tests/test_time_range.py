@@ -51,6 +51,8 @@ class TestMonotonicity:
             "fx",
             "2020",
             "20200101-20201231",
+            "1950-1-2020-1-1",
+            "a-a",
             ["fx", "fx"],
             ["2020-01-01"],
             ["2020-01-01", "2020-12-31"],
@@ -71,9 +73,7 @@ class TestMonotonicity:
         the wrong end (start 23:59, end 00:00) and narrow the interval.  The
         bounds are re-converted instead, so the day still runs 00:00..23:59.
         """
-        assert rng(["2020-12-31", "2020-01-01"]) == rng(
-            ["2020-01-01", "2020-12-31"]
-        )
+        assert rng(["2020-12-31", "2020-01-01"]) == rng(["2020-01-01", "2020-12-31"])
         assert rng("20200101-20191231") == rng("20191231-20200101")
 
     def test_repaired_range_covers_both_bounds(self) -> None:
@@ -127,9 +127,10 @@ class TestInputHandling:
 
     def test_day_precision_end_widens_to_end_of_day(self) -> None:
         """``np.datetime64('2020-06-01')`` carries no time, so the end opens."""
-        assert rng(
-            [np.datetime64("2020-01-01"), np.datetime64("2020-06-01")]
-        ) == [datetime(2020, 1, 1, 0, 0), datetime(2020, 6, 1, 23, 59)]
+        assert rng([np.datetime64("2020-01-01"), np.datetime64("2020-06-01")]) == [
+            datetime(2020, 1, 1, 0, 0),
+            datetime(2020, 6, 1, 23, 59),
+        ]
 
     def test_underscore_and_colon_separators(self) -> None:
         assert rng("2020:01:01_2020:12:31") == rng("20200101-20201231")
