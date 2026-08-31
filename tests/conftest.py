@@ -3,7 +3,7 @@
 import multiprocessing as mp
 from pathlib import Path
 from queue import Queue
-from tempfile import TemporaryDirectory
+from tempfile import TemporaryDirectory, NamedTemporaryFile
 from threading import Thread
 from typing import Any, Dict, Iterator
 
@@ -318,3 +318,10 @@ def zarr_data(dataset: xr.Dataset) -> Iterator[Path]:
         out = Path(temp_dir) / "tas.zarr"
         dataset.to_zarr(out)
         yield out
+
+
+@pytest.fixture(scope="session")
+def netcdf_file(dataset: xr.Dataset) -> Iterator[Path]:
+    with NamedTemporaryFile(suffix=".nc") as temp_f:
+        dataset.to_netcdf(temp_f.name)
+        yield Path(temp_f.name)

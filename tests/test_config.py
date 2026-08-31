@@ -261,3 +261,47 @@ def test_reading_data_attributes(
         "v20210618/pr/pr_30min_CPC_cmorph_r1i1p1_201609020000-201609020030.nc"
     )
     assert sw.read_attr("ensemble", path) == "r1i1p1"
+
+
+@pytest.mark.parametrize(
+    ("fixture_name", "engine", "xr_method", "read_kwargs"),
+    [
+        (
+            "zarr_data",
+            "zarr",
+            "open_zarr",
+            {"consolidated": True, "decode_times": False},
+        ),
+        (
+            "netcdf_file",
+            "netcdf4",
+            "open_mfdataset",
+            {"decode_times": False},
+        ),
+    ],
+)
+def test_read_keywords_are_forwarded(
+    request: pytest.FixtureRequest,
+    fixture_name: str,
+    engine: str,
+    xr_method: str,
+    read_kwargs: dict[str, object],
+) -> None:
+    path: Path = request.getfixturevalue(fixture_name)
+    backend = PosixPath()
+
+    with mock.patch(f"metadata_crawler.api.storage_backend.xr.{xr_method}") as opener:
+        backend.open_dataset(
+            str(path),
+            engine=engine,
+            **read_kwargs,
+        )
+
+    expected = read_kwargs.copy()
+    if engine != "zarr":
+        expected["engine"] = engine
+
+    opener.assert_called_once_with(
+        mock.ANY,
+        **expected,
+    )
