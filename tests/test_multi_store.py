@@ -73,9 +73,11 @@ def stores(monkeypatch: pytest.MonkeyPatch) -> Dict[str, FakeStore]:
     return registry
 
 
-def _batches(index: BaseIndex, name: str) -> List[List[Dict[str, Any]]]:
+def _batches(
+    index: BaseIndex, name: str, data_set: Optional[List[str]] = None
+) -> List[List[Dict[str, Any]]]:
     async def _main() -> List[List[Dict[str, Any]]]:
-        return [batch async for batch in index.get_metadata(name)]
+        return [batch async for batch in index.get_metadata(name, data_set=data_set)]
 
     return asyncio.run(_main())
 
@@ -163,6 +165,20 @@ class TestChaining:
         index = Index(uri=["store-a", "store-b"], progress=Progress())  # type: ignore[arg-type]
         _batches(index, "latest")
         assert sum(seen) == 4
+
+    def test_dataset_patterns_filter_records(
+        self, stores: Dict[str, FakeStore]
+    ) -> None:
+        stores["store-a"].batches["latest"] = [
+            [{"dataset": "obs-a"}, {"dataset": "cmip-a"}]
+        ]
+        stores["store-b"].batches["latest"] = [[{"dataset": "obs-b"}]]
+
+        index = Index(uri=["store-a", "store-b"])
+        assert _batches(index, "latest", data_set=["obs-*"]) == [
+            [{"dataset": "obs-a"}],
+            [{"dataset": "obs-b"}],
+        ]
 
 
 class TestIndexNames:

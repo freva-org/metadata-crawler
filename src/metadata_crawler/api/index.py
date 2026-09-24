@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import abc
+from fnmatch import fnmatchcase
 from pathlib import Path
 from types import TracebackType
 from typing import (
@@ -126,7 +127,7 @@ class BaseIndex:
         return names.pop() if names else ("", "")
 
     async def get_metadata(
-        self, index_name: str
+        self, index_name: str, data_set: Optional[Sequence[str]] = None
     ) -> AsyncIterator[List[Dict[str, Any]]]:
         """Get the metadata of an index in batches.
 
@@ -137,13 +138,28 @@ class BaseIndex:
         ^^^^^^^^^^
         index_name:
             Name of the index that should be read.
+        data_set:
+            Optional dataset-name patterns. Only records whose ``dataset``
+            facet matches one of these shell-style patterns are yielded.
         """
         if not self._stores:
             return
+        patterns = [str(pattern) for pattern in data_set or []]
         num_items = 0
         for store in self._stores:
             logger.debug("Reading index %s from %s", index_name, store)
             async for batch in store.read(index_name):
+                if patterns:
+                    batch = [
+                        record
+                        for record in batch
+                        if any(
+                            fnmatchcase(str(record.get("dataset", "")), pattern)
+                            for pattern in patterns
+                        )
+                    ]
+                    if not batch:
+                        continue
                 yield batch
                 self.progress.update(len(batch))
                 num_items += len(batch)
