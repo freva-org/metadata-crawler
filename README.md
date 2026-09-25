@@ -269,18 +269,22 @@ Development install:
 
    git clone https://github.com/freva-org/metadata-crawler.git
    cd metadata-crawler
-   pip install -e .
+   python -m pip install -e ".[tests]" tox maturin
 
 ```
 
 PRs and issues welcome. Please add tests and keep examples minimal & reproducible
-(use the MinIO compose stack). Run:
+(use the MinIO compose stack).
 
+### Checks and tests
 
 ```console
-   python -m pip install tox
-   tox -e test lint types
+   tox -e types  # strict mypy checks
+   tox -e lint   # Python/Rust formatting, style, spelling, and security checks
+   tox -e test   # pytest with coverage (95% minimum)
 ```
+
+Run all three locally with ``tox -e types,lint,test``.
 
 ### Benchmarks
 For benchmarking you can create a directory tree with roughly 1.5 M files by
@@ -291,11 +295,51 @@ calling the ``create-cordex.sh`` script in the ``dev-env`` folder:
 python dev-env/benchmark.py --num-files 20000
 ```
 
+While ``create-cordex.sh`` always creates the complete tree (and may take a long
+time), ``--num-files`` limits the crawl. ``benchmark.py`` profiles a local
+crawl of ``data/cordex-tree/cordex_fake`` and writes ``cordex.prof.pstats`` and
+``cordex.cprofile.txt``.
+
+### Live S3/MinIO smoke test
+
+The included Compose stack starts MinIO; ``setup-minio`` creates bucket
+``test`` and copies in fixture data:
+
+```console
+docker compose up -d minio
+docker compose run --rm setup-minio
+```
+
+``drs_config.toml`` already defines ``cmip6-s3`` with ``fs_type = "s3"`` and a
+local MinIO endpoint. Crawl it with:
+
+```console
+mdc add /tmp/minio-smoke.yml \
+  -c drs_config.toml \
+  --catalogue-backend jsonlines \
+  --data-set cmip6-s3 \
+  --batch-size 100
+mdc glance /tmp/minio-smoke.yml
+```
+
+This exercises live S3 listing and reads; ``/tmp/minio-smoke.yml`` is the local
+output catalogue. Use ``docker compose stop minio`` to pause the service.
+
+### Local PostgreSQL and Solr
+
+Start the local database, create its ``metadata_crawler`` schema, and start
+Solr:
+
+```console
+docker compose up -d postgresdb solr
+docker compose run --rm postgres-init
+```
+
+PostgreSQL is available at
+``postgresql://metadata:secret@localhost:5432/metadata``; Solr is at
+``http://localhost:8983``. Stop them with ``docker compose stop postgresdb solr``.
 
 See ``code-of-conduct.rst`` and ``whatsnew.rst`` for guidelines and changelog.
-
-Use MinIO or LocalStack via ``docker-compose`` and seed a bucket (e.g., ``test-bucket``).
-Then point a dataset’s ``fs_type = "s3"`` and set ``storage_options``.
 
 ### Documentation
 

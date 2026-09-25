@@ -30,15 +30,18 @@ services:
         condition: service_healthy
     environment:
       PGPASSWORD: secret
-    command: >
-      sh -c '
-        psql
-        -h postgresdb
-        -U metadata
-        -d metadata
-        -v ON_ERROR_STOP=1
-        -c "CREATE SCHEMA IF NOT EXISTS metadata_crawler AUTHORIZATION metadata;"
-      '
+    command:
+      - psql
+      - -h
+      - postgresdb
+      - -U
+      - metadata
+      - -d
+      - metadata
+      - -v
+      - ON_ERROR_STOP=1
+      - -c
+      - CREATE SCHEMA IF NOT EXISTS metadata_crawler AUTHORIZATION metadata;
     restart: "no"
 
   mongodb:

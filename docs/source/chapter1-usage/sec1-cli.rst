@@ -112,6 +112,17 @@ following example writes to a json.gz file and index named ``latest``:
        /tmp/catalog.yml \
        --server localhost:8983
 
+To index only selected datasets from a store (including PostgreSQL stores),
+use ``-ds`` / ``--data-set``. The option may be repeated and supports shell
+wildcards:
+
+.. code-block:: console
+
+   metadata-crawler solr index \
+       postgresql://username:password@server:5432/database \
+       --server localhost:8983 \
+       -ds cmip6-* -ds obs-fs
+
 For MongoDB, supply the database URL and name:
 
 .. code-block:: console

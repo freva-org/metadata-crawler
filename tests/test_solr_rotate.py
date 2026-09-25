@@ -508,6 +508,19 @@ class TestWithoutRotation:
         datasets = {doc.get("dataset") for doc in solr_state.documents("latest")}
         assert set(DATASETS.values()) <= datasets
 
+    def test_dataset_selection_limits_indexed_documents(
+        self, fake_solr: str, solr_state: SolrState, in_mock_dir: Path
+    ) -> None:
+        index(
+            "solr",
+            *CATALOGUES,
+            server=fake_solr,
+            batch_size=20,
+            data_set=["obs-s3"],
+        )
+        datasets = {doc.get("dataset") for doc in solr_state.documents("latest")}
+        assert datasets - {None} == {"obs-s3"}
+
     def test_rejected_batches_abort(
         self, fake_solr: str, solr_state: SolrState, in_mock_dir: Path
     ) -> None:

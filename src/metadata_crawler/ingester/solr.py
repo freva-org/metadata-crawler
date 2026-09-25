@@ -9,7 +9,18 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from types import TracebackType
-from typing import Annotated, Any, Dict, List, Optional, Tuple, Type, cast
+from typing import (
+    Annotated,
+    Any,
+    Dict,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    Union,
+    cast,
+)
 
 import aiohttp
 import orjson
@@ -400,6 +411,7 @@ class SolrIndex(BaseIndex):
         server: str,
         core: str,
         suffix: str,
+        data_set: Optional[Sequence[str]] = None,
     ) -> None:
         """Zero-copy-ish, backpressured, bounded-concurrency indexer.
 
@@ -410,7 +422,7 @@ class SolrIndex(BaseIndex):
         base_url = await self.solr_url(server, core + suffix)
         update_url = base_url.split("?", 1)[0]  # guard
         loop = asyncio.get_running_loop()
-        async for body in self.get_metadata(core):
+        async for body in self.get_metadata(core, data_set=data_set):
             enc = await loop.run_in_executor(self.cpu_pool, self._encode_payload, body)
             await self.producer_queue.put((update_url, enc))
         # NB: no commit here. Producers only enqueue; the bodies are POSTed
@@ -438,6 +450,18 @@ class SolrIndex(BaseIndex):
     async def index(
         self,
         *,
+        data_set: Annotated[
+            Optional[Union[str, List[str]]],
+            cli_parameter(
+                "-ds",
+                "--data-set",
+                action="append",
+                help=(
+                    "Only index records from these dataset names. Names can "
+                    "contain wildcards such as ``xces-*``."
+                ),
+            ),
+        ] = None,
         server: Annotated[
             Optional[str],
             cli_parameter(
@@ -506,6 +530,7 @@ class SolrIndex(BaseIndex):
         ] = 0,
     ) -> None:
         """Add metadata to the apache solr metadata server."""
+        data_sets = [data_set] if isinstance(data_set, str) else data_set
         server = server or ""
         suffix = index_suffix or ""
         if rotate and not suffix:
@@ -527,7 +552,9 @@ class SolrIndex(BaseIndex):
                     if await self._create_core(admin, core + suffix, configset):
                         created.append(core + suffix)
         try:
-            await self._index(server, suffix, http_workers, max_failed_batches)
+            await self._index(
+                server, suffix, http_workers, max_failed_batches, data_set=data_sets
+            )
             if rotate:
                 await self._rotate(suffix, min_docs)
         except BaseException:
@@ -542,6 +569,7 @@ class SolrIndex(BaseIndex):
         suffix: str,
         http_workers: int,
         max_failed_batches: int,
+        data_set: Optional[Sequence[str]] = None,
     ) -> None:
         """Stream every store into ``<core><suffix>`` and commit the result."""
         async with aiohttp.ClientSession(
@@ -562,6 +590,7 @@ class SolrIndex(BaseIndex):
                             server,
                             core,
                             suffix=suffix,
+                            data_set=data_set,
                         )
                     )
             for _ in range(http_workers):
