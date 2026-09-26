@@ -1,5 +1,6 @@
 """Apply the metadata collector."""
 
+import asyncio
 import os
 import time
 from fnmatch import fnmatch
@@ -16,6 +17,7 @@ from typing import (
     Sequence,
     Tuple,
     Union,
+    cast,
 )
 
 import tomlkit
@@ -27,7 +29,8 @@ from .api.metadata_stores import (
     CatalogueBackendType,
     CatalogueReader,
 )
-from .api.stores import IndexName
+from .api.stores import IndexName, IndexStore
+from .api.stores.base import Facet
 from .data_collector import DataCollector
 from .logger import apply_verbosity, get_level_from_verbosity, logger
 from .utils import (
@@ -144,7 +147,7 @@ async def async_call(
     *args: Any,
     **kwargs: Any,
 ) -> None:
-    """Add / Delete metadata from index."""
+    """Add / Delete metadata from index or source of truth."""
     env = dict(os.environ)
     old_level = apply_verbosity(verbosity, suffix=log_suffix)
 
@@ -305,6 +308,91 @@ async def async_delete(
         log_suffix=log_suffix,
         **kwargs,
     )
+
+
+async def async_remove(
+    store: Optional[Union[str, Path]] = None,
+    storage_options: Optional[Dict[str, Any]] = None,
+    verbosity: int = 0,
+    log_suffix: Optional[str] = None,
+    dry_run: bool = False,
+    facets: Optional[Sequence[Facet]] = None,
+) -> int:
+    """Remove metadata entries from the source of truth.
+
+    .. versionadded:: 2609.0.0
+
+        This function deletes entries by facet from the source of truth for
+        example the database or intake catalogue that is used to put metadata
+        into the search index system.
+
+    Parameters
+    ^^^^^^^^^^
+
+    store:
+        Path or url of the source of truth where the collected metadata will be
+        stored.
+    storage_options:
+        Set additional storage options for adding metadata to the metadata store
+    facets:
+        Remove entries matching the criteria given in this collection.
+        Each entry represents a key-value pair that is matched in the source
+        of truth. Multiple entries will be connected using logical and.
+    verbosity:
+        Set the verbosity of the system.
+    log_suffix:
+        Add a suffix to the log file output.
+    dry_run:
+        Do not delete the data, only print would would happen.
+
+    Returns
+    ^^^^^^^
+
+    int:
+        Number of objects from the source of truth.
+
+
+    Examples
+    ^^^^^^^^
+
+    .. code-block:: python
+
+        from metadata_crawler import async_remove
+
+        num = async_remove(
+            store="postgresql://passwd:user@server.example.com:5432",
+            facets=[("project", "CMIP6"), ("institute", "MPI-M")],
+        )
+    """
+    env = dict(os.environ)
+    facets = facets or cast(Sequence[Facet], [])
+    old_level = apply_verbosity(verbosity, suffix=log_suffix)
+    try:
+        os.environ["MDC_LOG_INIT"] = "1"
+        os.environ["MDC_LOG_LEVEL"] = str(get_level_from_verbosity(verbosity))
+        os.environ["MDC_LOG_SUFFIX"] = log_suffix or os.getenv("MDC_LOG_SUFFIX") or ""
+        Console.print("Deleting items:")
+        removed = 0
+        stores = 0
+        for _uri in IndexStore.normalise_uris(store):
+            reader = CatalogueReader(
+                store_url=_uri,
+                storage_options=storage_options,
+            )
+            _removed = await reader.store.remove(*facets, dry_run=dry_run)
+            if _removed and not dry_run:
+                await asyncio.to_thread(reader.update_total_objects, _removed)
+            removed += _removed
+            stores += 1
+        prefix = "[b]Dry-run[/b]: would have deleted" if dry_run else "Deleted"
+        s = "s" if stores > 1 else ""
+        Console.print(f"{prefix} {removed} items in {stores} metadata store{s}")
+
+    finally:
+        os.environ.clear()
+        os.environ.update(env)
+        logger.set_level(old_level)
+    return removed
 
 
 async def async_add(

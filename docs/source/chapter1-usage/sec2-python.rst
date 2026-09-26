@@ -20,8 +20,8 @@ The synchronous API functions return when the operation is finished
 and raise exceptions on error.  A typical workflow consists of
 
 1. **Crawling**: collect metadata from one or more files or datasets
-   into a temporary catalog (e.g. JSON lines).
-2. **Indexing**: read entries from the catalog and write them to the
+   into a permanet source of truth  (intake catalogue, database).
+2. **Indexing**: read entries from the source of truth and write them to the
    configured index backend (e.g. Apache Solr or MongoDB).
 3. **Deleting**: remove previously indexed entries matching a set
    of search facets (optional).
@@ -31,7 +31,7 @@ stores it in a metadata store, and indexes it to Apache Solr:
 
 .. code-block:: python
 
-   from metadata_crawler import add, index, delete
+   from metadata_crawler import add, index, delete, remove
 
    # 1) collect metadata into a catalog
    add(
@@ -61,6 +61,14 @@ stores it in a metadata store, and indexes it to Apache Solr:
        facets=[("project", "CMIP6"), ("institute", "MPI-M")],
    )
 
+   # 4) optionally remove data from the source of truth so it is not indexed
+   #    anymore
+   removed_items = remove(
+    "mongodb://mongo:secret@localhost:27017/metadata",
+    facets=[("project", "CMIP6"), ("institute", "MPI-M")],
+   )
+
+
 .. versionchanged:: 2511.0.0
 
    The catalogue argument ``store`` of the the :func:`add`
@@ -75,6 +83,17 @@ stores it in a metadata store, and indexes it to Apache Solr:
     crawled directly into a **MongoDB** or **PostgreSQL** database. Database
     backends store catalogue metadata internally, so no YAML catalogue file
     is needed. The backend is detected automatically from the URL scheme.
+
+
+.. versionadded:: 2609.0.0
+
+    Search facets can be used to create subset of the metadata added to the source
+    of truth (databases or intake catalogues). Sometimes it might be necessary to
+    delete certain data from source of truth. To select datasets that should be
+    deleted from an intake catalogue or database the ``remove`` method can
+    be used.
+
+
 
 **MongoDB as data store:**
 
@@ -112,7 +131,7 @@ Asynchronous usage
 
 For applications that already run an event loop, metadata‑crawler
 provides async counterparts to the functions above.  They are named
-``async_add``, ``async_index`` and ``async_delete``.  These
+``async_add``, ``async_index``, ``async_remove`` and ``async_delete``.  These
 coroutines can be awaited directly or scheduled concurrently with
 other tasks:
 
@@ -151,6 +170,13 @@ other tasks:
            latest_version="latest",
            facets=[("file", "*.nc"), ("project", "OBS")],
        )
+       # optionally remove data from the source of truth so it is not indexed
+       #    anymore
+       removed_items = await async_remove(
+        "mongodb://mongo:secret@localhost:27017/metadata",
+        facets=[("project", "CMIP6"), ("institute", "MPI-M")],
+        )
+
 
 
    asyncio.run(main())
@@ -169,6 +195,15 @@ other tasks:
     crawled directly into a **MongoDB** or **PostgreSQL** database. Database
     backends store catalogue metadata internally, so no YAML catalogue file
     is needed. The backend is detected automatically from the URL scheme.
+
+.. versionadded:: 2609.0.0
+
+    Search facets can be used to create subset of the metadata added to the source
+    of truth (databases or intake catalogues). Sometimes it might be necessary to
+    delete certain data from source of truth. To select datasets that should be
+    deleted from an intake catalogue or database the ``remove`` method can
+    be used.
+
 
 
 Library Reference

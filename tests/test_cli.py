@@ -380,7 +380,7 @@ def test_run_routes_exceptions_to_exception_handler(
     assert ei2.value.code == 1
     assert len(low_logger.records) == 1
     msg2, exc2 = low_logger.records[0]
-    assert  "explode" in msg1
+    assert "explode" in msg1
     assert isinstance(exc2, Boom)
 
 
@@ -390,3 +390,142 @@ def test_process_storage_option_behavior() -> None:
     assert mc_cli._process_storage_option("3") == 3
     assert mc_cli._process_storage_option("1.25") == 1.25
     assert mc_cli._process_storage_option("http://x") == "http://x"
+
+
+# -----------------------------
+# remove subcommand
+# -----------------------------
+
+
+@pytest.fixture()
+def remove_recorder(monkeypatch: pytest.MonkeyPatch) -> Recorder:
+    """Patch ``remove`` before the parser binds it as ``apply_func``."""
+    rec = Recorder()
+    monkeypatch.setattr(mc_cli, "remove", rec.record("remove"))
+    monkeypatch.setattr(mc_cli, "load_plugins", lambda ep: {})
+    return rec
+
+
+def _run_cli(argv: List[str]) -> Dict[str, Any]:
+    parser = mc_cli.ArgParse()
+    args = parser.parse_args(argv)
+    mc_cli._run(args, **parser.kwargs)
+    return parser.kwargs
+
+
+def test_remove_parsing_and_dispatch(remove_recorder: Recorder) -> None:
+    _run_cli(
+        [
+            "remove",
+            "s3://bucket/catalog.yml",
+            "-f",
+            "project",
+            "CMIP6",
+            "--facets",
+            "file",
+            "*_2016*",
+            "-f",
+            "project",
+            "obs*",
+            "-s",
+            "anon",
+            "true",
+            "--storage-option",
+            "timeout",
+            "1.5",
+            "--log-suffix",
+            "rm",
+            "-vv",
+        ]
+    )
+
+    assert len(remove_recorder.calls) == 1
+    call = remove_recorder.calls[0]
+    assert call.fn == "remove"
+    assert call.args == ()  # no config files are passed to remove
+    kw = call.kwargs
+    assert kw["store"] == "s3://bucket/catalog.yml"
+    # Order and repeated keys are preserved; globs are passed through untouched.
+    assert [tuple(f) for f in kw["facets"]] == [
+        ("project", "CMIP6"),
+        ("file", "*_2016*"),
+        ("project", "obs*"),
+    ]
+    assert kw["dry_run"] is False
+    assert kw["storage_options"] == {"anon": True, "timeout": 1.5}
+    assert kw["log_suffix"] == "rm"
+    assert kw["verbosity"] == 2
+
+
+def test_remove_defaults(remove_recorder: Recorder) -> None:
+    _run_cli(["remove", "cat.yml"])
+
+    kw = remove_recorder.calls[0].kwargs
+    assert kw["store"] == "cat.yml"
+    assert not kw["facets"]
+    assert kw["dry_run"] is False
+    assert kw["storage_options"] == {}
+    assert kw["verbosity"] == 0
+
+
+@pytest.mark.parametrize("flag", ["--dry-run", "--dry_run"])
+def test_remove_dry_run_flag(remove_recorder: Recorder, flag: str) -> None:
+    _run_cli(["remove", "postgresql://localhost", "-f", "project", "x", flag])
+
+    assert remove_recorder.calls[0].kwargs["dry_run"] is True
+
+
+def test_remove_via_cli_entrypoint(remove_recorder: Recorder) -> None:
+    mc_cli.cli(["remove", "mongodb://localhost", "-f", "variable", "pr"])
+
+    assert len(remove_recorder.calls) == 1
+    kw = remove_recorder.calls[0].kwargs
+    assert kw["store"] == "mongodb://localhost"
+    assert [tuple(f) for f in kw["facets"]] == [("variable", "pr")]
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["remove"],  # store is required
+        ["remove", "cat.yml", "-f", "project"],  # a facet needs key and value
+    ],
+)
+def test_remove_invalid_arguments(remove_recorder: Recorder, argv: List[str]) -> None:
+    with pytest.raises(SystemExit) as exc:
+        mc_cli.ArgParse().parse_args(argv)
+
+    assert exc.value.code == 2
+    assert not remove_recorder.calls
+
+
+def test_remove_kwargs_match_the_api(remove_recorder: Recorder) -> None:
+    """Everything the CLI forwards must be accepted by ``metadata_crawler.remove``."""
+    import inspect
+
+    import metadata_crawler
+
+    _run_cli(["remove", "cat.yml", "-f", "project", "x", "--dry-run", "-s", "a", "1"])
+
+    call = remove_recorder.calls[0]
+    inspect.signature(metadata_crawler.remove).bind(*call.args, **call.kwargs)
+
+
+def test_remove_errors_exit_non_zero(monkeypatch: pytest.MonkeyPatch) -> None:
+    def failing_remove(**_: Any) -> None:
+        raise RuntimeError("Cannot remove entries from a store opened for writing.")
+
+    monkeypatch.setattr(mc_cli, "remove", failing_remove)
+    monkeypatch.setattr(mc_cli, "load_plugins", lambda ep: {})
+
+    with pytest.raises(SystemExit) as exc:
+        mc_cli.cli(["remove", "cat.yml", "-f", "project", "x"])
+
+    assert exc.value.code == 1
+
+
+def test_remove_is_listed_in_help(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit):
+        mc_cli.ArgParse().parse_args(["--help"])
+
+    assert "remove" in capsys.readouterr().out

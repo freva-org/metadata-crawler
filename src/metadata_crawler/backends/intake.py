@@ -131,9 +131,9 @@ class IntakePath(PathTemplate):
         if not self._normalize_path(path).endswith(".json"):
             return False
         esmcat = False
-        fs = fsspec.get_filesystem_class(
-            fsspec.core.split_protocol(path)[0] or "file"
-        )(**self.storage_options)
+        fs = fsspec.get_filesystem_class(fsspec.core.split_protocol(path)[0] or "file")(
+            **self.storage_options
+        )
         with fs.open(path, mode="rb", **self.storage_options) as stream:
             num = 0
             for line in stream:

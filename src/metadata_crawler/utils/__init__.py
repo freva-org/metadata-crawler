@@ -88,7 +88,9 @@ class EventLike(Protocol):
 class LockLike(Protocol):
     """A lock like Type class."""
 
-    def acquire(self, blocking: bool = ..., timeout: Optional[float] = ...) -> bool:  # noqa
+    def acquire(
+        self, blocking: bool = ..., timeout: Optional[float] = ...
+    ) -> bool:  # noqa
         ...
 
     def release(self) -> None:  # noqa
@@ -450,9 +452,7 @@ def print_performance(
             q_col = (
                 "red"
                 if queue_size > 100_000
-                else "green"
-                if queue_size < 10_000
-                else "blue"
+                else "green" if queue_size < 10_000 else "blue"
             )
             return (
                 f"[bold]Discovering: [{f_col}]{perf_file:>6,.1f}[/{f_col}] files/s "

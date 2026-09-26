@@ -283,9 +283,7 @@ class TestRejectedBatches:
         solr_state.reject_updates = 400
         solr_state.reject_limit = 1
 
-        _rotate(
-            fake_solr, "fs-cat.yml", index_suffix="_bg", max_failed_batches=1
-        )
+        _rotate(fake_solr, "fs-cat.yml", index_suffix="_bg", max_failed_batches=1)
 
         assert solr_state.num_docs("latest") > 0
 
@@ -296,9 +294,7 @@ class TestRejectedBatches:
         solr_state.reject_limit = 2
 
         with pytest.raises(RuntimeError, match="max-failed-batches=1"):
-            _rotate(
-                fake_solr, "fs-cat.yml", index_suffix="_bg", max_failed_batches=1
-            )
+            _rotate(fake_solr, "fs-cat.yml", index_suffix="_bg", max_failed_batches=1)
 
 
 class TestMinDocsGate:
@@ -417,9 +413,7 @@ class TestDeleteOffline:
             latest_version="gone",
             verbosity=2,
         )
-        assert any(
-            "no such core" in record.getMessage() for record in log_records
-        )
+        assert any("no such core" in record.getMessage() for record in log_records)
 
     def test_verbosity_reaches_the_ingester(
         self,
@@ -430,8 +424,7 @@ class TestDeleteOffline:
         """``delete`` has to honour ``verbosity`` like ``index`` does."""
         delete("solr", facets=[("project", "*")], server=fake_solr, verbosity=4)
         assert any(
-            "Deleting entries matching" in record.getMessage()
-            for record in log_records
+            "Deleting entries matching" in record.getMessage() for record in log_records
         )
 
 

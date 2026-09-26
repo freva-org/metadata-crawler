@@ -6,31 +6,44 @@ import asyncio
 import gzip
 import multiprocessing as mp
 import os
-from concurrent.futures import ThreadPoolExecutor
+from fnmatch import fnmatch
+from itertools import islice
+from tempfile import TemporaryDirectory
 from typing import (
     Any,
     AsyncIterator,
     BinaryIO,
+    Callable,
     ClassVar,
     Dict,
     List,
     Literal,
     Optional,
+    Set,
+    TextIO,
+    Tuple,
     Union,
+    cast,
 )
 
 import orjson
 import yaml
 
-from ...utils import create_async_iterator, parse_batch
-from ..config import SchemaField
+from ...logger import logger
+from ...utils import parse_batch
+from ..config import BaseType, SchemaField
 from .base import (
     BackendWriter,
+    FacetValue,
     IndexName,
     IndexStore,
     MetadataRecord,
     StorageOptions,
 )
+
+Record = Dict[str, Any]
+Predicate = Callable[[MetadataRecord], bool]
+_Batch = Tuple[List[MetadataRecord], bool]
 
 
 class JSONLineWriter(BackendWriter):
@@ -108,11 +121,13 @@ class JSONLines(IndexStore):
             storage_options=storage_options,
             batch_size=batch_size,
         )
-        _comp_level = int(kwargs.get("comp_level", "4"))
+        self._comp_level = int(kwargs.get("comp_level", "4"))
         self._proc: Optional[mp.process.BaseProcess] = None
+        self.schema = schema
+        self.mode = mode
         if mode == "w":
             kwargs = {k: v for (k, v) in self.storage_options.items()}
-            kwargs["comp_level"] = _comp_level
+            kwargs["comp_level"] = self._comp_level
             args = (self.queue, self._sent, self.counter) + tuple(self._paths)
             self._proc = self._ctx.Process(
                 target=JSONLineWriter.as_daemon,
@@ -121,6 +136,83 @@ class JSONLines(IndexStore):
                 daemon=True,
             )
             self._proc.start()
+
+    @staticmethod
+    def _matches(field: SchemaField, value: Any, patterns: List[FacetValue]) -> bool:
+        """Check a single record value against the patterns of one facet."""
+        if value is None:
+            return False
+        values = value if isinstance(value, list) else [value]
+        if field.base_type == BaseType.string:
+            return any(
+                fnmatch(str(v).lower(), str(p).lower())
+                for v in values
+                for p in patterns
+            )
+        targets = set()
+        for pattern in patterns:
+            try:
+                targets.add(float(pattern))
+            except (TypeError, ValueError):
+                continue
+        return any(isinstance(v, (int, float)) and float(v) in targets for v in values)
+
+    def _make_predicate(self, grouped: Dict[str, List[FacetValue]]) -> Predicate:
+        checks = [(key, self.schema[key], pats) for key, pats in grouped.items()]
+
+        def predicate(record: MetadataRecord) -> bool:
+            return all(
+                self._matches(field, record.get(key), pats)
+                for key, field, pats in checks
+            )
+
+        return predicate
+
+    def _discard(self, path: str) -> None:
+        try:
+            if self._fs.exists(path):
+                self._fs.rm(path)
+        except Exception as error:  # pragma: no cover
+            logger.warning("Could not remove temporary file %s: %s", path, error)
+
+    def _filter_batch(
+        self, batch: List[MetadataRecord], predicate: Predicate, encode: bool
+    ) -> Tuple[bytes, int]:
+        """Filter one batch; return the gzipped survivors and the removed count."""
+        keep = [rec for rec in batch if not predicate(rec)]
+        removed = len(batch) - len(keep)
+        if not encode or not keep:
+            return b"", removed
+        payload = JSONLineWriter._encode_records(keep)
+        return gzip.compress(payload, compresslevel=self._comp_level), removed
+
+    async def _rewrite(
+        self, index_name: str, path: str, predicate: Predicate, dry_run: bool
+    ) -> int:
+        """Filter one index file and replace it; return the number removed."""
+        local_target = cast(
+            Optional[str],
+            self._fs._strip_protocol(path) if self._is_local_path else None,
+        )
+        tmp_parent = os.path.dirname(local_target) if local_target else None
+        removed = 0
+        with TemporaryDirectory(dir=tmp_parent, prefix=".mdc-") as tmp_dir:
+            tmp = os.path.join(tmp_dir, os.path.basename(path))
+            with open(tmp, "wb") as out:
+                async for batch in self.read(index_name, parse_timestamps=False):
+                    gz, n = await asyncio.to_thread(
+                        self._filter_batch, batch, predicate, not dry_run
+                    )
+                    removed += n
+                    if gz:
+                        await asyncio.to_thread(out.write, gz)
+            if dry_run or not removed:
+                return removed
+            if local_target:
+                await asyncio.to_thread(os.replace, tmp, local_target)
+            else:
+                await asyncio.to_thread(self._fs.put_file, tmp, path)
+        return removed
 
     @property
     def proc(self) -> Optional[mp.process.BaseProcess]:
@@ -151,45 +243,67 @@ class JSONLines(IndexStore):
             cat: Dict[str, MetadataRecord] = yaml.safe_load(stream.read())
         return cat.get("metadata", {})
 
-    async def read(
+    def _read_batch(
+        self,
+        stream: TextIO,
+        ts_keys: Set[str],
+        predicate: Optional[Predicate] = None,
+    ) -> Tuple[List[MetadataRecord], bool]:
+        """Read and parse up to ``batch_size`` lines; runs in a worker thread."""
+        raw = list(islice(stream, self.batch_size))
+        eof = len(raw) < self.batch_size
+        lines = [line for line in raw if line.strip()]
+        records = parse_batch(lines, ts_keys) if lines else []
+        if predicate is not None:
+            records = [rec for rec in records if predicate(rec)]
+        return records, eof
+
+    async def _read(
         self,
         index_name: str,
+        *,
+        parse_timestamps: bool = True,
     ) -> AsyncIterator[List[MetadataRecord]]:
-        """Yield batches of metadata records from a specific table.
-
-        Parameters
-        ^^^^^^^^^^
-        index_name:
-            The name of the index_name.
-
-        Yields
-        ^^^^^^^
-        List[MetadataRecord]:
-            Deserialised metadata records.
-        """
-        loop = asyncio.get_running_loop()
-        ts_keys = self._timestamp_keys
+        """Yield batches of metadata records from a specific table."""
+        ts_keys = self._timestamp_keys if parse_timestamps else set()
         path = self.get_path(index_name)
-        with (
-            self._fs.open(
-                path,
-                mode="rt",
-                compression="gzip",
-                encoding="utf-8",
-            ) as stream,
-            ThreadPoolExecutor(max_workers=self.max_workers) as pool,
-        ):
-            raw_lines: List[str] = []
-            async for line in create_async_iterator(stream):
-                raw_lines.append(line)
-                if len(raw_lines) >= self.batch_size:
-                    batch = await loop.run_in_executor(
-                        pool, parse_batch, raw_lines, ts_keys
-                    )
-                    yield batch
-                    raw_lines.clear()
-            if raw_lines:
-                batch = await loop.run_in_executor(
-                    pool, parse_batch, raw_lines, ts_keys
-                )
-                yield batch
+        stream = cast(
+            TextIO,
+            await asyncio.to_thread(
+                self._fs.open, path, mode="rt", compression="gzip", encoding="utf-8"
+            ),
+        )
+        pending: Optional[asyncio.Future[_Batch]] = None
+
+        def schedule() -> asyncio.Future[_Batch]:
+            return asyncio.ensure_future(
+                asyncio.to_thread(self._read_batch, stream, ts_keys)
+            )
+
+        try:
+            current = schedule()
+            pending = current
+            while True:
+                records, eof = await current
+                pending = None
+                if not eof:
+                    current = schedule()
+                    pending = current
+                if records:
+                    yield records
+                if eof:
+                    break
+        finally:
+            if pending is not None:
+                # A thread can't be cancelled; let it finish before closing the file.
+                await asyncio.gather(pending, return_exceptions=True)
+            await asyncio.to_thread(stream.close)
+
+    async def _remove(self, grouped: Dict[str, List[FacetValue]], dry_run: bool) -> int:
+        """Remove entries from intake catalogue with matching *grouped* facets."""
+        predicate = self._make_predicate(grouped)
+        streams = [s for s in self._paths if self._fs.exists(s.path)]
+        counts = await asyncio.gather(
+            *(self._rewrite(s.name, s.path, predicate, dry_run) for s in streams)
+        )
+        return sum(counts)

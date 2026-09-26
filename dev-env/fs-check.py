@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Run a file system check."""
+
 import argparse
 import csv
 import os
@@ -74,9 +75,7 @@ def main() -> None:
         default=None,
         help="Config file.",
     )
-    parser.add_argument(
-        "--concurrency", type=int, default=[8, 1048, 100], nargs=3
-    )
+    parser.add_argument("--concurrency", type=int, default=[8, 1048, 100], nargs=3)
     parser.add_argument(
         "-o",
         "--out-dir",
@@ -102,9 +101,7 @@ def main() -> None:
         "concurrency",
     ]
     now = datetime.now().strftime("%a_%F")
-    outfile = (
-        args.out_dir / f"fs-performance-test-{args.dataset}-{host}-{now}.csv"
-    )
+    outfile = args.out_dir / f"fs-performance-test-{args.dataset}-{host}-{now}.csv"
     env = os.environ.copy()
     old_stdout = sys.stdout
     curr_dir = Path.cwd()

@@ -25,6 +25,7 @@ from typing import Any, Optional
 
 from metadata_crawler import add, index
 from metadata_crawler.cli import _get_storage_option_from_env
+
 # --- your workload ---------------------------------------------------------
 
 

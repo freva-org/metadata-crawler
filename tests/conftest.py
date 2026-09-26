@@ -16,6 +16,10 @@ import requests
 import toml
 import xarray as xr
 
+from metadata_crawler.api.config import SchemaField
+from metadata_crawler.api.stores import IndexName, MongoDB, PostgreSQL
+from metadata_crawler.api.stores.jsonlines import JSONLines
+
 
 class ThreadContext:
     """Fake the mp.get_context with threads."""
@@ -325,3 +329,41 @@ def netcdf_file(dataset: xr.Dataset) -> Iterator[Path]:
     with NamedTemporaryFile(suffix=".nc") as temp_f:
         dataset.to_netcdf(temp_f.name)
         yield Path(temp_f.name)
+
+
+# ---------------------------------------------------------------------------
+# Stores for unit tests of facet filtering (remove, subset reading)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def schema() -> Dict[str, SchemaField]:
+    """A small schema covering every kind of field the filters care about."""
+    return {
+        "file": SchemaField(key="file", type="path", multi_valued=False, unique=True),
+        "project": SchemaField(key="project", type="string", multi_valued=True),
+        "dataset": SchemaField(key="dataset", type="dataset", multi_valued=False),
+        "level": SchemaField(key="level", type="integer", multi_valued=False),
+        "height": SchemaField(key="height", type="float", multi_valued=True),
+        "time": SchemaField(key="time", type="daterange"),
+        "bbox": SchemaField(key="bbox", type="bbox"),
+        "created": SchemaField(key="created", type="timestamp", multi_valued=False),
+    }
+
+
+@pytest.fixture()
+def jsonl_store(tmp_path: Path, schema: Dict[str, SchemaField]) -> JSONLines:
+    """A read-mode JSONLines store; no files are needed to create it."""
+    return JSONLines(str(tmp_path / "metadata"), IndexName(), schema, mode="r")
+
+
+@pytest.fixture()
+def mongo_store(schema: Dict[str, SchemaField]) -> MongoDB:
+    """A read-mode MongoDB store; creating it does not connect."""
+    return MongoDB("mongodb://localhost:27017", IndexName(), schema, mode="r")
+
+
+@pytest.fixture()
+def pg_store(schema: Dict[str, SchemaField]) -> PostgreSQL:
+    """A read-mode PostgreSQL store; creating it does not connect."""
+    return PostgreSQL("postgresql://localhost/metadata", IndexName(), schema, mode="r")

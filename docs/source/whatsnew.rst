@@ -3,6 +3,10 @@ What's new
 
 This document highlights major changes and additions across releases.
 
+v2609.0.0
+---------
+* Enable deleting subsets of metadata from the source of truth.
+
 v2608.2.0
 ---------
 * Use keyword arguments for ``xarray.open_zarr`` when opening zarr stores.

@@ -1,7 +1,18 @@
 """Metadata Crawler API high level functions."""
 
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Union, cast, overload
+from typing import (
+    Any,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+    cast,
+    overload,
+)
 
 from tomlkit import TOMLDocument
 
@@ -12,9 +23,10 @@ from .api.metadata_stores import (
     CatalogueReader,
     IndexName,
 )
+from .api.stores.base import Facet
 from .data_collector import DataCollector
 from .logger import logger
-from .run import async_add, async_delete, async_index
+from .run import async_add, async_delete, async_index, async_remove
 from .utils.loop import get_async_model
 
 async_model = get_async_model()
@@ -26,10 +38,12 @@ __all__ = [
     "index",
     "add",
     "delete",
+    "remove",
     "glance_metadata",
     "get_config",
     "async_index",
     "async_delete",
+    "async_remove",
     "async_add",
     "async_model",
 ]
@@ -157,6 +171,7 @@ def delete(
     batch_size: int = 2500,
     verbosity: int = 0,
     log_suffix: Optional[str] = None,
+    facets: Optional[List[Tuple[str, str]]] = None,
     **kwargs: Any,
 ) -> None:
     """Delete metadata from the indexing system.
@@ -172,6 +187,9 @@ def delete(
         Set the verbosity of the system.
     log_suffix:
         Add a suffix to the log file output.
+    facets:
+        List of search facets (key, value) pairs. Search facets will be
+        connected using logical AND.
 
     Other Parameters
     ^^^^^^^^^^^^^^^^
@@ -197,7 +215,73 @@ def delete(
             batch_size=batch_size,
             verbosity=verbosity,
             log_suffix=log_suffix,
+            facets=facets,
             **kwargs,
+        )
+    )
+
+
+def remove(
+    store: Optional[Union[str, Path]] = None,
+    storage_options: Optional[Dict[str, Any]] = None,
+    verbosity: int = 0,
+    log_suffix: Optional[str] = None,
+    dry_run: bool = False,
+    facets: Optional[Sequence[Facet]] = None,
+) -> int:
+    """Remove metadata entries from the source of truth.
+
+    .. versionadded:: 2609.0.0
+
+        This function deletes entries by facet from the source of truth for
+        example the database or intake catalogue that is used to put metadata
+        into the search index system.
+
+    Parameters
+    ^^^^^^^^^^
+
+    store:
+        Path or url of the source of truth where the collected metadata will be
+        stored.
+    storage_options:
+        Set additional storage options for adding metadata to the metadata store
+    facets:
+        Remove entries matching the criteria given in this collection.
+        Each entry represents a key-value pair that is matched in the source
+        of truth. Multiple entries will be connected using logical and.
+    verbosity:
+        Set the verbosity of the system.
+    log_suffix:
+        Add a suffix to the log file output.
+    dry_run:
+        Do not delete the data, only print would would happen.
+
+    Returns
+    ^^^^^^^
+
+    int:
+        Number of objects from the source of truth.
+
+    Examples
+    ^^^^^^^^
+
+    .. code-block:: python
+
+        from metadata_crawler import remove
+
+        num = remove(
+            store="postgresql://passwd:user@server.example.com:5432",
+            facets=[("project", "CMIP6"), ("institute", "MPI-M")],
+        )
+    """
+    return async_model.run(
+        async_remove(
+            store=store,
+            verbosity=verbosity,
+            log_suffix=log_suffix,
+            storage_options=storage_options,
+            dry_run=dry_run,
+            facets=facets,
         )
     )
 
@@ -227,7 +311,7 @@ def add(
     fail_under: int = -1,
     **kwargs: Any,
 ) -> None:
-    """Harvest metadata from storage systems and add them to an intake catalogue.
+    """Harvest metadata from storage systems and add them to a source of truth.
 
     .. versionchanged:: 2511.0.0
 
@@ -242,7 +326,7 @@ def add(
     config_files:
         Path to the drs-config file / loaded configuration.
     store:
-        Path to the intake catalogue where the collected metadata will be
+        Path to or url of the source of truth where the collected metadata will be
         stored.
     data_ojbect:
         Instead of defining datasets that are to be crawled you can crawl
