@@ -19,6 +19,7 @@ import pytest
 
 from metadata_crawler import run as run_module
 from metadata_crawler.api.index import BaseIndex
+from metadata_crawler.api.stores.base import IndexStore
 from metadata_crawler.utils import IndexProgress
 
 
@@ -99,7 +100,7 @@ class TestUriNormalisation:
         ],
     )
     def test_normalise(self, value: Any, expected: List[str]) -> None:
-        assert BaseIndex._normalise_uris(value) == expected
+        assert IndexStore.normalise_uris(value) == expected
 
     def test_single_uri_still_works(self, stores: Dict[str, FakeStore]) -> None:
         """The old single-store call signature is unchanged."""

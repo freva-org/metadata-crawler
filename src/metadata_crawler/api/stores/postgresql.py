@@ -47,11 +47,13 @@ from ...logger import logger
 from ..config import BaseType, SchemaField
 from .base import (
     BackendWriter,
+    FacetValue,
     IndexName,
     IndexStore,
     MetadataRecord,
     StorageOptions,
     Stream,
+    glob_to_like,
 )
 
 if TYPE_CHECKING:
@@ -62,6 +64,12 @@ _IMPORT_ERR = (
     "Install them with:  pip install sqlalchemy psycopg"
 )
 _DEFAULT_DB_SCHEMA = "metadata_crawler"
+_PG_ARRAY_TYPES = {
+    BaseType.string: "text[]",
+    BaseType.integer: "bigint[]",
+    BaseType.float: "double precision[]",
+}
+
 
 # ------------------------------------------------------------------
 # Schema helpers
@@ -351,6 +359,55 @@ class PostgreSQL(IndexStore):
                 return name
         return "file"
 
+    def _build_where(
+        self, grouped: Dict[str, List[FacetValue]]
+    ) -> Tuple[str, Dict[str, Any]]:
+        clauses: List[str] = []
+        params: Dict[str, Any] = {}
+        for i, (key, values) in enumerate(grouped.items()):
+            field = self.schema[key]
+            col = '"' + key.replace('"', '""') + '"'
+            exact, globs = self.split_facet_values(key, values)
+            ors: List[str] = []
+            if exact:
+                params[f"e{i}"] = exact
+                arr = f"CAST(:e{i} AS {_PG_ARRAY_TYPES[field.base_type]})"
+                ors.append(
+                    f"{col} && {arr}" if field.multi_valued else f"{col} = ANY({arr})"
+                )
+            for j, glob in enumerate(globs):
+                name = f"g{i}_{j}"
+                params[name] = glob_to_like(glob)
+                if field.multi_valued:
+                    ors.append(
+                        f"EXISTS (SELECT 1 FROM unnest({col}) AS _u(_v) "
+                        f"WHERE _v LIKE :{name})"
+                    )
+                else:
+                    ors.append(f"{col} LIKE :{name}")
+            clauses.append("(" + " OR ".join(ors) + ")" if ors else "FALSE")
+        return " AND ".join(clauses), params
+
+    def _remove_sync(self, where: str, params: Dict[str, Any], dry_run: bool) -> int:
+        """Remove data from a postgresQL source of truth."""
+        try:
+            import sqlalchemy as sa
+        except ImportError:
+            raise ImportError(_IMPORT_ERR) from None
+
+        verb = "SELECT COUNT(*) FROM" if dry_run else "DELETE FROM"
+        total = 0
+        with _open_db_connection(self._url, sanitise=False) as conn:
+            for name in self.index_names:
+                result = conn.execute(sa.text(f"{verb} {name} WHERE {where}"), params)
+                total += result.scalar_one() if dry_run else result.rowcount
+        return total
+
+    async def _remove(self, grouped: Dict[str, List[FacetValue]], dry_run: bool) -> int:
+        where, params = self._build_where(grouped)
+        logger.debug("Removing entries matching %s with %s", where, params)
+        return await asyncio.to_thread(self._remove_sync, where, params, dry_run)
+
     # ------------------------------------------------------------------
     # IndexStore interface
     # ------------------------------------------------------------------
@@ -443,9 +500,11 @@ class PostgreSQL(IndexStore):
             )
         return payload
 
-    async def read(
+    async def _read(
         self,
         index_name: str,
+        *,
+        parse_timestamps: bool = True,
     ) -> AsyncIterator[List[MetadataRecord]]:
         """Yield batches of metadata records from a PostgreSQL table.
 
@@ -459,15 +518,6 @@ class PostgreSQL(IndexStore):
         table of tens of millions of records is then a multi-gigabyte
         allocation before the first batch is ever yielded.
 
-        Parameters
-        ^^^^^^^^^^
-        index_name:
-            Name of the table to read from.
-
-        Yields
-        ^^^^^^
-        List[MetadataRecord]:
-            Deserialised metadata records.
         """
         try:
             import sqlalchemy as sa
@@ -479,9 +529,9 @@ class PostgreSQL(IndexStore):
         batch_size = self.batch_size
         url = self._url
 
-        def _open() -> Tuple[
-            "sa.Engine", Optional["sa.Connection"], Optional["sa.MappingResult"]
-        ]:
+        def _open() -> (
+            Tuple["sa.Engine", Optional["sa.Connection"], Optional["sa.MappingResult"]]
+        ):
             engine: sa.Engine = sa.create_engine(url, pool_pre_ping=True)
             sa_meta: sa.MetaData = sa.MetaData(schema=self._db_schema)
             sa_meta.reflect(bind=engine)
@@ -501,7 +551,8 @@ class PostgreSQL(IndexStore):
                 stream_results=True,
                 max_row_buffer=batch_size,
             )
-            result = conn.execute(sa.select(table))
+            stmt = sa.select(table)
+            result = conn.execute(stmt)
             return engine, conn, result.mappings()
 
         def _next_batch(

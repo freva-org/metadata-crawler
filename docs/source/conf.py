@@ -10,16 +10,15 @@ needed.
 from __future__ import annotations
 
 import io
-import os
 import json
-import sys
+import os
 import pathlib
+import sys
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime
 from urllib.parse import urljoin
 
 import requests
-
 
 # Include the project source on the Python path so sphinx can find it.
 sys.path.insert(0, os.path.abspath("."))

@@ -489,6 +489,7 @@ class TestDegenerateListings:
         store._client = Placeholder({})  # type: ignore[assignment]
         assert [d async for d in store.iterdir("bucket/pre")] == ["bucket/pre/data.nc"]
 
+
 class TestGlobPattern:
     """``glob_pattern`` is matched relative to the ``rglob`` root."""
 

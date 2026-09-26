@@ -1,24 +1,26 @@
 """MongoDB metadata storage backend.
 
-Both the *read* and *write* paths use synchronous :mod:`pymongo`.
-The writer daemon runs in a spawned process.  The reader offloads
-cursor iteration to a single-thread
-:class:`~concurrent.futures.ThreadPoolExecutor` one batch at a time
-so the event loop stays responsive without pulling the entire
-collection into memory.
+The writer daemon runs in a spawned process and uses synchronous
+:mod:`pymongo`, since it has no event loop of its own.  Reading and
+removing entries use pymongo's native async API
+(:class:`pymongo.AsyncMongoClient`), streaming one batch at a time so
+memory stays bounded.  Housekeeping helpers that are part of the
+synchronous :class:`~.base.IndexStore` interface (counting, sweeping,
+catalogue metadata) keep using the synchronous client.
 
 .. note::
 
    ``pymongo`` is an **optional** dependency.  Install it separately
    (``pip install pymongo`` / ``conda install pymongo``) before
-   selecting ``backend="mongodb"``.
+   selecting ``backend="mongodb"``.  The async API requires
+   ``pymongo>=4.13``.
 """
 
 from __future__ import annotations
 
 import asyncio
 import multiprocessing as mp
-from concurrent.futures import ThreadPoolExecutor
+import re
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -28,7 +30,6 @@ from typing import (
     List,
     Literal,
     Optional,
-    Tuple,
     Union,
 )
 from urllib.parse import (
@@ -44,17 +45,19 @@ from ...logger import logger
 from ..config import SchemaField
 from .base import (
     BackendWriter,
+    FacetValue,
     IndexName,
     IndexStore,
     MetadataRecord,
     StorageOptions,
     Stream,
+    glob_to_regex,
 )
 
 if TYPE_CHECKING:
-    from pymongo import MongoClient
+    from pymongo import AsyncMongoClient, MongoClient
+    from pymongo.asynchronous.database import AsyncDatabase
     from pymongo.collection import Collection
-    from pymongo.cursor import Cursor
 
 _IMPORT_ERR = (
     "The mongodb storage backend requires 'pymongo'. "
@@ -325,63 +328,36 @@ class MongoDB(IndexStore):
         finally:
             client.close()
 
-    async def read(
+    async def _read(
         self,
         index_name: str,
+        *,
+        parse_timestamps: bool = True,
     ) -> AsyncIterator[List[MetadataRecord]]:
-        """Yield batches of metadata records from a MongoDB collection.
-
-        Uses synchronous :mod:`pymongo` in a single-thread executor,
-        fetching one batch at a time so memory stays bounded.
-
-        Parameters
-        ^^^^^^^^^^
-        index_name:
-            Name of the collection to read from.
-
-        Yields
-        ^^^^^^
-        List[MetadataRecord]:
-            Deserialised metadata records.
-        """
+        """Yield batches of metadata records from a MongoDB collection."""
         try:
-            from pymongo import MongoClient as _MongoClient
+            from pymongo import AsyncMongoClient as _AsyncMongoClient
         except ImportError:
             raise ImportError(_IMPORT_ERR) from None
 
-        loop = asyncio.get_running_loop()
         batch_size = self.batch_size
-        uri = self._uri
-        collection_name = index_name
-
-        def _open() -> Tuple["MongoClient[MetadataRecord]", "Cursor[MetadataRecord]"]:
-            client: "MongoClient[MetadataRecord]" = _MongoClient(uri)
-            db = client.get_default_database(default="metadata")
-            cursor = db[collection_name].find(
-                {}, {"_id": 0, self._epoch_key: 0}, batch_size=batch_size
+        client: "AsyncMongoClient[MetadataRecord]"
+        async with _AsyncMongoClient(self._uri) as client:
+            db: "AsyncDatabase[MetadataRecord]" = client.get_default_database(
+                default="metadata"
             )
-            return client, cursor
-
-        def _next_batch(
-            cursor: "Cursor[MetadataRecord]",
-        ) -> Optional[List[MetadataRecord]]:
+            query: Dict[str, Any] = {}
+            cursor = db[index_name].find(
+                query, {"_id": 0, self._epoch_key: 0}, batch_size=batch_size
+            )
             batch: List[MetadataRecord] = []
-            for doc in cursor:
+            async for doc in cursor:
                 batch.append(doc)
                 if len(batch) >= batch_size:
-                    return batch
-            return batch or None
-
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            client, cursor = await loop.run_in_executor(pool, _open)
-            try:
-                while True:
-                    batch = await loop.run_in_executor(pool, _next_batch, cursor)
-                    if batch is None:
-                        break
                     yield batch
-            finally:
-                await loop.run_in_executor(pool, client.close)
+                    batch = []
+            if batch:
+                yield batch
 
     def count_stale_objects(self, epoch: float) -> int:
         """Count the number of stale (outdated objects)."""
@@ -411,3 +387,47 @@ class MongoDB(IndexStore):
         finally:
             client.close()
         logger.info("Cleaned up %i old entries from database.", total)
+
+    # ------------------------------------------------------------------
+    # Removing entries from the source of truth
+    # ------------------------------------------------------------------
+
+    def _build_query(self, grouped: Dict[str, List[FacetValue]]) -> Dict[str, Any]:
+        """Translate grouped facets into a MongoDB query.
+
+        Values of the same key are OR-ed via ``$in``, different keys are
+        AND-ed.  Array fields match if any element matches.  A key without
+        valid values yields an empty ``$in``, which matches nothing.
+        """
+        query: Dict[str, Any] = {}
+        for key, values in grouped.items():
+            exact, globs = self.split_facet_values(key, values)
+            query[key] = {
+                "$in": [*exact, *(re.compile(glob_to_regex(g)) for g in globs)]
+            }
+        return query
+
+    async def _remove(self, grouped: Dict[str, List[FacetValue]], dry_run: bool) -> int:
+        """Delete (or with *dry_run* count) all entries matching *grouped*."""
+        try:
+            from pymongo import AsyncMongoClient as _AsyncMongoClient
+        except ImportError:
+            raise ImportError(_IMPORT_ERR) from None
+
+        query = self._build_query(grouped)
+        logger.debug("Removing entries matching %s", query)
+        client: "AsyncMongoClient[MetadataRecord]"
+        async with _AsyncMongoClient(self._uri) as client:
+            db: "AsyncDatabase[MetadataRecord]" = client.get_default_database(
+                default="metadata"
+            )
+            if dry_run:
+                counts = await asyncio.gather(
+                    *(db[name].count_documents(query) for name in self.index_names)
+                )
+            else:
+                results = await asyncio.gather(
+                    *(db[name].delete_many(query) for name in self.index_names)
+                )
+                counts = [result.deleted_count for result in results]
+        return sum(counts)

@@ -1,17 +1,19 @@
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Literal, Optional, overload
+from typing import Any, Dict, Literal, Optional, Sequence, Union, overload
 
 from tomlkit import TOMLDocument
 
 from ._version import __version__ as __version__
 from .api.config import ConfigMerger
 from .api.metadata_stores import CatalogueBackendType
+from .api.stores.base import Facet
 from .data_collector import DataCollector as DataCollector
 from .logger import logger as logger
 from .run import async_add as async_add
 from .run import async_delete as async_delete
 from .run import async_index as async_index
+from .run import async_remove as async_remove
 
 __all__ = [
     "logger",
@@ -20,9 +22,11 @@ __all__ = [
     "index",
     "add",
     "delete",
+    "remove",
     "get_config",
     "async_index",
     "async_delete",
+    "async_remove",
     "async_add",
 ]
 
@@ -78,3 +82,11 @@ def glance_metadata(
     backend: Optional[CatalogueBackendType] = None,
     **storage_options: Any,
 ) -> dict[str, Any]: ...
+def remove(
+    store: Optional[Union[str, Path]] = None,
+    storage_options: Optional[Dict[str, Any]] = None,
+    verbosity: int = 0,
+    log_suffix: Optional[str] = None,
+    dry_run: bool = False,
+    facets: Optional[Sequence[Facet]] = None,
+) -> int: ...

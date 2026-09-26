@@ -29,7 +29,14 @@ from typing import (
 import yaml
 from rich_argparse import ArgumentDefaultsRichHelpFormatter
 
-from metadata_crawler import add, delete, get_config, glance_metadata, index
+from metadata_crawler import (
+    add,
+    delete,
+    get_config,
+    glance_metadata,
+    index,
+    remove,
+)
 
 from ._version import __version__
 from .api.metadata_stores import (
@@ -165,7 +172,7 @@ class ArgParse:
         self.verbose: int = 0
         self.parser = argparse.ArgumentParser(
             prog=THIS_NAME,
-            description="Add/Remove metadata to/from a metadata index.",
+            description="Add/Delete metadata to/from a metadata index.",
             formatter_class=ArgumentDefaultsRichHelpFormatter,
             epilog=self.epilog,
         )
@@ -184,6 +191,7 @@ class ArgParse:
         self._add_config_parser()
         self._add_walk_catalogue()
         self._add_crawler_subcommand()
+        self._add_remove()
         self._add_inspect()
         self._index_submcommands()
 
@@ -406,6 +414,48 @@ class ArgParse:
             default=None,
         )
 
+    def _add_remove(self) -> None:
+        """Add the remove metadata from source of truth cli."""
+        parser = self.subparsers.add_parser(
+            "remove",
+            description="Remove metadata from source of truth.",
+            help="Remove metadata from source of truth.",
+            formatter_class=ArgumentDefaultsRichHelpFormatter,
+            epilog=self.epilog,
+        )
+        parser.add_argument(
+            "store",
+            type=str,
+            help="Path/Url to the source of truth.",
+        )
+        parser.add_argument(
+            "--storage-option",
+            "--storage_option",
+            "-s",
+            help=(
+                "Set additional storage options for adding metadata to the"
+                "metadata store"
+            ),
+            action="append",
+            nargs=2,
+        )
+        parser.add_argument(
+            "--dry-run",
+            "--dry_run",
+            help="Only count what would be deleted don't remove data.",
+            action="store_true",
+        )
+        parser.add_argument(
+            "-f",
+            "--facets",
+            type=str,
+            nargs=2,
+            action="append",
+            help="Search facets matching the delete query.",
+        )
+        self._add_general_config_to_parser(parser)
+        parser.set_defaults(apply_func=remove)
+
     def _add_inspect(self) -> None:
         """Add an inspect subcommand for table metadata inspection."""
         parser = self.subparsers.add_parser(
@@ -418,7 +468,7 @@ class ArgParse:
         parser.add_argument(
             "store",
             type=str,
-            help="Path/Url to the intake catalogue",
+            help="Path/Url to the source of truth.",
         )
         parser.add_argument(
             "--backend",

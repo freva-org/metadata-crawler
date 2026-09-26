@@ -51,7 +51,7 @@ Too long; didn't read (TL;DR)
 
 
 - **Multi-backend discovery**: POSIX, S3/MinIO, Swift (async REST), Intake
-- **Two-stage pipeline**: *crawl → catalogue* then *catalogue → index*
+- **Two-stage pipeline**: *crawl → source of truth* then *source of truth → index*
 - **Schema driven**: strong types (e.g. ``string``, ``datetime[2]``,
   ``float[4]``, ``string[]``)
 - **DRS dialects**: packaged CMIP6/CMIP5/CORDEX; build your own via inheritance
@@ -65,7 +65,7 @@ Too long; didn't read (TL;DR)
 
 The CLI uses a **custom framework** inspired by `Typer <https://typer.tiangolo.com>`_
 but is **not** Typer. The Main commands are grouped under four verbs:
-``config``, ``crawl``, ``index`` and ``delete``.
+``config``, ``add``, ``remove``, ``index`` and ``delete``.
 
 Check also ``mdc --help``
 
@@ -98,8 +98,15 @@ content with the ``glance`` sub command:
 
 
 
-Harvest metadata into a catalogue
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Harvest metadata into a source of truth
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Metadata-crawler distinguishes between index or search systems such as
+apache solr or elastic search and so called *source of truth* stores. These
+stores can be static catalogues or databases that hold *all* metadata entries.
+
+A source of truth is considered a permanent store of crawled metadata, where
+as data in an index can change.
 
 .. versionadded:: 2605.0.0
 
@@ -112,15 +119,15 @@ Harvest metadata into a catalogue
 .. code-block:: console
 
    # Intake
-   mdc crawl cat.yaml -c drs_config.toml --dataset cmip6-fs --dataset obs-fs \
+   mdc add cat.yaml -c drs_config.toml --dataset cmip6-fs --dataset obs-fs \
              --threads 4 --batch-size 100
 
    # MongoDB
-   mdc crawl mongodb://username:password@server:27107/database -c drs_config.toml --dataset cmip6-fs --dataset obs-fs \
+   mdc add mongodb://username:password@server:27107/database -c drs_config.toml --dataset cmip6-fs --dataset obs-fs \
              --threads 4 --batch-size 100
 
    # PostgreSQL
-   mdc crawl postgresql://username:password@server:5432/database -c drs_config.toml --dataset cmip6-fs --dataset obs-fs \
+   mdc add postgresql://username:password@server:5432/database -c drs_config.toml --dataset cmip6-fs --dataset obs-fs \
              --threads 4 --batch-size 100
 
 
@@ -133,8 +140,8 @@ and **PostgreSQL**.
 
 
 
-Index catalogue entries
-^^^^^^^^^^^^^^^^^^^^^^^^
+Index entries from a source of truth
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: console
 
@@ -143,6 +150,27 @@ Index catalogue entries
 This reads entries from a catalogue and inserts/updates them in the chosen
 index backend. Supported backends include **Solr**
 and **MongoDB** (see :doc:`chapter3-api/index`).
+
+Remove entries from the source of truth
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. versionadded:: 2609.0.0
+
+    Entries from the source of truth (database) can be deleted with help of the
+    ``remove`` sub-caommand
+
+
+.. code-block:: console
+
+   # Intake
+   mdc remove cat.yaml -f dataset cmip6-fs -f variable tas
+
+   # MongoDB
+   mdc remove mongodb://username:password@server:27107/database -f dataset cmip6-fs -f variable tas
+
+   # PostgreSQL
+   mdc remove postgresql://username:password@server:5432/database -f dataset cmip6-fs -f dataset obs-fs
+
 
 Delete entries from an index
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

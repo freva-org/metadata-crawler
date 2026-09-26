@@ -9,7 +9,7 @@ supports both synchronous and asynchronous workflows.
 
 The general workflow of collecting metadata is separated into *two* steps:
 
-1. Harvesting metadata and storing the crawled data to a **metadata store**
+1. Harvesting metadata and storing the crawled data to a **source of truth**
    This step should de-couples the crawling from the indexing procedure.
    Supported metadata stores are **intake catalogues**, **MongoDB** and
    **PostgreSQL**.
@@ -31,6 +31,15 @@ account (*latest* versions only).
    period are automatically removed. This prevents stale entries, files that
    have been moved, renamed, or deleted, from accumulating across
    successive crawls.
+
+
+.. versionadded:: 2609.0.0
+    Search facets can be used to create subset of the metadata added to the source
+    of truth (databases or intake catalogues). Sometimes it might be necessary to
+    delete certain data from source of truth. To select datasets that should be
+    deleted from an intake catalogue or database the ``remove`` sub command can
+    be used.
+
 
 
 .. toctree::
