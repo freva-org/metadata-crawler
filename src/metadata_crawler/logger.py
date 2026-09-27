@@ -11,7 +11,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, Optional, cast
 
-import platfromdirs
+import platformdirs
 from rich.console import Console
 from rich.logging import RichHandler
 
@@ -153,7 +153,7 @@ class Logger(logging.Logger):
         """
         suffix = suffix or os.getenv("MDC_LOG_SUFFIX", "")
         base_name = f"{THIS_NAME}-{suffix}" if suffix else THIS_NAME
-        log_dir = Path(os.getenv("MDC_LOG_DIR", platfromdirs.user_log_path(THIS_NAME)))
+        log_dir = Path(os.getenv("MDC_LOG_DIR", platformdirs.user_log_path(THIS_NAME)))
         log_dir.mkdir(exist_ok=True, parents=True)
         logger_file_handle = RotatingFileHandler(
             log_dir / f"{base_name}.log",
