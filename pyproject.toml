@@ -8,7 +8,7 @@ authors = [{name = "DKRZ, Clint", email = "freva@dkrz.de"}]
 readme = "README.md"
 license = {file = "LICENSE"}
 classifiers = [
-               "Development Status :: 4 - Beta",
+               "Development Status :: 5 - Production/Stable",
                "Environment :: Console",
                "Intended Audience :: Developers",
                "Intended Audience :: Science/Research",
@@ -26,7 +26,6 @@ description="Crawl, extract and push climate metadata for indexing."
 requires-python = ">=3.11"
 dependencies = [
         "aiohttp",
-        "appdirs",
         "ciso8601",
         "fsspec",
         "diskcache",
@@ -37,6 +36,7 @@ dependencies = [
         "intake-esm",
         "pandas",
         "python-dateutil",
+        "platfromdirs",
         "psycopg[binary]",
         "numpy",
         "orjson",
@@ -86,7 +86,6 @@ doc = [
 tests = [
     "codespell",
     "pydocstyle",
-    "types-appdirs",
     "black",
     "isort",
     "mock",
