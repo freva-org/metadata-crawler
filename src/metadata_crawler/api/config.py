@@ -271,10 +271,11 @@ class ConfigMerger(Generic[DocT]):
                 raise MetadataCrawlerException(
                     f"Could not load config path: {error}"
                 ) from error
-            self._merge_tables(self._system_doc, self._user_doc)
+            self.merge_tables(self._system_doc, self._user_doc)
 
-    def _merge_tables(
-        self,
+    @classmethod
+    def merge_tables(
+        cls,
         base: Union[Dict[str, Any], tomlkit.TOMLDocument, Table, OutOfOrderTableProxy],
         override: Union[
             Dict[str, Any], Table, tomlkit.TOMLDocument, OutOfOrderTableProxy
@@ -285,7 +286,7 @@ class ConfigMerger(Generic[DocT]):
                 base[key] = value
                 continue
             if isinstance(value, (Table, OutOfOrderTableProxy, dict)):
-                self._merge_tables(cast(Union[Table, Dict[str, Any]], base[key]), value)
+                cls.merge_tables(cast(Union[Table, Dict[str, Any]], base[key]), value)
             else:
                 base[key] = value
 

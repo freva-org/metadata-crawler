@@ -59,6 +59,7 @@ dependencies = [
 ]
 [project.optional-dependencies]
 dev = ["maturin", "tox"]
+vault = ["pyrage"]
 mkdoc = [
   "mkdocs",
   "mkdocs-material",
