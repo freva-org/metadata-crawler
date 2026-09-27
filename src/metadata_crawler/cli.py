@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from platformdirs import user_config_path
 import argparse
 import asyncio
 import inspect
@@ -211,7 +212,11 @@ class ArgParse:
             action="append",
             default=None,
         )
-        parser.add_argument("--json", help="Print in json format.", action="store_true")
+        parser.add_argument(
+            "--json",
+            help="Print in json format.",
+            action=argparse.BooleanOptionalAction,
+        )
         parser.add_argument(
             "--no-comments",
             "--drop-comments",
@@ -312,7 +317,7 @@ class ArgParse:
         )
         parser.add_argument(
             "--no-sweep",
-            action="store_true",
+            action=argparse.BooleanOptionalAction,
             default=False,
             help=(
                 "Skip removal of stale records after crawling. "
@@ -412,6 +417,28 @@ class ArgParse:
             type=str,
             help="Add a suffix to the log file output.",
             default=None,
+        )
+        parser.add_argument(
+            "--mdc-config",
+            type=Path,
+            help="Path to the metadata-crawler config file.",
+            default=Path(
+                os.getenv(
+                    "MDC_CONFIG_PATH", user_config_path(appname="metdata-crawler")
+                )
+            )
+            / "store.toml",
+        )
+        parser.add_argument(
+            "--mdc-secrets",
+            type=Path,
+            help="Path to the metadata-crawler secrets file.",
+            default=Path(
+                os.getenv(
+                    "MDC_SECRETS_PATH", user_config_path(appname="metdata-crawler")
+                )
+            )
+            / "secrets.toml",
         )
 
     def _add_remove(self) -> None:
