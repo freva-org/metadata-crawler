@@ -317,7 +317,7 @@ class ArgParse:
         )
         parser.add_argument(
             "--no-sweep",
-            action=argparse.BooleanOptionalAction,
+            action="store_true",
             default=False,
             help=(
                 "Skip removal of stale records after crawling. "
