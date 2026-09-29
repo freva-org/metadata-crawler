@@ -11,7 +11,7 @@ import rtoml
 from pathlib import Path
 from typing import Any, Dict, List
 
-from .types import StoresConfig
+from ..types import StoresConfig
 
 _ARMOR_HEADER = b"-----BEGIN AGE ENCRYPTED FILE-----"
 _DEFAULT_IDENTITIES = ("~/.ssh/id_ed25519", "~/.ssh/id_rsa")

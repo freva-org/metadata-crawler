@@ -4,12 +4,12 @@ import os
 from typing import Literal
 from importlib.resources import files
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Optional
 
 import rtoml
 from platformdirs import user_config_dir
 
-from .types import ConfigValue
+from ..types import StoresConfig
 from .vault import load_secrets
 from ..api.config import ConfigMerger
 
@@ -33,7 +33,7 @@ def init_template(store_type: Literal["secrets", "stores"] = "stores") -> Path:
 
 def read(
     store_path: Optional[Path] = None, secrets_path: Optional[Path] = None
-) -> Dict[str, ConfigValue]:
+) -> StoresConfig:
     """Read the metadata config and secert files."""
     store_path = store_path or Path(
         os.getenv("MCD_CONFIG_PATH", init_template("stores"))
@@ -42,7 +42,7 @@ def read(
         os.getenv("MCD_CONFIG_PATH", init_template("secrets"))
     )
     try:
-        parsed_config: Dict[str, ConfigValue] = rtoml.loads(store_path.read_text())
+        parsed_config: StoresConfig = rtoml.loads(store_path.read_text())
     except (rtoml.TomlParsingError, rtoml.TomlSerializationError) as error:
         raise ValueError(f"{store_path}: {error}") from None
     parsed_secrets = load_secrets(secrets_path)

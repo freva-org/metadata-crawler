@@ -481,7 +481,7 @@ class PostgreSQL(IndexStore):
         )
         db_schema = _get_storage_options(url).partition(",")[0] or db_schema
         with _open_db_connection(url, **kwargs) as conn:
-            result: "sa.CursorResult[Tuple[str]]" = conn.execute(
+            result: "sa.CursorResult[str]" = conn.execute(
                 sa.text(
                     (
                         f"SELECT value FROM {db_schema}.{cls._CATALOGUE_TABLE} "
@@ -529,9 +529,9 @@ class PostgreSQL(IndexStore):
         batch_size = self.batch_size
         url = self._url
 
-        def _open() -> (
-            Tuple["sa.Engine", Optional["sa.Connection"], Optional["sa.MappingResult"]]
-        ):
+        def _open() -> Tuple[
+            "sa.Engine", Optional["sa.Connection"], Optional["sa.MappingResult"]
+        ]:
             engine: sa.Engine = sa.create_engine(url, pool_pre_ping=True)
             sa_meta: sa.MetaData = sa.MetaData(schema=self._db_schema)
             sa_meta.reflect(bind=engine)
