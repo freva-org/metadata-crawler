@@ -17,7 +17,9 @@ class Parameter(BaseModel):
     """Help string that is going to be displayed."""
 
 
-def cli_parameter(*args: str, connection: bool = True, **kwargs: Any) -> Dict[str, Any]:
+def cli_parameter(
+    *args: str, connection: bool = False, **kwargs: Any
+) -> Dict[str, Any]:
     """Construct a ``argparse.Namespace``.
 
     Parameters
@@ -26,7 +28,9 @@ def cli_parameter(*args: str, connection: bool = True, **kwargs: Any) -> Dict[st
     *args:
         Any arguments passed to ``argparse.ArgumentParser().add_argument``
     connection:
-        Enable using named connections define in the ``.toml`` config files.
+        The option says where the index system is (``--server``, ``--url``)
+        and also accepts the name of a connection from ``connections.toml``.
+        Requires the index system to define ``connection``.
 
         .. versionadded:: 2610.0.0
 
@@ -34,7 +38,10 @@ def cli_parameter(*args: str, connection: bool = True, **kwargs: Any) -> Dict[st
         Any keyword arguments passed to ``argparse.ArgumentParser().add_arguent``
 
     """
-    return Parameter(args=args, **kwargs).model_dump()
+    options = Parameter(args=args, **kwargs).model_dump()
+    if connection:
+        options["connection"] = True
+    return options
 
 
 def cli_function(

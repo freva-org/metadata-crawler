@@ -530,8 +530,27 @@ def tls(tmp_path_factory: pytest.TempPathFactory) -> Dict[str, Path]:
         .not_valid_before(now - datetime.timedelta(days=1))
         .not_valid_after(now + datetime.timedelta(days=1))
         .add_extension(x509.BasicConstraints(ca=True, path_length=None), True)
+        .add_extension(
+            x509.KeyUsage(
+                digital_signature=True,
+                content_commitment=False,
+                key_encipherment=False,
+                data_encipherment=False,
+                key_agreement=False,
+                key_cert_sign=True,
+                crl_sign=True,
+                encipher_only=False,
+                decipher_only=False,
+            ),
+            True,
+        )
+        .add_extension(
+            x509.SubjectKeyIdentifier.from_public_key(ca_key.public_key()), False
+        )
         .sign(ca_key, hashes.SHA256())
     )
+    # Python >= 3.13 verifies strictly (VERIFY_X509_STRICT): the server
+    # certificate needs an authority key identifier, like real ones have.
     key = ec.generate_private_key(ec.SECP256R1())
     cert = (
         x509.CertificateBuilder()
@@ -546,6 +565,13 @@ def tls(tmp_path_factory: pytest.TempPathFactory) -> Dict[str, Path]:
                 [x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]
             ),
             False,
+        )
+        .add_extension(
+            x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_key.public_key()),
+            False,
+        )
+        .add_extension(
+            x509.ExtendedKeyUsage([x509.oid.ExtendedKeyUsageOID.SERVER_AUTH]), False
         )
         .sign(ca_key, hashes.SHA256())
     )
