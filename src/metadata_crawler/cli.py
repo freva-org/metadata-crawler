@@ -27,7 +27,6 @@ from typing import (
 )
 
 import yaml
-from platformdirs import user_config_path
 from rich_argparse import ArgumentDefaultsRichHelpFormatter
 
 from metadata_crawler import (
@@ -88,7 +87,6 @@ def walk_catalogue(
 
 
 def _flatten(inp: Union[List[str], List[List[str]]]) -> List[str]:
-
     out = []
     for item in inp:
         out += item if isinstance(item, list) else [item]
@@ -108,7 +106,6 @@ def _get_storage_option_from_env() -> List[Tuple[str, str]]:
 
 
 def _process_storage_option(option: str) -> Union[str, bool, int, float]:
-
     if option.lower() in ("false", "true", "yes", "y"):
         return option.lower() in ["true", "yes", "y"]
     try:
@@ -417,28 +414,6 @@ class ArgParse:
             type=str,
             help="Add a suffix to the log file output.",
             default=None,
-        )
-        parser.add_argument(
-            "--mdc-config",
-            type=Path,
-            help="Path to the metadata-crawler config file.",
-            default=Path(
-                os.getenv(
-                    "MDC_CONFIG_PATH", user_config_path(appname="metdata-crawler")
-                )
-            )
-            / "store.toml",
-        )
-        parser.add_argument(
-            "--mdc-secrets",
-            type=Path,
-            help="Path to the metadata-crawler secrets file.",
-            default=Path(
-                os.getenv(
-                    "MDC_SECRETS_PATH", user_config_path(appname="metdata-crawler")
-                )
-            )
-            / "secrets.toml",
         )
 
     def _add_remove(self) -> None:
