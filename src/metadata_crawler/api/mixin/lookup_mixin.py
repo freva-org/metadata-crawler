@@ -5,8 +5,8 @@ import os
 from types import MappingProxyType
 from typing import Any, Dict, Mapping, Tuple
 
-from platformdirs import user_cache_dir
 from diskcache import Cache
+from platformdirs import user_cache_dir
 
 from .lookup_tables import cmor_lookup as _NESTED
 
