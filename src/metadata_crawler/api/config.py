@@ -281,6 +281,7 @@ class ConfigMerger(Generic[DocT]):
             Dict[str, Any], Table, tomlkit.TOMLDocument, OutOfOrderTableProxy
         ],
     ) -> None:
+        """Merge one toml table / dict into another base table dict."""
         for key, value in override.items():
             if key not in base:
                 base[key] = value

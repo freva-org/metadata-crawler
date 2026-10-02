@@ -1,0 +1,155 @@
+# =============================================================================
+# metadata-crawler connections
+# =============================================================================
+#
+# Named connections to catalogue stores. Wherever metadata-crawler expects a
+# store, a name from this file works as well as a URL or path:
+#
+#     mdc glance prod
+#     mdc remove prod -f variable pr --dry-run
+#
+# and in Python:
+#
+#     from metadata_crawler.connections import read_configfiles
+#
+#     with read_configfiles() as config:
+#         prod = config["prod"]
+#
+# -----------------------------------------------------------------------------
+# Where connections are defined
+# -----------------------------------------------------------------------------
+#
+# Tables with the same name are merged, later layers win (weakest first):
+#
+#     1. /etc/metadata-crawler/connections.toml    site-wide, shared
+#     2. ~/.config/metadata-crawler/connections.toml
+#          your own connections; MDC_CONNECTIONS points to another file
+#     3. secrets.toml(.age) next to it              your credentials
+#          MDC_SECRETS points to another file
+#     4. -s/--storage-option on the command line
+#
+# Merging happens per key: a user file that only sets `port` for [prod]
+# keeps the site's url and database for [prod].
+#
+# -----------------------------------------------------------------------------
+# Keys every connection has
+# -----------------------------------------------------------------------------
+#
+#   url          required. Path or URL of the catalogue.
+#   backend      optional. Picked from the URL scheme if not given:
+#                  postgresql:// and postgres://        -> "postgresql"
+#                  mongodb:// and mongodb+srv://         -> "mongodb"
+#                  anything else (paths, s3://, ...)     -> "intake"
+#                Store plugins may add backends and schemes.
+#   secrets      optional. Take the credentials from this table of
+#                  secrets.toml instead of the one named like the connection.
+#   description  optional.
+#
+# All other keys depend on the backend, see the sections below. Unknown keys
+# are an error for PostgreSQL; for intake and MongoDB they are passed on
+# (as s3fs options or as MongoDB URI options).
+#
+# -----------------------------------------------------------------------------
+# No credentials in this file
+# -----------------------------------------------------------------------------
+#
+# Usernames, passwords, keys, secrets and tokens belong in secrets.toml,
+# which must only be readable by you. Credentials are never written into
+# catalogue metadata, whichever file they come from.
+#
+# Everything below is commented out, so a fresh copy of this file has no
+# effect. Uncomment and adapt the connections you need.
+#
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# Intake catalogue on a local or shared file system
+# -----------------------------------------------------------------------------
+# The YAML file plus its data files (metadata-latest.json.gz, ...), which are
+# kept next to it.
+
+# [scratch]
+# url = "/work/ab1234/catalogues/scratch.yml"
+# description = "My test crawls"
+
+
+# -----------------------------------------------------------------------------
+# Intake catalogue on S3
+# -----------------------------------------------------------------------------
+# Every key besides the common ones is an s3fs option, e.g. endpoint_url,
+# anon, client_kwargs. They only apply when the url is not a local path.
+# key/secret (and token) go into secrets.toml under [waterpark]; key and
+# secret must be given together. Without them, access is anonymous or falls
+# back to your AWS profile.
+
+# [waterpark]
+# url = "s3://metadata/catalogues/waterpark.yml"
+# endpoint_url = "https://s3.example.org"
+# description = "Waterpark HEALPix data"
+
+# A read-only view of a public catalogue, no credentials needed:
+
+# [waterpark-public]
+# url = "s3://metadata/catalogues/waterpark.yml"
+# endpoint_url = "https://s3.example.org"
+# anon = true
+
+
+# -----------------------------------------------------------------------------
+# PostgreSQL catalogue
+# -----------------------------------------------------------------------------
+# host, port and database can be part of the url; explicit keys win.
+#
+#   host       default: from the url, else "localhost"
+#   port       default: from the url, else 5432
+#   database   default: from the url path, else "metadata"
+#   db_schema  default: "metadata_crawler"
+#
+# Username and password go into secrets.toml under [prod].
+
+# [prod]
+# url = "postgresql://db.example.org/metadata"
+# db_schema = "metadata_crawler"
+# description = "Production catalogue"
+
+# A second schema on the same server, sharing the credentials of [prod]:
+
+# [prod-staging]
+# url = "postgresql://db.example.org/metadata"
+# db_schema = "metadata_crawler_staging"
+# secrets = "prod"
+
+
+# -----------------------------------------------------------------------------
+# MongoDB catalogue
+# -----------------------------------------------------------------------------
+# host, port and database can be part of the url; explicit keys win.
+#
+#   host       default: from the url, else "localhost"
+#   port       default: from the url, else MongoDB's default
+#   database   default: from the url path, else "metadata"
+#
+# Every other key is added to the connection URI as a MongoDB option, e.g.
+# tls, replicaSet, authSource. With credentials, authSource defaults to
+# "admin". Username and password go into secrets.toml under [mongo].
+
+# [mongo]
+# url = "mongodb://mongo.example.org:27017/metadata"
+# tls = true
+# replicaSet = "rs0"
+
+
+# -----------------------------------------------------------------------------
+# Local development (docker-compose.yaml of the repository)
+# -----------------------------------------------------------------------------
+# The compose services listen on localhost; both share the [dev] table in
+# secrets.toml.
+
+# [dev-pg]
+# url = "postgresql://localhost/metadata"
+# secrets = "dev"
+
+# [dev-mongo]
+# url = "mongodb://localhost:27017/metadata"
+# secrets = "dev"

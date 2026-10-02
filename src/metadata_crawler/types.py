@@ -1,9 +1,21 @@
 """Define types for the secrets and config engine."""
 
-from datetime import date, time, datetime
+from datetime import date, datetime, time
+from typing import (
+    TYPE_CHECKING,
+    Dict,
+    List,
+    Mapping,
+    Sequence,
+    TypeAlias,
+    Union,
+)
 
+if TYPE_CHECKING:
+    from pathlib import Path
 
-from typing import Dict, TypeAlias, Union, List, Mapping, Sequence
+    from .api.stores.base import BaseConnection
+
 
 TomlScalar: TypeAlias = Union[str, int, float, bool, datetime, date, time]
 """A single TOML value. TOML has no null, so there is no None."""
@@ -21,3 +33,8 @@ ConfigValue: TypeAlias = Union[
     TomlScalar, Sequence["ConfigValue"], Mapping[str, "ConfigValue"]
 ]
 """Read-only counterpart of TomlValue, for function parameters."""
+
+
+StoresInput: TypeAlias = Union["Path", str, "BaseConnection"]
+FilesArg = Union[str, "Path", Sequence[Union[str, "Path"]]]
+StoresSequence: TypeAlias = Union[StoresInput, Sequence[StoresInput]]

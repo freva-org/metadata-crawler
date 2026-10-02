@@ -7,9 +7,10 @@ import getpass
 import os
 import stat
 import sys
-import rtoml
 from pathlib import Path
 from typing import Any, Dict, List
+
+import rtoml
 
 from ..types import StoresConfig
 
@@ -79,6 +80,7 @@ def _passphrase() -> str:
 
 
 def decrypt(data: bytes) -> bytes:
+    """Try to decrypt a data store."""
     try:
         import pyrage
     except ImportError:

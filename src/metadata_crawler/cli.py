@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-from platformdirs import user_config_path
 import argparse
 import asyncio
 import inspect
 import os
 import sys
+from contextlib import ExitStack
 from functools import partial
 from json import dumps
 from pathlib import Path
 from typing import (
+    TYPE_CHECKING,
     Annotated,
     Any,
     Callable,
@@ -33,6 +34,7 @@ from rich_argparse import ArgumentDefaultsRichHelpFormatter
 from metadata_crawler import (
     add,
     delete,
+    init_config,
     get_config,
     glance_metadata,
     index,
@@ -46,6 +48,7 @@ from .api.metadata_stores import (
 )
 from .api.stores import IndexName
 from .backends.intake import IntakePath
+from .connections import ConfigFiles, read_configfiles
 from .logger import (
     THIS_NAME,
     apply_verbosity,
@@ -53,9 +56,53 @@ from .logger import (
 )
 from .utils import exception_handler, load_plugins
 
+if TYPE_CHECKING:
+    from .api.stores.base import BaseConnection
+
 StorageScalar = Union[str, int, float, bool]
 StorageOptions = Dict[str, StorageScalar]
 KwargValue = Union[str, int, float, Path, StorageOptions, List[str], List[int], None]
+
+
+STORE_KEYS = ("store", "metadata_stores")
+
+
+def _is_store_name(value: object) -> bool:
+    """A name has no scheme and doesn't point to an existing file or directory."""
+    if not isinstance(value, str) or not value:
+        return False
+    return "://" not in value and not os.path.exists(os.path.expanduser(value))
+
+
+def _needs_config(kwargs: Dict[str, Any]) -> bool:
+    for key in STORE_KEYS:
+        value = kwargs.get(key)
+        values = value if isinstance(value, (list, tuple)) else [value]
+        if any(_is_store_name(v) for v in values):
+            return True
+    return False
+
+
+def resolve_store_args(kwargs: Dict[str, Any], cfg: ConfigFiles) -> None:
+    """Replace store names by their connections, in place."""
+
+    def _one(value: Any) -> Any:
+        if not _is_store_name(value):
+            return value
+        if value not in cfg:
+            raise ValueError(
+                f"{value!r} is neither an existing path, a URL nor a configured store"
+            )
+        return cfg[value]
+
+    for key in STORE_KEYS:
+        value = kwargs.get(key)
+        if value is None:
+            continue
+        if isinstance(value, (list, tuple)):
+            kwargs[key] = [_one(v) for v in value]
+        else:
+            kwargs[key] = _one(value)
 
 
 def walk_catalogue(
@@ -190,6 +237,7 @@ class ArgParse:
             required=True,
         )
         self._add_config_parser()
+        self._add_init_config()
         self._add_walk_catalogue()
         self._add_crawler_subcommand()
         self._add_remove()
@@ -232,6 +280,20 @@ class ArgParse:
             default=self.verbose,
             help="Increase the verbosity level.",
         )
+
+    def _add_init_config(self) -> None:
+        parser = self.subparsers.add_parser(
+            "init-config",
+            description="Create the connections and secrets templates.",
+            help="Create the connections and secrets templates.",
+            formatter_class=ArgumentDefaultsRichHelpFormatter,
+            epilog=self.epilog,
+        )
+        parser.add_argument(
+            "--force", action="store_true", help="Replace existing files."
+        )
+        self._add_general_config_to_parser(parser)
+        parser.set_defaults(apply_func=init_config)
 
     def _add_crawler_subcommand(self) -> None:
         """Add sub command for crawling metadata."""
@@ -422,23 +484,13 @@ class ArgParse:
             "--mdc-config",
             type=Path,
             help="Path to the metadata-crawler config file.",
-            default=Path(
-                os.getenv(
-                    "MDC_CONFIG_PATH", user_config_path(appname="metdata-crawler")
-                )
-            )
-            / "store.toml",
+            default=os.getenv("MDC_CONFIG_PATH"),
         )
         parser.add_argument(
             "--mdc-secrets",
             type=Path,
             help="Path to the metadata-crawler secrets file.",
-            default=Path(
-                os.getenv(
-                    "MDC_SECRETS_PATH", user_config_path(appname="metdata-crawler")
-                )
-            )
-            / "secrets.toml",
+            default=os.getenv("MDC_SECRETS_PATH"),
         )
 
     def _add_remove(self) -> None:
@@ -718,12 +770,15 @@ class ArgParse:
 
 def _run(
     parser: argparse.Namespace,
-    **kwargs: KwargValue,
+    **kwargs: Union[KwargValue, "BaseConnection"],
 ) -> None:
     """Apply the parsed method."""
     old_level = apply_verbosity(
         getattr(parser, "verbose", 0), suffix=getattr(parser, "log_suffix", None)
     )
+    mdc_config = cast(Optional[Path], kwargs.pop("mdc_config", None))
+    mdc_secrets = cast(Optional[Path], kwargs.pop("mdc_secrets", None))
+
     cfg_files = (
         cast(
             Optional[Sequence[Path]],
@@ -732,7 +787,13 @@ def _run(
         or []
     )
     try:
-        parser.apply_func(*cfg_files, **kwargs)
+        with ExitStack() as stack:
+            if _needs_config(kwargs):
+                cfg = stack.enter_context(
+                    read_configfiles(store_path=mdc_config, secrets_path=mdc_secrets)
+                )
+                resolve_store_args(kwargs, cfg)
+            parser.apply_func(*cfg_files, **kwargs)
     except Exception as error:
         exception_handler(error)
     finally:

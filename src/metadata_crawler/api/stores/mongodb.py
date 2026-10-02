@@ -27,8 +27,10 @@ from typing import (
     AsyncIterator,
     ClassVar,
     Dict,
+    FrozenSet,
     List,
     Literal,
+    Mapping,
     Optional,
     Union,
 )
@@ -38,13 +40,18 @@ from urllib.parse import (
     quote_plus,
     urlencode,
     urlparse,
+    urlsplit,
     urlunparse,
 )
+
+import pydantic
 
 from ...logger import logger
 from ..config import SchemaField
 from .base import (
     BackendWriter,
+    BaseConnection,
+    Credentials,
     FacetValue,
     IndexName,
     IndexStore,
@@ -65,12 +72,80 @@ _IMPORT_ERR = (
 )
 
 
+class MongoConnection(BaseConnection, Credentials):
+    """A MongoDB catalogue. Unknown keys become options of the connection URI."""
+
+    model_config = pydantic.ConfigDict(extra="allow")
+
+    backend: ClassVar[str] = "mongodb"
+    schemes: ClassVar[FrozenSet[str]] = frozenset({"mongodb", "mongodb+srv"})
+
+    host: str = "localhost"
+    port: Optional[int] = pydantic.Field(default=None, ge=1, le=65535)
+    database: str = "metadata"
+
+    @pydantic.model_validator(mode="before")
+    @classmethod
+    def _from_url(cls, data: Any) -> Any:
+        if isinstance(data, Mapping):
+            data = dict(data)
+            cls._url_defaults(data, default_port=None)
+        return data
+
+    def uri_options(self) -> Dict[str, str]:
+        """Extra keys as URI query parameters; booleans lowercase for pymongo."""
+        options = {
+            key: str(value).lower() if isinstance(value, bool) else str(value)
+            for key, value in (self.model_extra or {}).items()
+        }
+        return options
+
+    def storage_options(self, *, reveal: bool = False) -> StorageOptions:
+        """Define storage options for the database."""
+        opts: StorageOptions = {"host": self.host, "database": self.database}
+        if self.port:
+            opts["port"] = self.port
+        if self.username:
+            opts["username"] = self.username
+        if self.password:
+            opts["password"] = self._reveal(self.password) if reveal else self.password
+        opts.update(self.model_extra or {})
+        return opts
+
+    @property
+    def store_uri(self) -> str:
+        """URI for ``MongoClient``/``AsyncMongoClient``, with credentials."""
+        scheme = urlsplit(self.url).scheme or "mongodb"
+        host = self.host + (f":{self.port}" if self.port else "")
+        query = urlencode(self.uri_options())
+        return f"{scheme}://{host}/{quote_plus(self.database)}" + (
+            f"?{query}" if query else ""
+        )
+
+
 def _sanitise_uri(uri: str, timeout_ms: int = 5000, **kwargs: Any) -> str:
     """Merge storage options into a MongoDB URI.
 
     This function is idempotent -- calling it on an already-sanitised
     URI with the same keyword arguments produces the same result.
     """
+    _NOT_URI_OPTIONS = {
+        "username",
+        "user",
+        "password",
+        "passwd",
+        "database",
+        "db",
+        "host",
+        "port",
+        "name",
+        "uri",
+        "url",
+        "backend",
+        "description",
+        "secrets",
+    }
+
     uri = str(uri)
     netloc, _, body = uri.rpartition("://")
     netloc = netloc or "mongodb"
@@ -99,8 +174,8 @@ def _sanitise_uri(uri: str, timeout_ms: int = 5000, **kwargs: Any) -> str:
     # Query params -- kwargs merge in, existing values preserved
     query = parse_qs(parsed.query)
     for key, value in kwargs.items():
-        if key not in ("username", "user", "password", "database"):
-            query[key] = [str(value)]
+        if key not in _NOT_URI_OPTIONS:
+            query[key] = [str(value).lower() if isinstance(value, bool) else str(value)]
     if "authsource" not in {k.lower() for k in query}:
         query["authSource"] = ["admin"]
     if "timeoutms" not in {k.lower() for k in query}:
