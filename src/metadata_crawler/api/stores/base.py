@@ -377,6 +377,10 @@ class IndexStore(abc.ABC):
         ):
             yield record
 
+    def get_args(self, index_name: str) -> Dict[str, Any]:
+        """Define the intake arguments."""
+        return {}
+
     # ------------------------------------------------------------------
     # Abstract interface
     # ------------------------------------------------------------------
