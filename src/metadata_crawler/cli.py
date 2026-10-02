@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from platformdirs import user_config_path
 import argparse
 import asyncio
 import inspect
@@ -28,6 +27,7 @@ from typing import (
 )
 
 import yaml
+from platformdirs import user_config_path
 from rich_argparse import ArgumentDefaultsRichHelpFormatter
 
 from metadata_crawler import (
