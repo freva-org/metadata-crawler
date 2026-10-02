@@ -240,8 +240,11 @@ async def async_index(
 
     index_system:
         The index server where the metadata is indexed.
-        .. versionchanged:: 2609.0.0
+
+        .. versionchanged:: 2610.0.0
+
            This parameter accepts a metadata crawler config item.
+
     metadata_stores:
         Uri to the metadata store(s).
     batch_size:
@@ -351,7 +354,7 @@ async def async_remove(
 ) -> int:
     """Remove metadata entries from the source of truth.
 
-    .. versionadded:: 2609.0.0
+    .. versionadded:: 2610.0.0
 
         This function deletes entries by facet from the source of truth for
         example the database or intake catalogue that is used to put metadata
@@ -363,8 +366,11 @@ async def async_remove(
     store:
         Path or url of the source of truth where the collected metadata will be
         stored.
-        .. versionchanged:: 2609.0.0
+
+        .. versionchanged:: 2610.0.0
+
            This parameter accepts a metadata crawler config item.
+
     storage_options:
         Set additional storage options for adding metadata to the metadata store
     facets:
@@ -473,8 +479,11 @@ async def async_add(
         Path to the drs-config file / loaded configuration.
     store:
         Path to the source of truth.
-        .. versionchanged:: 2609.0.0
+
+        .. versionchanged:: 2610.0.0
+
            This parameter accepts a metadata crawler config item.
+
     data_objects:
         Instead of defining datasets that are to be crawled you can crawl
         data based on their directories. The directories must be a root dirs
@@ -506,7 +515,6 @@ async def async_add(
 
            Added ``"mongodb"`` and ``"postgresql"`` backends.
 
-
     catalogue_backend:
         Alias for ``backend``
     no_sweep:
@@ -519,7 +527,6 @@ async def async_add(
 
         .. versionadded:: 2605.0.0
 
-
     sweep_grace_period:
         Number of days to keep records before they become eligible
         for sweeping. Records older than this grace period are
@@ -527,7 +534,6 @@ async def async_add(
         environment variable. Defaults to 5 days.
 
         .. versionadded:: 2605.0.0
-
 
     batch_size:
         Batch size that is used to collect the meta data. This can affect

@@ -85,7 +85,7 @@ stores it in a metadata store, and indexes it to Apache Solr:
     is needed. The backend is detected automatically from the URL scheme.
 
 
-.. versionadded:: 2609.0.0
+.. versionadded:: 2610.0.0
 
     Search facets can be used to create subset of the metadata added to the source
     of truth (databases or intake catalogues). Sometimes it might be necessary to
@@ -210,7 +210,7 @@ other tasks:
     backends store catalogue metadata internally, so no YAML catalogue file
     is needed. The backend is detected automatically from the URL scheme.
 
-.. versionadded:: 2609.0.0
+.. versionadded:: 2610.0.0
 
     Search facets can be used to create subset of the metadata added to the source
     of truth (databases or intake catalogues). Sometimes it might be necessary to

@@ -168,7 +168,7 @@ and **MongoDB** (see :doc:`chapter3-api/index`).
 Remove entries from the source of truth
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. versionadded:: 2609.0.0
+.. versionadded:: 2610.0.0
 
     Entries from the source of truth (catalogue or database) can be deleted
     with the ``remove`` sub-command.

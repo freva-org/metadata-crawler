@@ -24,7 +24,7 @@ from .api.metadata_stores import (
     IndexName,
 )
 from .api.stores.base import Facet
-from .connections import init_template
+from .connections import TemplateName, init_template
 from .data_collector import DataCollector
 from .logger import logger
 from .run import (
@@ -129,8 +129,11 @@ def index(
         The index store where the metadata is indexed.
     metadata_stores:
         Uri to the metadata store(s).
-        .. versionchanged:: 2609.0.0
+
+        .. versionchanged:: 2610.0.0
+
            This parameter accepts a metadata crawler config item.
+
     batch_size:
         If the index system supports batch-sizes, the size of the batches.
     verbosity:
@@ -240,7 +243,7 @@ def remove(
 ) -> int:
     """Remove metadata entries from the source of truth.
 
-    .. versionadded:: 2609.0.0
+    .. versionadded:: 2610.0.0
 
         This function deletes entries by facet from the source of truth for
         example the database or intake catalogue that is used to put metadata
@@ -252,8 +255,11 @@ def remove(
     store:
         Path or url of the source of truth where the collected metadata will be
         stored.
-        .. versionchanged:: 2609.0.0
+
+        .. versionchanged:: 2610.0.0
+
            This parameter accepts a metadata crawler config item.
+
     storage_options:
         Set additional storage options for adding metadata to the metadata store
     facets:
@@ -266,9 +272,6 @@ def remove(
         Add a suffix to the log file output.
     dry_run:
         Do not delete the data, only print would would happen.
-    config:
-        .. versionchanged:: 2609.0.0
-           Merged metadata crawler config.
 
     Returns
     ^^^^^^^
@@ -342,8 +345,11 @@ def add(
     store:
         Path to or url of the source of truth where the collected metadata will be
         stored.
-        .. versionchanged:: 2609.0.0
+
+        .. versionchanged:: 2610.0.0
+
            This parameter accepts a metadata crawler config item.
+
     data_ojbect:
         Instead of defining datasets that are to be crawled you can crawl
         data based on their directories. The directories must be a root dirs
@@ -471,11 +477,34 @@ def add(
     )
 
 
-def init_config(force: bool = False, **_: Any) -> None:
-    """Create the connections and secrets templates."""
-    for name in ("connections", "secrets"):
+def init_config(
+    force: bool = False,
+    store_path: Optional[Union[str, Path]] = None,
+    secrets_path: Optional[Union[str, Path]] = None,
+    **_: Any,
+) -> None:
+    """Create the connections and secrets templates.
+
+    Parameters
+    ^^^^^^^^^^
+    force:
+        Replace existing files.
+    store_path:
+        Where to write the connections file, default: ``MDC_CONFIG_PATH`` or
+        ``connections.toml`` in the user config directory.
+    secrets_path:
+        Where to write the secrets file, default: ``MDC_SECRETS_PATH`` or
+        ``secrets.toml`` in the user config directory.
+    """
+    targets: Dict[TemplateName, Optional[Union[str, Path]]] = {
+        "connections": store_path,
+        "secrets": secrets_path,
+    }
+    for name, target in targets.items():
         try:
-            path = init_template(name, force=force)
+            path = init_template(
+                name, Path(target).expanduser() if target else None, force=force
+            )
         except FileExistsError as error:
             print(f"Skipped: {error}")
         else:

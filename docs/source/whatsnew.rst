@@ -22,9 +22,6 @@ v2610.0.0
 * Fix ``-v``, ``--log-suffix`` and the new options being ignored when given
   before the sub-command.
 * Fix ``mongodb+srv://`` URLs being rewritten to ``mongodb://``.
-
-v2609.0.0
----------
 * Enable deleting subsets of metadata from the source of truth.
 
 v2608.2.0

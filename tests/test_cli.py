@@ -18,15 +18,14 @@ from typing import (
     cast,
 )
 
-import pytest
-from pytest_mock import MockerFixture
-
 import metadata_crawler.cli as mc_cli
+import pytest
 from metadata_crawler.api.stores.base import BaseConnection
 from metadata_crawler.api.stores.jsonlines import IntakeConnection
 from metadata_crawler.api.stores.mongodb import MongoConnection
 from metadata_crawler.api.stores.postgresql import PostgresConnection
 from metadata_crawler.connections import ConfigFiles
+from pytest_mock import MockerFixture
 
 # -----------------------------
 # Helpers / fakes for patching
@@ -924,6 +923,22 @@ class TestInitConfigCommand:
         assert (tmp_path / "elsewhere.toml").is_file()
         assert not (config_home / "secrets.toml").exists()
 
+    @pytest.mark.parametrize("before", [True, False])
+    def test_options_choose_the_targets(
+        self, config_home: Path, tmp_path: Path, before: bool
+    ) -> None:
+        options = [
+            "--mdc-config",
+            str(tmp_path / "c.toml"),
+            "--mdc-secrets",
+            str(tmp_path / "s.toml"),
+        ]
+        argv = [*options, "init-config"] if before else ["init-config", *options]
+        mc_cli.cli(argv)
+        assert (tmp_path / "c.toml").is_file()
+        assert stat.S_IMODE((tmp_path / "s.toml").stat().st_mode) == 0o600
+        assert not config_home.exists() or not any(config_home.iterdir())
+
 
 def test_connections_pass_through_unchanged(api: Dict[str, ApiRecorder]) -> None:
     """Callers of _run may already hand in resolved connections."""
@@ -940,3 +955,31 @@ def test_default_config_options(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(mc_cli, "load_plugins", lambda ep: {})
     args = mc_cli.ArgParse().parse_args(["glance", "prod"])
     assert args.mdc_config is None and args.mdc_secrets is None
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--mdc-config", "/c.toml", "--mdc-secrets", "/s.toml", "-vv", "glance", "x"],
+        ["glance", "x", "--mdc-config", "/c.toml", "--mdc-secrets", "/s.toml", "-vv"],
+        [
+            "--mdc-config",
+            "/c.toml",
+            "-v",
+            "glance",
+            "x",
+            "--mdc-secrets",
+            "/s.toml",
+            "-v",
+        ],
+    ],
+)
+def test_general_options_before_and_after_the_sub_command(
+    monkeypatch: pytest.MonkeyPatch, argv: List[str]
+) -> None:
+    """A sub command must not reset options given before it."""
+    monkeypatch.setattr(mc_cli, "load_plugins", lambda ep: {})
+    args = mc_cli.ArgParse().parse_args(argv)
+    assert args.mdc_config == Path("/c.toml")
+    assert args.mdc_secrets == Path("/s.toml")
+    assert args.verbose in (1, 2)

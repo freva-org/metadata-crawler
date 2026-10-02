@@ -464,31 +464,48 @@ class ArgParse:
         parser.set_defaults(apply_func=add)
 
     def _add_general_config_to_parser(self, parser: argparse.ArgumentParser) -> None:
-        """Add the most common arguments to a given parser."""
+        """Add the most common arguments to a given parser.
+
+        The options are accepted before and after the sub command. Only the
+        main parser has defaults: argparse copies every attribute of a sub
+        parser's namespace over the main one, so a default there would replace
+        a value given before the sub command.
+        """
+        main = parser is self.parser
+
+        def default(value: Any) -> Any:
+            return value if main else argparse.SUPPRESS
+
         parser.add_argument(
             "-v",
             "--verbose",
             action="count",
-            default=self.verbose,
+            default=default(self.verbose),
             help="Increase the verbosity level.",
         )
         parser.add_argument(
             "--log-suffix",
             type=str,
             help="Add a suffix to the log file output.",
-            default=None,
+            default=default(None),
         )
         parser.add_argument(
             "--mdc-config",
             type=Path,
-            help="Path to the metadata-crawler config file.",
-            default=os.getenv("MDC_CONFIG_PATH"),
+            help=(
+                "Path to the connections file "
+                "(default: MDC_CONFIG_PATH or the user config directory)."
+            ),
+            default=default(os.getenv("MDC_CONFIG_PATH")),
         )
         parser.add_argument(
             "--mdc-secrets",
             type=Path,
-            help="Path to the metadata-crawler secrets file.",
-            default=os.getenv("MDC_SECRETS_PATH"),
+            help=(
+                "Path to the secrets file "
+                "(default: MDC_SECRETS_PATH or the user config directory)."
+            ),
+            default=default(os.getenv("MDC_SECRETS_PATH")),
         )
 
     def _add_remove(self) -> None:
@@ -786,7 +803,10 @@ def _run(
     )
     try:
         with ExitStack() as stack:
-            if _needs_config(kwargs):
+            if parser.apply_func is init_config:
+                # Here the options say where to write the templates.
+                kwargs.update(store_path=mdc_config, secrets_path=mdc_secrets)
+            elif _needs_config(kwargs):
                 cfg = stack.enter_context(
                     read_configfiles(store_path=mdc_config, secrets_path=mdc_secrets)
                 )

@@ -127,7 +127,7 @@ table or collection name prefix (defaults to ``metadata``).
 Removing metadata from a source of truth
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. versionadded:: 2609.0.0
+.. versionadded:: 2610.0.0
 
     Search facets can be used to create subset of the metadata added to the source
     of truth (databases or intake catalogues). Sometimes it might be necessary to

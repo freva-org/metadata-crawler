@@ -93,4 +93,9 @@ def remove(
     dry_run: bool = False,
     facets: Optional[Sequence[Facet]] = None,
 ) -> int: ...
-def init_config(force: bool = False, **_: Any) -> None: ...
+def init_config(
+    force: bool = False,
+    store_path: Optional[Union[str, Path]] = None,
+    secrets_path: Optional[Union[str, Path]] = None,
+    **_: Any,
+) -> None: ...
