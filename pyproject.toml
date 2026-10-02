@@ -102,6 +102,8 @@ tests = [
     "pre-commit",
     "toml",
     "pyrage",
+    "bcrypt",
+    "cryptography",
 ]
 
 [project.urls]
