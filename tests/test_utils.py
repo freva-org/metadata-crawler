@@ -126,6 +126,4 @@ def test_convert_str_to_timestamp(time_str, alternative, expected):
 
 def test_custom_alternative_used_on_failure():
     alt = "1999-12-31"
-    assert convert_str_to_timestamp("nonsense", alt) == datetime.fromisoformat(
-        alt
-    )
+    assert convert_str_to_timestamp("nonsense", alt) == datetime.fromisoformat(alt)

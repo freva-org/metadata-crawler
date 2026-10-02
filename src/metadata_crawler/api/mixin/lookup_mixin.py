@@ -5,8 +5,8 @@ import os
 from types import MappingProxyType
 from typing import Any, Dict, Mapping, Tuple
 
-from appdirs import user_cache_dir
 from diskcache import Cache
+from platformdirs import user_cache_dir
 
 from .lookup_tables import cmor_lookup as _NESTED
 
@@ -38,9 +38,7 @@ _dir = os.getenv("MDC_LOOKUP_CACHE_DIR") or os.path.join(
     user_cache_dir("metadata-crawler", "freva"), "lookup"
 )
 os.makedirs(_dir, exist_ok=True)
-_DC = Cache(
-    _dir, size_limit=2 * 1024**3, eviction="least-recently-used", cull_limit=10
-)
+_DC = Cache(_dir, size_limit=2 * 1024**3, eviction="least-recently-used", cull_limit=10)
 atexit.register(_DC.close)
 
 
@@ -68,9 +66,7 @@ class LookupMixin:
         """Get a metadata attribute from a datastore object."""
         raise NotImplementedError  # pragma: no cover
 
-    def lookup(
-        self, path: str, attribute: str, *tree: str, **read_kws: Any
-    ) -> Any:
+    def lookup(self, path: str, attribute: str, *tree: str, **read_kws: Any) -> Any:
         """Get metadata from a lookup table.
 
         This function will read metadata from a pre-defined cache table and if

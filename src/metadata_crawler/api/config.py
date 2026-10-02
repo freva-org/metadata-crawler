@@ -65,6 +65,17 @@ class BaseType(str, Enum):
     float = "float"
     timestamp = "timestamp"
 
+    @property
+    def duckdb(self) -> str:
+        """Corresponding DuckDB column type."""
+        _types = {
+            "string": "VARCHAR",
+            "integer": "BIGINT",
+            "float": "DOUBLE",
+            "timestamp": "TIMESTAMP",
+        }
+        return _types[self]
+
 
 class Types(str, Enum):
     """Types supported by the config."""

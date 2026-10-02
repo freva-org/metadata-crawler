@@ -6,9 +6,11 @@ import abc
 import json
 import multiprocessing as mp
 import os
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from pathlib import Path
 from types import NoneType
 from typing import (
     Annotated,
@@ -20,6 +22,7 @@ from typing import (
     Literal,
     NamedTuple,
     Optional,
+    Sequence,
     Set,
     Tuple,
     TypeAlias,
@@ -33,17 +36,44 @@ from typing_extensions import TypedDict
 
 from ...logger import logger
 from ...utils import Counter, SimpleQueueLike
-from ..config import SchemaField
+from ..config import BaseType, SchemaField
 
 BATCH_SECS_THRESHOLD = 20
+_GLOB_CHARS = frozenset("*?")
 
 MetadataRecord: TypeAlias = Dict[str, Any]
 """A single metadata record: key -> value of heterogeneous types."""
+
+FacetValue: TypeAlias = Union[str, int, float]
+Facet: TypeAlias = Tuple[str, FacetValue]
+
+UNFILTERABLE_TYPES = frozenset({"bbox", "daterange", "timestamp"})
 
 BATCH_ITEM: TypeAlias = List[Tuple[str, MetadataRecord]]
 WriterQueueType: TypeAlias = SimpleQueueLike[Union[int, BATCH_ITEM]]
 StorageOptions: TypeAlias = Dict[str, Any]
 CatalogueBackendType: TypeAlias = Literal["mongodb", "postgresql", "intake"]
+
+
+def glob_to_regex(glob: str) -> str:
+    """Anchored regex for a glob; only ``*`` and ``?`` are wildcards."""
+    esc = re.escape(glob).replace(r"\*", ".*").replace(r"\?", ".")
+    return f"^{esc}$"
+
+
+def glob_to_like(glob: str) -> str:
+    r"""Construct SQL ``LIKE`` pattern, escaping ``%``, ``_`` and ``\\``."""
+    out = []
+    for char in glob:
+        if char == "*":
+            out.append("%")
+        elif char == "?":
+            out.append("_")
+        elif char in "%_\\":
+            out.append("\\" + char)
+        else:
+            out.append(char)
+    return "".join(out)
 
 
 class ItemsDict(TypedDict):
@@ -136,13 +166,13 @@ class IndexName(NamedTuple):
     all: str = "files"
 
 
-class IndexStore:
+class IndexStore(abc.ABC):
     """Base class for all metadata stores.
 
-    Subclasses must implement :py:meth:`read`, :py:meth:`get_args` and
-    the :py:attr:`proc` property.  Filesystem-backed stores can rely on the
-    default :py:meth:`_init_storage`; database-backed stores should override
-    it to set up their own connection state.
+    Subclasses must implement :py:meth:`_read` and the :py:attr:`proc` property.
+    Filesystem-backed stores can rely on the default :py:meth:`_init_storage`;
+    database-backed stores should override it to set up their own connection
+    state.
     """
 
     suffix: ClassVar[str] = ""
@@ -163,7 +193,7 @@ class IndexStore:
         index_name: IndexName,
         schema: Dict[str, SchemaField],
         batch_size: int = 25_000,
-        mode: Literal["r", "w"] = "r",
+        mode: Literal["r", "w", "a"] = "r",
         storage_options: Optional[StorageOptions] = None,
         shadow: Optional[Union[str, List[str]]] = None,
         **kwargs: Any,
@@ -179,7 +209,7 @@ class IndexStore:
         self.schema: Dict[str, SchemaField] = schema
         self.batch_size: int = batch_size
         self.index_names: Tuple[str, str] = (index_name.latest, index_name.all)
-        self.mode: Literal["r", "w"] = mode
+        self.mode: Literal["r", "w", "a"] = mode
         self._rows_since_flush: int = 0
         self._last_flush: float = time.time()
         self._paths: List[Stream] = []
@@ -253,14 +283,76 @@ class IndexStore:
     def sweep(self, epoch: float) -> None:
         """Delete all records whose epoch differs from *epoch*."""
 
-    # ------------------------------------------------------------------
-    # Abstract interface
-    # ------------------------------------------------------------------
+    def sanitize_facets(self, facets: Sequence[Facet]) -> Dict[str, List[FacetValue]]:
+        """Sanitize the facets."""
+        grouped: Dict[str, List[FacetValue]] = {}
 
-    @abc.abstractmethod
+        for key, values in facets:
+            key = key.lower()
+            v = values.lower() if isinstance(values, str) else values
+            field = self.schema.get(key)
+            if field is None:
+                logger.warning("Facet %s not in in metadata schema", key)
+            elif (
+                field.type in UNFILTERABLE_TYPES
+                or field.base_type == BaseType.timestamp
+            ):
+                logger.warning("Ignoring invalid facet %s of type %s", key, field.type)
+            else:
+                grouped.setdefault(key, []).append(v)
+        return grouped
+
+    def split_facet_values(
+        self, key: str, values: List[FacetValue]
+    ) -> Tuple[List[FacetValue], List[str]]:
+        """Split facet values into typed exact values and glob patterns."""
+        field = self.schema[key]
+        exact: List[FacetValue] = []
+        globs: List[str] = []
+        for value in values:
+            if field.base_type == BaseType.string:
+                text = str(value)
+                (globs if _GLOB_CHARS & set(text) else exact).append(text)
+                continue
+            try:
+                exact.append(
+                    int(value) if field.base_type == BaseType.integer else float(value)
+                )
+            except (TypeError, ValueError):
+                logger.warning("Ignoring invalid value %r for facet %s", value, key)
+        return exact, globs
+
+    async def remove(self, *facets: Facet, dry_run: bool = False) -> int:
+        """Delete items from a meta data store.
+
+        Parameters
+        ^^^^^^^^^^
+        index_name:
+            The name of the index_name.
+        facets:
+            The search facets that need to match for the removal.
+        dry_run:
+            Do not delete data from the store.
+
+        Returns
+        ^^^^^^^
+        int:
+            Number of removed object for this index.
+        """
+        if self.mode != "r":
+            raise RuntimeError("Cannot remove entries from a store opened for writing.")
+        groups = self.sanitize_facets(facets)
+        if not facets or not groups:
+            logger.warning("No facets given, nothing to remove.")
+            return 0
+
+        return await self._remove(groups, dry_run)
+
     async def read(
         self,
         index_name: str,
+        *facets: Facet,
+        parse_timestamps: bool = True,
     ) -> AsyncIterator[List[MetadataRecord]]:
         """Yield batches of metadata records from a specific table.
 
@@ -268,6 +360,46 @@ class IndexStore:
         ^^^^^^^^^^
         index_name:
             The name of the index_name.
+        parse_timestamps:
+            Parse timestamps to datetimes
+
+        Yields
+        ^^^^^^
+        List[MetadataRecord]:
+            Deserialised metadata records.
+        """
+        groups = self.sanitize_facets(facets)
+        if facets and not groups:
+            raise ValueError("None of the given facets is valid.")
+        async for record in self._read(
+            index_name,
+            parse_timestamps=parse_timestamps,
+        ):
+            yield record
+
+    def get_args(self, index_name: str) -> Dict[str, Any]:
+        """Define the intake arguments."""
+        return {}
+
+    # ------------------------------------------------------------------
+    # Abstract interface
+    # ------------------------------------------------------------------
+
+    @abc.abstractmethod
+    async def _read(
+        self,
+        index_name: str,
+        *,
+        parse_timestamps: bool = True,
+    ) -> AsyncIterator[List[MetadataRecord]]:
+        """Yield batches of metadata records from a specific table.
+
+        Parameters
+        ^^^^^^^^^^
+        index_name:
+            The name of the index_name.
+        parse_timestamps:
+            Parse timestamps to datetimes
 
         Yields
         ^^^^^^
@@ -277,8 +409,8 @@ class IndexStore:
         yield [{}]  # pragma: no cover
 
     @abc.abstractmethod
-    def get_args(self, index_name: str) -> Dict[str, Any]:
-        """Define the intake arguments."""
+    async def _remove(self, grouped: Dict[str, List[FacetValue]], dry_run: bool) -> int:
+        """Apply Backend-specific removal of entries matching *grouped* facets."""
         ...  # pragma: no cover
 
     @property
@@ -341,6 +473,17 @@ class IndexStore:
         raise NotImplementedError(
             f"{cls.__name__} does not support internal catalogue metadata storage."
         )
+
+    @staticmethod
+    def normalise_uris(
+        uri: Optional[Union[str, Path, Sequence[Union[str, Path]]]],
+    ) -> List[str]:
+        """Coerce the ``uri`` argument into a list of non-empty store uris."""
+        if uri is None:
+            return []
+        if isinstance(uri, (str, Path)):
+            uri = [uri]
+        return [str(_uri) for _uri in uri if _uri is not None and str(_uri)]
 
 
 class BackendWriter:

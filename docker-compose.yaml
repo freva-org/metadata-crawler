@@ -30,15 +30,13 @@ services:
         condition: service_healthy
     environment:
       PGPASSWORD: secret
-    command: >
-      sh -c '
-        psql
-        -h postgresdb
-        -U metadata
-        -d metadata
-        -v ON_ERROR_STOP=1
-        -c "CREATE SCHEMA IF NOT EXISTS metadata_crawler AUTHORIZATION metadata;"
-      '
+    entrypoint: ["psql"]
+    command:
+      - --host=postgresdb
+      - --username=metadata
+      - --dbname=metadata
+      - --set=ON_ERROR_STOP=1
+      - --command=CREATE SCHEMA IF NOT EXISTS metadata_crawler AUTHORIZATION metadata;
     restart: "no"
 
   mongodb:
@@ -56,7 +54,7 @@ services:
   minio:
     networks:
       - freva-rest
-    image: quay.io/minio/minio
+    image: docker.io/pgsty/minio:latest
     hostname: minio
     environment:
        MINIO_ROOT_USER: minioadmin
@@ -74,7 +72,7 @@ services:
   setup-minio:
     networks:
       - freva-rest
-    image: quay.io/minio/mc
+    image: docker.io/pgsty/mc
     environment:
        MINIO_ROOT_USER: minioadmin
        MINIO_ROOT_PASSWORD: minioadmin

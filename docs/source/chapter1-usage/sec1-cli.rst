@@ -4,7 +4,8 @@ Command‑line interface
 The software installs a console entry point named
 ``metadata-crawler`` or ``mdc`` that exposes the high‑level subcommands:
 
-* ``add``  – Collect metadata into a temporary catalog.
+* ``add``  – Collect metadata into a permanent source of truth.
+* ``remove`` - Remove a subset of the metadata from the source of truth.
 * ``config`` – Display general configuration
 * ``glance`` – Get an overview over the crawled metadata in a metadata store.
 * ``solr``   - Index and delete metadata to/from Apache solr.
@@ -97,6 +98,31 @@ table or collection name prefix (defaults to ``metadata``).
 
    Database backends require optional dependencies:
    ``pymongo`` for MongoDB, ``sqlalchemy`` and ``psycopg`` for PostgreSQL.
+
+
+Removing metadata from a source of truth
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. versionadded:: 2609.0.0
+
+    Search facets can be used to create subset of the metadata added to the source
+    of truth (databases or intake catalogues). Sometimes it might be necessary to
+    delete certain data from source of truth. To select datasets that should be
+    deleted from an intake catalogue or database the ``remove`` sub command can
+    be used.
+
+
+.. code-block:: console
+
+   export MDC_STORAGE_OPTIONS="username:metadata,password:secret"
+   mdc remove mongodb://localhost:27017 -f variable tas -f time_frequency 1hr -f project cmip6
+
+To select the subsets the ``--facet/-f`` flags can be used. One facet has to have
+two entries representing the facet *key* and the corresponding target *value*.
+Multiple facet *keys* (e.g variable, time_frequency ...) will be combined using
+logical OR while multiple facet values are combined with logical AND.
+
+The function works for databases and intake catalogues alike.
 
 
 Indexing

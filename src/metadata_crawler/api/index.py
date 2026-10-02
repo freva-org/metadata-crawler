@@ -65,7 +65,7 @@ class BaseIndex:
     ) -> None:
         self._stores: List[IndexStore] = []
         self.progress = progress or IndexProgress(total=-1)
-        for _uri in self._normalise_uris(uri):
+        for _uri in IndexStore.normalise_uris(uri):
             _reader = CatalogueReader(
                 store_url=_uri,
                 batch_size=batch_size,
@@ -73,17 +73,6 @@ class BaseIndex:
             )
             self._stores.append(_reader.store)
         self.__post_init__()
-
-    @staticmethod
-    def _normalise_uris(
-        uri: Optional[Union[str, Path, Sequence[Union[str, Path]]]],
-    ) -> List[str]:
-        """Coerce the ``uri`` argument into a list of non-empty store uris."""
-        if uri is None:
-            return []
-        if isinstance(uri, (str, Path)):
-            uri = [uri]
-        return [str(_uri) for _uri in uri if _uri is not None and str(_uri)]
 
     @property
     def _store(self) -> Optional[IndexStore]:

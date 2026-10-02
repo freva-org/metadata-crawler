@@ -243,7 +243,7 @@ class CatalogueWriter:
         **kwargs: Any,
     ) -> None:
         self.config = config
-        storage_options = storage_options or {}
+        self.storage_options = storage_options or {}
         _store_path = collection or table or data_store_prefix or "metadata"
         scheme, _, _ = _store_path.rpartition("://")
         self.silent = bool(int(os.getenv("MDC_SILENT", "0")))
@@ -257,7 +257,7 @@ class CatalogueWriter:
         batch_size_per_proc = int(batch_size / n_procs)
         if self.backend in ("intake",):
             batch_size_per_proc = max(batch_size_per_proc, 100)
-            self.fs, _ = IndexStore.get_fs(store_uri, **storage_options)
+            self.fs, _ = IndexStore.get_fs(store_uri, **self.storage_options)
             self.path = self.fs.unstrip_protocol(store_uri)
             self.prefix = _store_path
             if not scheme and not os.path.isabs(_store_path):
@@ -509,19 +509,22 @@ class CatalogueReader:
         backend: Optional[CatalogueBackendType] = None,
     ) -> None:
         backend = backend or self.backend_from_store_url(store_url)
-        store_url = str(store_url)
-        storage_options = storage_options or {}
-        meta = self.read_catalogue_metadata(store_url, backend, **storage_options)
+        self.store_url = str(store_url)
+        self.storage_options = self._catalogue_options = storage_options or {}
+        self.metadata = self.read_catalogue_metadata(
+            store_url, backend, **self.storage_options
+        )
         store_cls: Type[IndexStore] = CatalogueBackends[backend].value
         if store_cls.has_catalogue_storage is False:
-            store_cls = CatalogueBackends[meta["backend"]].value
-            store_path = meta["prefix"]
-            storage_options = meta.get("storage_options", {})
+            store_cls = CatalogueBackends[self.metadata["backend"]].value
+            store_path = self._resolve_prefix(self.metadata["prefix"], self.store_url)
+            self.storage_options = self.metadata.get("storage_options", {})
+            self._catalogue_options = self.storage_options.copy()
         else:
-            store_path = store_url
-        _schema_json = meta["schema"]
+            store_path = self.store_url
+        _schema_json = self.metadata["schema"]
         schema = {s["key"]: SchemaField(**s) for k, s in _schema_json.items()}
-        index_name = IndexName(**meta["index_names"])
+        index_name = IndexName(**self.metadata["index_names"])
 
         self.store = store_cls(
             store_path,
@@ -529,8 +532,21 @@ class CatalogueReader:
             schema,
             mode="r",
             batch_size=batch_size,
-            storage_options=storage_options,
+            storage_options=self.storage_options.copy(),
         )
+
+    @staticmethod
+    def _resolve_prefix(prefix: str, store_url: str) -> str:
+        """Resolve a relative data prefix against the catalogue location.
+
+        The writer stores the prefix as given but writes the data next to
+        the catalogue, so a relative prefix must not depend on the cwd.
+        """
+        if "://" in prefix or os.path.isabs(prefix):
+            return prefix
+        if "://" in store_url:
+            return f"{store_url.rpartition('/')[0]}/{prefix}"
+        return os.path.join(os.path.dirname(os.path.abspath(store_url)), prefix)
 
     @classmethod
     def read_catalogue_metadata(
@@ -596,3 +612,22 @@ class CatalogueReader:
         except (FileNotFoundError, NotImplementedError):
             pass
         return [path]
+
+    def update_total_objects(self, removed: int) -> None:
+        """Refresh the stored object count after entries were removed."""
+        meta = dict(self.metadata)
+        if self.store.has_catalogue_storage:
+            meta["total_objects"] = self.store.total_objects
+            self.store.write_catalogue_metadata(meta)
+        else:
+            meta["total_objects"] = max(0, int(meta.get("total_objects", 0)) - removed)
+            self._write_intake_metadata(meta)
+        self.metadata = meta
+
+    def _write_intake_metadata(self, meta: Dict[str, Any]) -> None:
+        fs, _ = self.store.get_fs(self.store_url, **self._catalogue_options)
+        with fs.open(self.store_url, "r", encoding="utf-8") as stream:
+            catalog = yaml.safe_load(stream)
+        catalog["metadata"] = meta
+        with fs.open(self.store_url, "w", encoding="utf-8") as stream:
+            yaml.safe_dump(catalog, stream, sort_keys=False, default_flow_style=False)

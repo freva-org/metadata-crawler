@@ -1,0 +1,48 @@
+# Test image for metadata-crawler with a selectable Python version.
+#
+# One image per Python version; the build context is only dev-env/:
+#
+#   podman build -f dev-env/Containerfile --build-arg PYTHON_VERSION=3.12 \
+#       -t mdc-test:py3.12 dev-env
+#
+# Run from the repository root while the compose services are up. The host
+# network makes the services reachable on localhost, as the tests expect:
+#
+#   podman run --rm --network host -v "$PWD:/src:ro,z" -v mdc-cache:/cache \
+#       mdc-test:py3.12 tox -e test
+#
+# The Debian based image is used on purpose: the tox envs install manylinux
+# wheels (pyarrow, h5py, psycopg, ...) that need a full glibc userland.
+FROM docker.io/mambaorg/micromamba:debian-slim
+
+ARG PYTHON_VERSION=3.14
+
+USER root
+# A C toolchain for linking the Rust extension. It comes from Debian rather
+# than conda-forge because tox does not pass conda's CC/linker variables on
+# to the package build, so cargo needs a plain `cc` on the PATH. git lets
+# the entrypoint copy only the files the repository knows about.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc git libc6-dev make \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /src /work /cache \
+    && chown "${MAMBA_USER}:${MAMBA_USER}" /work /cache \
+    && ln -s /cache/cargo "/home/${MAMBA_USER}/.cargo"
+COPY --chmod=755 container-entrypoint.sh /usr/local/bin/mdc-entrypoint
+
+ARG MAMBA_DOCKERFILE_ACTIVATE=1
+RUN micromamba install -y -n base -c conda-forge \
+        "python=${PYTHON_VERSION}" tox rust \
+    && micromamba clean --all --yes
+
+ENV PYTHON_VERSION=${PYTHON_VERSION} \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_CACHE_DIR=/cache/pip \
+    TOX_WORK_DIR=/cache/tox-py${PYTHON_VERSION}
+
+WORKDIR /work
+# _entrypoint.sh comes with the base image and activates the conda env.
+ENTRYPOINT ["/usr/local/bin/_entrypoint.sh", "/usr/local/bin/mdc-entrypoint"]
+CMD ["tox", "-e", "test"]
