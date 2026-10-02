@@ -18,8 +18,9 @@ Use ``--help`` on any command to see available options.  Below are
 some examples.
 
 Wherever a command expects a metadata store (``add``, ``remove``, ``glance``
-and ``<index system> index``) you can pass a path, a URL or the name of a
-connection defined in ``connections.toml``. Two options, accepted before or
+and ``<index system> index``) or the server of an index system (``--server``,
+``--url``) you can pass a path, a URL or the name of a connection defined in
+``connections.toml``. Two options, accepted before or
 after the sub-command, select other connection files:
 
 ``--mdc-config``
@@ -176,7 +177,13 @@ following example indexes a catalogue into the Solr cores ``latest`` and
        --server localhost:8983
 
 The stores to index can be paths, URLs, glob patterns or names of
-connections (``mdc solr index prod --server localhost:8983``).
+connections. ``--server`` (Solr) and ``--url`` (MongoDB) accept the name of a
+connection as well, which brings its credentials along (see
+:ref:`connections`):
+
+.. code-block:: console
+
+   mdc solr index prod --server solr-prod
 
 For MongoDB, supply the database URL and name:
 

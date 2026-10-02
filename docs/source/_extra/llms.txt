@@ -18,7 +18,7 @@ Install with `python -m pip install metadata-crawler` or `conda install -c conda
 - `mdc add STORE -c drs_config.toml [-ds DATASET ...] [-d PATH ...]` crawl datasets (`-ds/--data-set`, repeat the flag for several, wildcards allowed) or explicit paths (`-d/--data-object`) into a source of truth.
 - `mdc remove STORE -f KEY VALUE [-f KEY VALUE ...] [--dry-run]` delete entries from a source of truth. Same key: OR; different keys: AND. Keys and string values are lower-cased, values may contain `*` and `?`. Unknown keys and time facets are ignored; with no usable facet nothing is removed.
 - `mdc glance STORE [--json]` show the metadata (schema, counts, timestamp) of a source of truth.
-- `mdc solr index STORE ... --server HOST:PORT [--rotate --min-docs N --configset NAME]` and `mdc mongo index STORE ... --url URL --database DB [--rotate]` index one or more sources of truth (paths, URLs, globs or connection names). `--rotate` builds a fresh index and swaps it in atomically.
+- `mdc solr index STORE ... --server HOST:PORT|NAME [--rotate --min-docs N --configset NAME]` and `mdc mongo index STORE ... --url URL|NAME [--database DB] [--rotate]` index one or more sources of truth (paths, URLs, globs or connection names). `--server`/`--url` also take the name of a connection to the index system. `--rotate` builds a fresh index and swaps it in atomically.
 - `mdc solr delete ...` / `mdc mongo delete ... -f KEY VALUE` delete from a search index (wildcards supported).
 - `mdc config -c drs_config.toml [--json]` print the merged DRS configuration.
 - `mdc init-config [--force]` write commented templates of `connections.toml` (mode 0640) and `secrets.toml` (mode 0600).
@@ -31,7 +31,7 @@ Install with `python -m pip install metadata-crawler` or `conda install -c conda
 - `from metadata_crawler import add, remove, index, delete, glance_metadata, get_config, init_config`; async variants: `async_add`, `async_remove`, `async_index`, `async_delete`.
 - `add(*config_files, store=..., data_set=[...] | data_object=[...], storage_options={...}, batch_size=..., no_sweep=False)`. Note: `store` is keyword-only; positional arguments are DRS config files.
 - `remove(store, facets=[("variable", "tas"), ("project", "cmip6")], dry_run=False, storage_options=None) -> int` returns the number of removed (or, with `dry_run`, matching) entries.
-- `index("solr", store, ..., server="localhost:8983")`, `index("mongo", store, ..., url=..., database=...)`; `delete(index_system, facets=[...], **backend_options)`.
+- `index("solr", store, ..., server="localhost:8983")`, `index("mongo", store, ..., url=..., database=...)`; `delete(index_system, facets=[...], **backend_options)`. `server=`/`url=` also take a connection object (`server=config["solr-prod"]`).
 - Every `store` argument accepts a path, a URL or a connection object. Names are not resolved in Python; use the configuration explicitly:
 
 ```python
@@ -51,12 +51,12 @@ with read_configfiles() as config:                 # reads and decrypts once
 
 ## Connection files
 
-- `connections.toml`: one table per named store. Keys: `url` (required; `uri` and `path` are synonyms; relative paths are relative to the file), `backend` (optional), `secrets` (optional: name of the secrets table to use), `description`. Backend keys: intake takes s3fs options (`endpoint_url`, `anon`, ...); PostgreSQL takes `host`, `port` (5432), `database` (`metadata`), `db_schema` (`metadata_crawler`) and rejects unknown keys; MongoDB takes `host`, `port`, `database` (`metadata`) and turns every other key into a URI option (`tls`, `replicaSet`, `authSource` defaulting to `admin`).
+- `connections.toml`: one table per named store or index system. Keys: `url` (required; `uri` and `path` are synonyms; relative paths are relative to the file), `backend` (optional), `secrets` (optional: name of the secrets table to use), `description`. Backend keys: intake takes s3fs options (`endpoint_url`, `anon`, ...); PostgreSQL takes `host`, `port` (5432), `database` (`metadata`), `db_schema` (`metadata_crawler`) and rejects unknown keys; MongoDB takes `host`, `port`, `database` (`metadata`) and turns every other key into a URI option (`tls`, `replicaSet`, `authSource` defaulting to `admin`). Solr index systems need `backend = "solr"` and `url = "https://host:8983"`; in secrets.toml either `username` + `password` (HTTP Basic auth) or `token` (`Authorization: Bearer`); TLS options `ca_file` (PEM CA bundle, relative to connections.toml) and `verify_ssl` (default true). A MongoDB index system uses the same keys as a MongoDB catalogue; `--database` wins over its database.
 - `secrets.toml`: tables merged into the connection of the same name (or the one referring to them via `secrets = "table"`). Keys: `username`/`user`, `password`/`passwd`, S3 `key` + `secret` (together) and `token`. Must not be readable by group or others, or it is rejected. Values are masked in logs and never written into catalogue metadata.
 - Precedence per key: connections.toml < secrets.toml < `-s` options and `MDC_STORAGE_OPTIONS`.
 - File lookup: `--mdc-config` > `MDC_CONFIG_PATH` > `~/.config/metadata-crawler/connections.toml`; `--mdc-secrets` > `MDC_SECRETS_PATH` > `~/.config/metadata-crawler/secrets.toml`. `XDG_CONFIG_HOME` moves `~/.config`. `secrets.toml.age` next to the secrets path is preferred over the plaintext file. Explicitly given files must exist; missing default files count as empty.
 - Decryption: identity from `MDC_AGE_IDENTITY` (SSH private key or age key file), else `~/.ssh/id_ed25519`, `~/.ssh/id_rsa`; passphrase from `MDC_SECRETS_PASSPHRASE`, else a prompt on a terminal. Passphrase-protected SSH keys are not supported.
-- CLI name resolution: an argument is treated as a name only if it has no `scheme://` and is not an existing path; unknown names are passed through unchanged (so `mdc add new.yml` and `mdc glance localhost -cb mongodb` keep working). Names cover metadata stores only, not index server options (`--server`, `--url`) and not dataset `storage_options` in the DRS config (use Jinja2 templating with environment variables there).
+- CLI name resolution: an argument is treated as a name only if it has no `scheme://` and is not an existing path; unknown names are passed through unchanged (so `mdc add new.yml` and `mdc glance localhost -cb mongodb` keep working). Names cover metadata stores and the server option of index systems (`--server` for Solr, `--url` for MongoDB), but not dataset `storage_options` in the DRS config (use Jinja2 templating with environment variables there). Explicit options win over connection values; `-s` applies to the stores, not to the index system.
 
 ## Environment variables
 
@@ -88,9 +88,9 @@ with read_configfiles() as config:                 # reads and decrypts once
 
 ## Extending
 
-- [API reference](https://metadata-crawler.readthedocs.io/en/latest/chapter3-api/index.html): plugin entry points (`metadata_crawler.storage_backends`, `metadata_crawler.index_backends`)
+- [API reference](https://metadata-crawler.readthedocs.io/en/latest/chapter3-api/index.html): plugin entry points (`metadata_crawler.storage` for storage backends, `metadata_crawler.ingester` for index systems)
 - [Storage backends](https://metadata-crawler.readthedocs.io/en/latest/chapter3-api/sec1-storage-backends.html): implementing a `PathTemplate` for a new file system
-- [Index backends](https://metadata-crawler.readthedocs.io/en/latest/chapter3-api/sec2-index-backends.html): implementing a new search index
+- [Index backends](https://metadata-crawler.readthedocs.io/en/latest/chapter3-api/sec2-index-backends.html): implementing a new index system (`BaseIndex`), including named connections (`connection = YourConnection`, `cli_parameter(..., connection=True)`, `self.target`)
 
 ## Optional
 

@@ -22,13 +22,14 @@ can describe each store once and refer to it by name:
    mdc glance prod
    mdc add prod -c drs_config.toml -ds cmip6-fs
    mdc remove prod -f variable pr --dry-run
-   mdc solr index prod waterpark --server localhost:8983
+   mdc solr index prod waterpark --server solr-prod
 
 The configuration lives in two files:
 
 ``connections.toml``
-    Where the stores are and how to reach them: URLs, hosts, database schemas,
-    S3 endpoints. Nothing secret, so it can be shared with your team.
+    Where the stores and index systems are and how to reach them: URLs,
+    hosts, database schemas, S3 endpoints. Nothing secret, so it can be
+    shared with your team.
 ``secrets.toml``
     Usernames, passwords, keys and tokens. Readable only by you, and
     optionally encrypted.
@@ -237,27 +238,98 @@ The files are looked up in this order:
 A file given explicitly must exist; a missing default file simply counts as
 empty. ``XDG_CONFIG_HOME`` moves ``~/.config``.
 
+Index systems
+^^^^^^^^^^^^^
+
+.. versionadded:: 2610.0.0
+
+The server of an index system can be a named connection, too. The option
+that says where the index system is accepts a name as well as an address:
+
+.. code-block:: console
+
+   mdc solr index prod --server solr-prod
+   mdc solr delete --server solr-prod -f project cmip6
+   mdc mongo index prod --url mongo-search
+
+.. code-block:: toml
+
+   # connections.toml
+
+   [solr-prod]                    # Apache Solr
+   backend = "solr"
+   url = "https://solr.example.org:8983"
+
+   [mongo-search]                 # MongoDB as index system
+   url = "mongodb://mongo.example.org:27017/search"
+
+.. code-block:: toml
+
+   # secrets.toml
+
+   [solr-prod]
+   username = "indexer"
+   password = "change-me"     # or: token = "..."
+
+   [mongo-search]
+   username = "indexer"
+   password = "change-me"
+
+``solr`` (``--server``)
+    ``backend = "solr"`` is required: a Solr URL is a plain ``http(s)://``
+    URL, which on its own means an intake catalogue.
+
+    .. list-table::
+       :widths: 22 78
+
+       * - ``url``
+         - ``http(s)://host:port``; a trailing ``/solr`` is optional.
+       * - ``username``, ``password``
+         - In ``secrets.toml``. Sent with HTTP Basic auth (Solr's
+           ``BasicAuthPlugin``, or a proxy in front of Solr).
+       * - ``token``
+         - In ``secrets.toml``, instead of username and password. Sent as
+           ``Authorization: Bearer <token>`` (``JWTAuthPlugin``, or a proxy
+           that checks tokens).
+       * - ``ca_file``
+         - CA bundle (PEM) to verify the server certificate with, e.g. for an
+           internal CA. Relative to ``connections.toml``.
+       * - ``verify_ssl``
+         - ``true`` by default. ``false`` skips the certificate check; only for
+           testing, since the credentials then go to whoever answers.
+``mongodb`` (``--url``)
+    The same kind of connection as a MongoDB catalogue, with the same keys
+    (see `Defining connections`_). Its database is used unless
+    ``--database`` is given.
+
+Options you give on the command line win over the connection, e.g.
+``--database`` for MongoDB. The connection to the index system is separate
+from the stores being indexed: ``-s/--storage-option`` still applies to the
+stores, not to the index system. Index system plugins can support named
+connections as well, see :ref:`add_backends`.
+
 How names are resolved on the command line
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Names are accepted wherever the CLI expects a store: the ``store`` argument of
 ``add``, ``remove`` and ``glance``, and the stores passed to
-``<index system> index``. An argument counts as a name if it has no
+``<index system> index``. They are also accepted by the option that names
+the server of an index system (``--server`` for Solr, ``--url`` for
+MongoDB). An argument counts as a name if it has no
 ``scheme://`` and does not point to an existing file or directory. Names that
 are not configured are passed on unchanged, so
 
-* ``mdc add new-catalogue.yml ...`` still creates a new catalogue, and
-* ``mdc glance localhost -cb mongodb`` still means the host ``localhost``.
+* ``mdc add new-catalogue.yml ...`` still creates a new catalogue,
+* ``mdc glance localhost -cb mongodb`` still means the host ``localhost``, and
+* ``mdc solr index prod --server localhost:8983`` still means that server.
 
 The configuration files are only read when at least one argument looks like
 a name, so plain paths and URLs work without any configuration.
 
 .. note::
 
-   Names refer to *metadata stores* only. The connection options of index
-   systems (``--server`` for Solr, ``--url`` for MongoDB) and the
-   ``storage_options`` of datasets in a ``drs_config.toml`` are not taken from
-   these files. Credentials for datasets can be read from environment
+   The ``storage_options`` of datasets in a ``drs_config.toml`` are not taken
+   from these files. Credentials for datasets can be read from environment
    variables with :ref:`templating <templates>`.
 
 Using connections in Python
@@ -281,6 +353,9 @@ accept a path or URL:
        mdc.add("drs_config.toml", store=prod, data_set=["cmip6-fs"])
        mdc.remove(scratch, facets=[("variable", "pr")], dry_run=True)
        print(mdc.glance_metadata(prod))
+
+       # index systems take their connection where the CLI takes the name
+       mdc.index("solr", prod, server=config["solr-prod"])
 
        # a configured name or an ad-hoc URL, with overrides
        other = config.resolve("prod", db_schema="metadata_crawler_staging")
@@ -308,6 +383,10 @@ Reference
 
 .. autoclass:: metadata_crawler.connections.ConfigFiles
    :members: get, resolve, close
+   :no-inherited-members:
+
+.. autoclass:: metadata_crawler.ingester.solr.SolrConnection
+   :members: store_uri, auth_headers, ssl
    :no-inherited-members:
 
 .. autoclass:: metadata_crawler.api.stores.base.BaseConnection

@@ -21,7 +21,7 @@ _ENV_VARS: Dict[TemplateName, str] = {
     "secrets": "MDC_SECRETS_PATH",
 }
 _MODES: Dict[TemplateName, int] = {"connections": 0o640, "secrets": 0o600}
-LOCATION_KEYS = ("uri", "url", "path")
+LOCATION_KEYS = ("uri", "url", "path", "ca_file")
 
 
 def default_path(name: TemplateName) -> Path:

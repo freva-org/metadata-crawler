@@ -17,13 +17,19 @@ class Parameter(BaseModel):
     """Help string that is going to be displayed."""
 
 
-def cli_parameter(*args: str, **kwargs: Any) -> Dict[str, Any]:
+def cli_parameter(*args: str, connection: bool = True, **kwargs: Any) -> Dict[str, Any]:
     """Construct a ``argparse.Namespace``.
 
     Parameters
     ^^^^^^^^^^
+
     *args:
         Any arguments passed to ``argparse.ArgumentParser().add_argument``
+    connection:
+        Enable using named connections define in the ``.toml`` config files.
+
+        .. versionadded:: 2610.0.0
+
     **kwargs:
         Any keyword arguments passed to ``argparse.ArgumentParser().add_arguent``
 
@@ -41,6 +47,7 @@ def cli_function(
 
     Parameters
     ^^^^^^^^^^
+
     help:
         Help string for this sub command.
     """

@@ -2,11 +2,13 @@
 # metadata-crawler connections
 # =============================================================================
 #
-# Named connections to catalogue stores. Wherever metadata-crawler expects a
-# store, a name from this file works as well as a URL or path:
+# Named connections to catalogue stores and index systems. Wherever
+# metadata-crawler expects a store, or the server of an index system, a name
+# from this file works as well as a URL or path:
 #
 #     mdc glance prod
 #     mdc remove prod -f variable pr --dry-run
+#     mdc solr index prod --server solr-prod
 #
 # and in Python:
 #
@@ -39,7 +41,8 @@
 #                  postgresql:// and postgres://        -> "postgresql"
 #                  mongodb:// and mongodb+srv://         -> "mongodb"
 #                  anything else (paths, s3://, ...)     -> "intake"
-#                Store plugins may add backends and schemes.
+#                Index systems need it where the URL is ambiguous, e.g.
+#                "solr" for an http(s):// URL. Plugins may add backends.
 #   secrets      optional. Take the credentials from this table of
 #                  secrets.toml instead of the one named like the connection.
 #   description  optional.
@@ -137,6 +140,46 @@
 # url = "mongodb://mongo.example.org:27017/metadata"
 # tls = true
 # replicaSet = "rs0"
+
+
+# -----------------------------------------------------------------------------
+# Apache Solr index
+# -----------------------------------------------------------------------------
+# Used with: mdc solr index ... --server solr-prod
+# A Solr URL is a plain http(s):// URL, so backend = "solr" is required.
+#
+# Authentication goes into secrets.toml, one of:
+#   username + password   HTTP Basic auth (Solr's BasicAuthPlugin or a proxy)
+#   token                 Authorization: Bearer (JWTAuthPlugin or a proxy)
+#
+# TLS:
+#   ca_file               CA bundle (PEM) for a server certificate from an
+#                         internal CA; relative to this file
+#   verify_ssl = false    skip the certificate check; for testing only, the
+#                         credentials then go to whoever answers
+
+# [solr-prod]
+# backend = "solr"
+# url = "https://solr.example.org:8983"
+
+# A Solr behind a token-checking proxy, certificate from an internal CA:
+
+# [solr-internal]
+# backend = "solr"
+# url = "https://solr.internal.example.org"
+# ca_file = "certs/internal-ca.pem"
+
+
+# -----------------------------------------------------------------------------
+# MongoDB index
+# -----------------------------------------------------------------------------
+# Used with: mdc mongo index ... --url mongo-search
+# The same kind of connection as a MongoDB catalogue, so the same keys apply.
+# Its database is used unless --database is given.
+
+# [mongo-search]
+# url = "mongodb://mongo.example.org:27017/search"
+# secrets = "mongo"
 
 
 # -----------------------------------------------------------------------------

@@ -167,12 +167,14 @@ class TestRegistry:
         loaded: List[str] = []
 
         class EntryPoint:
+            def __init__(self, group: str) -> None:
+                self.group = self.name = group
+
             def load(self) -> None:
-                loaded.append("plugin")
+                loaded.append(self.group)
 
         def entry_points(group: str) -> List[EntryPoint]:
-            assert group == base.PLUGIN_GROUP
-            return [EntryPoint()]
+            return [EntryPoint(group)]
 
         import importlib.metadata
 
@@ -180,7 +182,48 @@ class TestRegistry:
         monkeypatch.setattr(base, "_plugins_loaded", False)
         BaseConnection.registered()
         BaseConnection.registered()
-        assert loaded == ["plugin"]
+        assert loaded == [base.PLUGIN_GROUP, base.INGESTER_GROUP]
+
+    def test_broken_index_plugin_is_skipped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An index plugin with missing dependencies must not break the rest."""
+
+        class EntryPoint:
+            name = "broken"
+
+            def __init__(self, group: str) -> None:
+                self.group = group
+
+            def load(self) -> None:
+                if self.group == base.INGESTER_GROUP:
+                    raise ImportError("No module named 'nothing'")
+
+        import importlib.metadata
+
+        monkeypatch.setattr(
+            importlib.metadata, "entry_points", lambda group: [EntryPoint(group)]
+        )
+        monkeypatch.setattr(base, "_plugins_loaded", False)
+        assert "postgresql" in BaseConnection.registered()
+
+    def test_broken_store_plugin_is_an_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A store plugin is what the user asked for; don't hide its error."""
+
+        class EntryPoint:
+            def load(self) -> None:
+                raise ImportError("No module named 'nothing'")
+
+        import importlib.metadata
+
+        monkeypatch.setattr(
+            importlib.metadata, "entry_points", lambda group: [EntryPoint()]
+        )
+        monkeypatch.setattr(base, "_plugins_loaded", False)
+        with pytest.raises(ImportError):
+            BaseConnection.registered()
 
 
 # ---------------------------------------------------------------------------

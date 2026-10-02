@@ -201,6 +201,15 @@ async def async_call(
             )
             raise ValueError(msg) from None
         storage_options = kwargs.pop("storage_options", {})
+        # A connection for the option that says where the index system is
+        # (--server, --url, ...) goes to the instance as its target; the
+        # method then falls back to it for everything not given explicitly.
+        target: Optional[BaseConnection] = None
+        target_option = (
+            cls.target_option(method) if hasattr(cls, "target_option") else None
+        )
+        if target_option and isinstance(kwargs.get(target_option), BaseConnection):
+            target = kwargs.pop(target_option)
         progress.start()
         # NB: *all* store uris are handed to a single ingester instance. The
         # ingester is responsible for reading them as one stream. Calling the
@@ -208,11 +217,13 @@ async def async_call(
         # performs - for blue/green targets that means one create + rotate per
         # store, which both throws away all but the last store's data and
         # collides on the second rotation of a reused index suffix.
+        extra: Dict[str, Any] = {"target": target} if target is not None else {}
         async with cls(
             batch_size=batch_size,
             uri=list(uris or []) or None,
             storage_options=storage_options,
             progress=progress,
+            **extra,
         ) as obj:
             func = getattr(obj, method)
             await func(**kwargs)

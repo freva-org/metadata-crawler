@@ -74,8 +74,8 @@ def _is_store_name(value: object) -> bool:
     return "://" not in value and not os.path.exists(os.path.expanduser(value))
 
 
-def _needs_config(kwargs: Dict[str, Any]) -> bool:
-    for key in STORE_KEYS:
+def _needs_config(kwargs: Dict[str, Any], keys: Sequence[str] = STORE_KEYS) -> bool:
+    for key in keys:
         value = kwargs.get(key)
         values = value if isinstance(value, (list, tuple)) else [value]
         if any(_is_store_name(v) for v in values):
@@ -83,8 +83,10 @@ def _needs_config(kwargs: Dict[str, Any]) -> bool:
     return False
 
 
-def resolve_store_args(kwargs: Dict[str, Any], cfg: ConfigFiles) -> None:
-    """Replace store names by their connections, in place."""
+def resolve_store_args(
+    kwargs: Dict[str, Any], cfg: ConfigFiles, keys: Sequence[str] = STORE_KEYS
+) -> None:
+    """Replace store (or index target) names by their connections, in place."""
 
     def _one(value: Any) -> Any:
         # Anything that isn't a configured name stays as it is: a catalogue
@@ -93,7 +95,7 @@ def resolve_store_args(kwargs: Dict[str, Any], cfg: ConfigFiles) -> None:
             return cfg[value]
         return value
 
-    for key in STORE_KEYS:
+    for key in keys:
         value = kwargs.get(key)
         if value is None:
             continue
@@ -711,7 +713,16 @@ class ArgParse:
                     # if we found a cli_meta, wire it up
                     if cli_meta:
                         arg_names = cli_meta["args"]
-                        add_kwargs = {k: v for k, v in cli_meta.items() if k != "args"}
+                        add_kwargs = {
+                            k: v
+                            for k, v in cli_meta.items()
+                            if k not in ("args", "connection")
+                        }
+                        if cli_meta.get("connection") and getattr(
+                            cls, "connection", None
+                        ):
+                            # The option also takes a connection name.
+                            parser.set_defaults(target_option=param_name)
 
                         # preserve any explicit default
                         if (
@@ -767,6 +778,7 @@ class ArgParse:
                 "storage-option",
                 "storage_option",
                 "shadow",
+                "target_option",
             )
         }
         storage_option_pairs: List[Tuple[str, str]] = _get_storage_option_from_env() + (
@@ -801,16 +813,19 @@ def _run(
         )
         or []
     )
+    # The option of an index system that may name a connection (--server, ...)
+    target_option = getattr(parser, "target_option", None)
+    keys = STORE_KEYS + ((target_option,) if target_option else ())
     try:
         with ExitStack() as stack:
             if parser.apply_func is init_config:
                 # Here the options say where to write the templates.
                 kwargs.update(store_path=mdc_config, secrets_path=mdc_secrets)
-            elif _needs_config(kwargs):
+            elif _needs_config(kwargs, keys):
                 cfg = stack.enter_context(
                     read_configfiles(store_path=mdc_config, secrets_path=mdc_secrets)
                 )
-                resolve_store_args(kwargs, cfg)
+                resolve_store_args(kwargs, cfg, keys)
             parser.apply_func(*cfg_files, **kwargs)
     except Exception as error:
         exception_handler(error)

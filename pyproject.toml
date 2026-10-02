@@ -221,7 +221,7 @@ env_list = types, lint, docs
 [testenv]
 parallel_show_output = false
 [testenv:test]
-deps = -e .[tests]
+deps = -e .[tests,vault]
 
 commands =
     pytest -vv --cov=metadata_crawler --cov-report=html:coverage_report --junitxml report.xml --cov-report xml tests/

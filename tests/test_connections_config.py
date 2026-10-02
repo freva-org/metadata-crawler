@@ -25,6 +25,9 @@ from metadata_crawler.connections import (
 )
 from metadata_crawler.types import StoresConfig
 
+# Registers the solr connection model, as the ingester entry point does.
+import metadata_crawler.ingester.solr  # noqa: E402,F401  isort: skip
+
 WriteToml = Callable[..., Path]
 
 
@@ -461,8 +464,8 @@ class TestConfigFiles:
         assert cfg.get("y", PostgresConnection).host == "h"
 
     def test_unknown_backend(self) -> None:
-        with pytest.raises(ValueError, match="unknown backend 'solr'"):
-            ConfigFiles({"x": {"uri": "a", "backend": "solr"}})
+        with pytest.raises(ValueError, match="unknown backend 'elastic'"):
+            ConfigFiles({"x": {"uri": "a", "backend": "elastic"}})
 
     def test_unknown_name(self) -> None:
         cfg = ConfigFiles({"a": {"uri": "/a.yml"}, "b": {"uri": "/b.yml"}})
@@ -532,6 +535,10 @@ class TestTemplates:
         merge_secrets(conns, secrets)
         cfg = ConfigFiles(conns)
         assert set(cfg) == set(conns)
+        assert cfg["solr-prod"].backend == "solr"
+        assert cfg["solr-internal"].auth_headers()["Authorization"].startswith("Bearer")
+        assert cfg["solr-internal"].ca_file == str(tmp_path / "certs/internal-ca.pem")
+        assert cfg["mongo-search"].backend == "mongodb"
 
     @pytest.mark.parametrize("name", ["connections", "secrets"])
     def test_documented_environment_variables_exist(self, name: str) -> None:

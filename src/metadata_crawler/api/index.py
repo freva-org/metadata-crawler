@@ -8,6 +8,7 @@ from types import TracebackType
 from typing import (
     Any,
     AsyncIterator,
+    ClassVar,
     Dict,
     List,
     Optional,
@@ -17,6 +18,7 @@ from typing import (
     Type,
     Union,
     cast,
+    get_type_hints,
 )
 
 from ..logger import logger
@@ -24,6 +26,7 @@ from ..utils import Console, IndexProgress
 from .config import SchemaField
 from .metadata_stores import CatalogueReader
 from .stores import IndexStore
+from .stores.base import BaseConnection
 
 
 class BaseIndex:
@@ -50,10 +53,29 @@ class BaseIndex:
     progress:
         Optional rich progress object that should display the progress of the
         tasks.
+    target:
+        Connection to the index system, e.g. a named connection from
+        ``connections.toml``. It must be an instance of :attr:`connection`.
+        Options given explicitly to :meth:`index` or :meth:`delete` win over
+        the values of the target.
+
+        .. versionadded:: 2610.0.0
 
     Attributes
     ^^^^^^^^^^
     """
+
+    connection: ClassVar[Optional[Type[BaseConnection]]] = None
+    """The connection model of the index system, if it supports named targets.
+
+    Mark the option of :meth:`index` and :meth:`delete` that says where the
+    index system is (``--server``, ``--url``, ...) with
+    ``cli_parameter(..., connection=True)``. That option then also accepts
+    the name of a connection, which reaches the instance as :attr:`target`.
+    """
+
+    target: Optional[BaseConnection] = None
+    """The connection to the index system, if one was given."""
 
     def __init__(
         self,
@@ -61,8 +83,10 @@ class BaseIndex:
         batch_size: int = 2500,
         storage_options: Optional[Dict[str, Any]] = None,
         progress: Optional[IndexProgress] = None,
+        target: Optional[BaseConnection] = None,
         **kwargs: Any,
     ) -> None:
+        self.target = self._check_target(target)
         self._stores: List[IndexStore] = []
         self.progress = progress or IndexProgress(total=-1)
         for _uri in IndexStore.normalise_uris(uri):
@@ -73,6 +97,35 @@ class BaseIndex:
             )
             self._stores.append(_reader.store)
         self.__post_init__()
+
+    @classmethod
+    def _check_target(
+        cls, target: Optional[BaseConnection]
+    ) -> Optional[BaseConnection]:
+        """Make sure *target* is a connection this index system can use."""
+        if target is None:
+            return None
+        if cls.connection is None:
+            raise TypeError(f"{cls.__name__} doesn't support connection targets")
+        if not isinstance(target, cls.connection):
+            raise TypeError(
+                f"{cls.__name__} needs a {cls.connection.backend} connection, "
+                f"{target.name!r} is a {target.backend} connection"
+            )
+        return target
+
+    @classmethod
+    def target_option(cls, method: str) -> Optional[str]:
+        """Name of the option of *method* that accepts a connection, if any."""
+        func = getattr(cls, method, None)
+        if func is None or cls.connection is None:
+            return None
+        hints = get_type_hints(func, include_extras=True)
+        for name, hint in hints.items():
+            for extra in getattr(hint, "__metadata__", ()):
+                if isinstance(extra, dict) and extra.get("connection"):
+                    return name
+        return None
 
     @property
     def _store(self) -> Optional[IndexStore]:

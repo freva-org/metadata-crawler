@@ -60,6 +60,8 @@ CREDENTIAL_KEYS = frozenset(
 
 
 PLUGIN_GROUP = "metadata_crawler.stores"
+INGESTER_GROUP = "metadata_crawler.ingester"
+"""Index systems define the connection models of their targets."""
 _plugins_loaded = False
 
 BATCH_SECS_THRESHOLD = 20
@@ -278,7 +280,11 @@ class BaseConnection(pydantic.BaseModel, abc.ABC):
 
     @classmethod
     def _load_plugins(cls) -> None:
-        """Import store plugins once; importing them registers their models."""
+        """Import store and index plugins once; that registers their models.
+
+        An index plugin whose dependencies are missing is skipped, so that it
+        can't break reading the connections of everything else.
+        """
         global _plugins_loaded
         if _plugins_loaded:
             return
@@ -287,6 +293,11 @@ class BaseConnection(pydantic.BaseModel, abc.ABC):
 
         for entry_point in entry_points(group=PLUGIN_GROUP):
             entry_point.load()
+        for entry_point in entry_points(group=INGESTER_GROUP):
+            try:
+                entry_point.load()
+            except ImportError as error:
+                logger.debug("Skipping index plugin %s: %s", entry_point.name, error)
 
     @staticmethod
     def _reveal(value: Any) -> Any:
