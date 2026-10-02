@@ -30,7 +30,11 @@ class ConfigFiles:
 
     @staticmethod
     def _validate(name: str, entry: Mapping[str, Any]) -> BaseConnection:
-        url = entry.get("url") or entry.get("path") or entry.get("uri")
+        data = {k: v for k, v in entry.items() if k != "backend"}
+        # ``uri``, ``url`` and ``path`` are interchangeable in the config file,
+        # the models only know ``url``.
+        locations = [data.pop(key, None) for key in ("url", "uri", "path")]
+        url = next((loc for loc in locations if loc), None)
         if not url:
             raise ValueError(f"store {name!r} has no 'url/path/uri'")
         model = (
@@ -38,8 +42,7 @@ class ConfigFiles:
             if entry.get("backend")
             else BaseConnection.for_url(url=url)
         )
-        data = {k: v for k, v in entry.items() if k != "backend"}
-        return model.model_validate({"name": name, **data})
+        return model.model_validate({**data, "name": name, "url": url})
 
     def _check_open(self) -> None:
         if self._closed:

@@ -24,6 +24,7 @@ from .api.metadata_stores import (
     IndexName,
 )
 from .api.stores.base import Facet
+from .connections import init_template
 from .data_collector import DataCollector
 from .logger import logger
 from .run import (
@@ -33,9 +34,8 @@ from .run import (
     async_index,
     async_remove,
 )
-from .types import StoresInput, StoresSequence
+from .types import StoresInput
 from .utils.loop import get_async_model
-from .connections import init_template
 
 async_model = get_async_model()
 
@@ -49,6 +49,7 @@ __all__ = [
     "delete",
     "remove",
     "glance_metadata",
+    "init_config",
     "get_config",
     "async_index",
     "async_delete",

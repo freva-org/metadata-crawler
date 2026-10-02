@@ -5,15 +5,29 @@ The software installs a console entry point named
 ``metadata-crawler`` or ``mdc`` that exposes the high‑level subcommands:
 
 * ``add``  – Collect metadata into a permanent source of truth.
-* ``remove`` - Remove a subset of the metadata from the source of truth.
-* ``config`` – Display general configuration
+* ``remove`` – Remove a subset of the metadata from the source of truth.
+* ``config`` – Display the DRS configuration.
 * ``glance`` – Get an overview over the crawled metadata in a metadata store.
-* ``solr``   - Index and delete metadata to/from Apache solr.
-* ``mongo``  – Index and deleta metadata to/from MongoDB.
+* ``init-config`` – Create templates for named connections and secrets
+  (see :ref:`connections`).
+* ``solr``   – Index and delete metadata to/from Apache Solr.
+* ``mongo``  – Index and delete metadata to/from MongoDB.
 * ``walk-intake`` – Convenience module to traverse and check intake catalogues.
 
 Use ``--help`` on any command to see available options.  Below are
 some examples.
+
+Wherever a command expects a metadata store (``add``, ``remove``, ``glance``
+and ``<index system> index``) you can pass a path, a URL or the name of a
+connection defined in ``connections.toml``. Two options, accepted before or
+after the sub-command, select other connection files:
+
+``--mdc-config``
+    Path to the connections file (default: ``MDC_CONFIG_PATH`` or
+    ``~/.config/metadata-crawler/connections.toml``).
+``--mdc-secrets``
+    Path to the secrets file (default: ``MDC_SECRETS_PATH`` or
+    ``~/.config/metadata-crawler/secrets.toml``).
 
 Basic crawling
 ^^^^^^^^^^^^^^
@@ -26,9 +40,9 @@ files are supported since `v2511.0.0`):
    mdc add \
         /tmp/cat.yml \
        -c /path/to/drs_config-1.toml \
-       -c /path/to/drs_config-1.toml \
+       -c /path/to/drs_config-2.toml \
        --catalogue-backend jsonlines \
-       --threads 4 \
+       --n-procs 4 \
        --batch-size 100 \
        --data-object /path/to/data
 
@@ -40,8 +54,10 @@ your DRS configuration instead of explicit file paths
 
    metadata-crawler add \
        /tmp/catalog.yaml \
-       -c /path/to/drs_*.toml \
-       --data-set cmip6-fs obs-fs
+       -c '/path/to/drs_*.toml' \
+       --data-set cmip6-fs --data-set obs-fs
+
+Dataset names may contain wildcards, e.g. ``-ds 'cmip6-*'``.
 
 
 .. versionchanged:: 2511.0.0
@@ -91,6 +107,13 @@ history:
    export MDC_STORAGE_OPTIONS="username:metadata,password:secret"
    mdc add mongodb://localhost:27017 -c /path/to/drs_config.toml --data-object /path/to/data
 
+The most convenient way is a named connection with its credentials in
+``secrets.toml`` (see :ref:`connections`):
+
+.. code-block:: console
+
+   mdc add mongo -c /path/to/drs_config.toml --data-object /path/to/data
+
 The ``--table`` / ``--collection`` / ``--prefix`` flag controls the
 table or collection name prefix (defaults to ``metadata``).
 
@@ -98,6 +121,7 @@ table or collection name prefix (defaults to ``metadata``).
 
    Database backends require optional dependencies:
    ``pymongo`` for MongoDB, ``sqlalchemy`` and ``psycopg`` for PostgreSQL.
+   Encrypted secrets files need ``pyrage`` (``metadata-crawler[vault]``).
 
 
 Removing metadata from a source of truth
@@ -117,26 +141,42 @@ Removing metadata from a source of truth
    export MDC_STORAGE_OPTIONS="username:metadata,password:secret"
    mdc remove mongodb://localhost:27017 -f variable tas -f time_frequency 1hr -f project cmip6
 
-To select the subsets the ``--facet/-f`` flags can be used. One facet has to have
-two entries representing the facet *key* and the corresponding target *value*.
-Multiple facet *keys* (e.g variable, time_frequency ...) will be combined using
-logical OR while multiple facet values are combined with logical AND.
+   # count what would be removed, using a named connection
+   mdc remove prod -f variable tas -f variable pr --dry-run
 
-The function works for databases and intake catalogues alike.
+To select the subsets the ``-f/--facets`` flags can be used. Each flag takes
+two values, the facet *key* and the target *value*:
+
+* values given for the **same key** are combined with logical **OR**
+  (``-f variable tas -f variable pr``: tas or pr),
+* **different keys** are combined with logical **AND**
+  (``-f variable tas -f project cmip6``: tas in cmip6).
+
+Keys and string values are compared in lower case, and string values may
+contain the wildcards ``*`` and ``?``. Keys that are not part of the metadata
+schema, as well as time facets, are ignored with a warning. Without any
+usable facet nothing is removed. ``--dry-run`` only counts the matching
+entries.
+
+The command works for databases and intake catalogues alike.
 
 
 Indexing
 ^^^^^^^^
 
 Once a catalog has been generated you can index it into a backend.
-Apache Slor and MongoDB backends are supported out of the box.  The
-following example writes to a json.gz file and index named ``latest``:
+Apache Solr and MongoDB backends are supported out of the box.  The
+following example indexes a catalogue into the Solr cores ``latest`` and
+``files``:
 
 .. code-block:: console
 
    metadata-crawler solr index \
        /tmp/catalog.yml \
        --server localhost:8983
+
+The stores to index can be paths, URLs, glob patterns or names of
+connections (``mdc solr index prod --server localhost:8983``).
 
 For MongoDB, supply the database URL and name:
 

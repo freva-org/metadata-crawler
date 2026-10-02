@@ -34,10 +34,10 @@ from rich_argparse import ArgumentDefaultsRichHelpFormatter
 from metadata_crawler import (
     add,
     delete,
-    init_config,
     get_config,
     glance_metadata,
     index,
+    init_config,
     remove,
 )
 
@@ -68,7 +68,7 @@ STORE_KEYS = ("store", "metadata_stores")
 
 
 def _is_store_name(value: object) -> bool:
-    """A name has no scheme and doesn't point to an existing file or directory."""
+    """Define a store name."""
     if not isinstance(value, str) or not value:
         return False
     return "://" not in value and not os.path.exists(os.path.expanduser(value))
@@ -87,13 +87,11 @@ def resolve_store_args(kwargs: Dict[str, Any], cfg: ConfigFiles) -> None:
     """Replace store names by their connections, in place."""
 
     def _one(value: Any) -> Any:
-        if not _is_store_name(value):
-            return value
-        if value not in cfg:
-            raise ValueError(
-                f"{value!r} is neither an existing path, a URL nor a configured store"
-            )
-        return cfg[value]
+        # Anything that isn't a configured name stays as it is: a catalogue
+        # that ``add`` is about to create, or a bare database host.
+        if _is_store_name(value) and value in cfg:
+            return cfg[value]
+        return value
 
     for key in STORE_KEYS:
         value = kwargs.get(key)
@@ -177,7 +175,7 @@ def display_config(
 ) -> None:
     """Display the config file."""
     cfg = get_config(*config, preserve_comments=no_comments is False)
-    if json is False:
+    if not json:
         print(cfg.dumps())
     else:
         print(dumps(cfg.merged_doc, indent=3))

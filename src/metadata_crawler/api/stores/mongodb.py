@@ -147,9 +147,11 @@ def _sanitise_uri(uri: str, timeout_ms: int = 5000, **kwargs: Any) -> str:
     }
 
     uri = str(uri)
-    netloc, _, body = uri.rpartition("://")
-    netloc = netloc or "mongodb"
-    parsed = urlparse(f"{netloc}://{body}")
+    scheme, _, body = uri.rpartition("://")
+    scheme = scheme or "mongodb"
+    parsed = urlparse(f"{scheme}://{body}")
+    # mongodb+srv resolves hosts and ports through DNS, a port is an error
+    srv = scheme == "mongodb+srv"
 
     # Credentials -- kwargs override URI, URI is the fallback
     username = kwargs.get("username") or kwargs.get("user") or parsed.username
@@ -159,7 +161,7 @@ def _sanitise_uri(uri: str, timeout_ms: int = 5000, **kwargs: Any) -> str:
 
     # Netloc
     host = parsed.hostname or "localhost"
-    port = f":{parsed.port}" if parsed.port else f":{port}"
+    port = "" if srv else (f":{parsed.port}" if parsed.port else f":{port}")
     if username:
         creds = quote_plus(str(username))
         if password:
@@ -183,7 +185,7 @@ def _sanitise_uri(uri: str, timeout_ms: int = 5000, **kwargs: Any) -> str:
 
     result = urlunparse(
         ParseResult(
-            "mongodb",
+            scheme,
             netloc,
             path,
             parsed.params,

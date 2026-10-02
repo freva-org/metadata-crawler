@@ -85,10 +85,18 @@ Keys
   ``aws_secret_access_key``, ``region`` and ``endpoint_url``.
   For Swift use keys beginning with ``os_`` (see the Swift
   example).  Additional fields can be added for custom backends.
+
+  .. note::
+
+     Dataset credentials are not read from the ``secrets.toml`` used for
+     :ref:`named connections <connections>`, which only covers metadata
+     stores. To keep them out of the configuration file, read them from
+     environment variables with :ref:`templating <templates>`, as in the
+     Swift example above.
 * **defaults** – Facet values that should be filled in when the
   corresponding key is absent in the parsed metadata.  These
   defaults override the dialect defaults if both are specified.
-* **inherits_from** – Onther dataset name to take defaults from.
+* **inherits_from** – Another dataset name to take defaults from.
 * **glob_pattern** – Apply this glob pattern for file object discovery.
 
 

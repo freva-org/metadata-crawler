@@ -19,17 +19,16 @@
 # Where connections are defined
 # -----------------------------------------------------------------------------
 #
-# Tables with the same name are merged, later layers win (weakest first):
+# Settings come from three places, later ones win per key:
 #
-#     1. /etc/metadata-crawler/connections.toml    site-wide, shared
-#     2. ~/.config/metadata-crawler/connections.toml
-#          your own connections; MDC_CONNECTIONS points to another file
-#     3. secrets.toml(.age) next to it              your credentials
-#          MDC_SECRETS points to another file
-#     4. -s/--storage-option on the command line
+#     1. ~/.config/metadata-crawler/connections.toml   (this file)
+#          MDC_CONFIG_PATH or --mdc-config point to another file
+#     2. ~/.config/metadata-crawler/secrets.toml(.age)  your credentials
+#          MDC_SECRETS_PATH or --mdc-secrets point to another file
+#     3. -s/--storage-option on the command line
 #
-# Merging happens per key: a user file that only sets `port` for [prod]
-# keeps the site's url and database for [prod].
+# XDG_CONFIG_HOME moves ~/.config. Relative paths in this file are relative
+# to the file itself, not to the directory you run the crawler from.
 #
 # -----------------------------------------------------------------------------
 # Keys every connection has

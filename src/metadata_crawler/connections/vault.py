@@ -100,11 +100,22 @@ def decrypt(data: bytes) -> bytes:
         raise SecretsError(f"Could not decrypt the secrets file: {error}") from None
 
 
+def encrypted_path(secrets_file: Path) -> Path:
+    """Get the age encrypted variant of *secrets_file*: ``secrets.toml.age``."""
+    if secrets_file.suffix == ".age":
+        return secrets_file
+    return secrets_file.with_name(f"{secrets_file.name}.age")
+
+
 def load_secrets(secrets_file: Path) -> StoresConfig:
-    """Read secrets.toml.age or secrets.toml from *config_dir*, if present."""
-    for _path in secrets_file, secrets_file.with_suffix(".toml.age"):
-        path = _path
-        if _path.is_file():
+    """Read *secrets_file*, preferring its encrypted ``.age`` variant.
+
+    If both ``secrets.toml.age`` and ``secrets.toml`` exist the encrypted file
+    wins: a plaintext file next to it is most likely a stale leftover from
+    editing.
+    """
+    for path in encrypted_path(secrets_file), secrets_file:
+        if path.is_file():
             break
     else:
         return {}

@@ -46,8 +46,13 @@ Too long; didn't read (TL;DR)
 
 .. code-block:: console
 
-    mdc add s3://freva/metadata-crawler/data.yml -c drs-config.toml -ds xces-*
-    mdc solr index s3://feva/metadata-crawler/data.yml --server localhost:8983
+    mdc add s3://freva/metadata-crawler/data.yml -c drs-config.toml -ds 'xces-*'
+    mdc solr index s3://freva/metadata-crawler/data.yml --server localhost:8983
+
+    # or give your stores a name, with credentials kept in a separate file
+    mdc init-config
+    mdc add prod -c drs-config.toml -ds 'xces-*'
+    mdc solr index prod --server localhost:8983
 
 
 - **Multi-backend discovery**: POSIX, S3/MinIO, Swift (async REST), Intake
@@ -59,13 +64,17 @@ Too long; didn't read (TL;DR)
   dataset attributes/vars
 - **Special rules**: conditionals and method/function calls (e.g. CMIP6 realm,
   time aggregation)
+- **Sources of truth**: intake catalogues (local or S3), MongoDB, PostgreSQL
 - **Index backends**: Apache Solr, MongoDB
+- **Named connections**: refer to stores by name; credentials live in a
+  separate, optionally age encrypted secrets file
 - **Support of dataset versions**: Dataset versions are stored separately.
   Data containing *all* dataset versions and the *latest* versions only.
 
 The CLI uses a **custom framework** inspired by `Typer <https://typer.tiangolo.com>`_
-but is **not** Typer. The Main commands are grouped under four verbs:
-``config``, ``add``, ``remove``, ``index`` and ``delete``.
+but is **not** Typer. The main commands are ``config``, ``add``, ``remove``,
+``glance`` and ``init-config``, plus ``index`` and ``delete`` for every index
+system (``mdc solr index``, ``mdc mongo delete``, ...).
 
 Check also ``mdc --help``
 
@@ -96,6 +105,9 @@ content with the ``glance`` sub command:
 
     mdc glance mongodb://localhost -s username mongo -s password secret
 
+    # the same with a named connection, see below
+    mdc glance mongo
+
 
 
 Harvest metadata into a source of truth
@@ -119,22 +131,24 @@ as data in an index can change.
 .. code-block:: console
 
    # Intake
-   mdc add cat.yaml -c drs_config.toml --dataset cmip6-fs --dataset obs-fs \
-             --threads 4 --batch-size 100
+   mdc add cat.yaml -c drs_config.toml -ds cmip6-fs -ds obs-fs --batch-size 100
 
    # MongoDB
-   mdc add mongodb://username:password@server:27107/database -c drs_config.toml --dataset cmip6-fs --dataset obs-fs \
-             --threads 4 --batch-size 100
+   mdc add mongodb://username:password@server:27017/database \
+       -c drs_config.toml -ds cmip6-fs -ds obs-fs --batch-size 100
 
    # PostgreSQL
-   mdc add postgresql://username:password@server:5432/database -c drs_config.toml --dataset cmip6-fs --dataset obs-fs \
-             --threads 4 --batch-size 100
+   mdc add postgresql://username:password@server:5432/database \
+       -c drs_config.toml -ds cmip6-fs -ds obs-fs --batch-size 100
+
+   # A named connection from connections.toml
+   mdc add prod -c drs_config.toml -ds cmip6-fs -ds obs-fs
 
 
 
 This reads dataset definitions from ``drs_config.toml`` and writes harvested
 metadata into a **metadata store**. You can specify one or
-more dataset names via ``--dataset`` or explicit paths via ``--data-object``.
+more dataset names via ``-ds/--data-set`` or explicit paths via ``-d/--data-object``.
 Meta data store formats include **intake** (via gzipped JSONLines) **MongoDB**
 and **PostgreSQL**.
 
@@ -145,7 +159,7 @@ Index entries from a source of truth
 
 .. code-block:: console
 
-   mdc <backend> index cat-1.yaml cat2.yaml
+   mdc <backend> index cat-1.yaml cat-2.yaml
 
 This reads entries from a catalogue and inserts/updates them in the chosen
 index backend. Supported backends include **Solr**
@@ -156,8 +170,8 @@ Remove entries from the source of truth
 
 .. versionadded:: 2609.0.0
 
-    Entries from the source of truth (database) can be deleted with help of the
-    ``remove`` sub-caommand
+    Entries from the source of truth (catalogue or database) can be deleted
+    with the ``remove`` sub-command.
 
 
 .. code-block:: console
@@ -166,10 +180,42 @@ Remove entries from the source of truth
    mdc remove cat.yaml -f dataset cmip6-fs -f variable tas
 
    # MongoDB
-   mdc remove mongodb://username:password@server:27107/database -f dataset cmip6-fs -f variable tas
+   mdc remove mongodb://username:password@server:27017/database -f dataset cmip6-fs -f variable tas
 
-   # PostgreSQL
-   mdc remove postgresql://username:password@server:5432/database -f dataset cmip6-fs -f dataset obs-fs
+   # PostgreSQL, or any named connection; --dry-run only counts the matches
+   mdc remove prod -f dataset cmip6-fs -f dataset obs-fs --dry-run
+
+Facets with the same key are combined with OR, different keys with AND, so
+the last example removes everything from ``cmip6-fs`` *or* ``obs-fs``.
+
+Named connections
+^^^^^^^^^^^^^^^^^
+
+.. versionadded:: 2610.0.0
+
+Instead of repeating URLs and credentials, describe your stores once in
+``~/.config/metadata-crawler/connections.toml`` and keep the credentials in
+``secrets.toml`` (which can be encrypted with age). ``mdc init-config``
+creates commented templates of both files:
+
+.. code-block:: toml
+
+   # ~/.config/metadata-crawler/connections.toml
+   [prod]
+   url = "postgresql://db.example.org/metadata"
+
+.. code-block:: toml
+
+   # ~/.config/metadata-crawler/secrets.toml (chmod 600)
+   [prod]
+   username = "ab1234"
+   password = "..."
+
+.. code-block:: console
+
+   mdc glance prod
+
+See :ref:`connections` for all options.
 
 
 Delete entries from an index

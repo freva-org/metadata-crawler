@@ -47,3 +47,4 @@ account (*latest* versions only).
 
    sec1-cli
    sec2-python
+   sec3-connections

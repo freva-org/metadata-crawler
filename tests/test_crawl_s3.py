@@ -1,19 +1,15 @@
 """Test crawling s3 stores."""
 
+from pathlib import Path
 from typing import Any, Dict, List, Mapping, Tuple, cast
 
+import intake
 import pytest
 from s3fs import S3FileSystem
 
+from metadata_crawler import add
 from metadata_crawler.api.storage_backend import MetadataType
 from metadata_crawler.backends.s3 import S3Path
-
-
-from pathlib import Path
-
-import intake
-
-from metadata_crawler import add
 
 
 class FakeS3Client:

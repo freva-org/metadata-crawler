@@ -6,14 +6,12 @@ import time
 from copy import deepcopy
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
-from functools import lru_cache
 from pathlib import Path
 from types import NoneType
 from typing import (
     Any,
     Collection,
     Dict,
-    FrozenSet,
     List,
     Optional,
     Sequence,
@@ -90,24 +88,6 @@ class StoreReader:
         cfg_options = deepcopy(self._storage_options or {})
         ConfigMerger.merge_tables(cfg_options, options or {})
         return cfg_options
-
-
-@lru_cache(maxsize=None)
-def _norm_files_cached(
-    uris: Tuple[str, ...],
-    backend: Optional[CatalogueBackendType],
-    opts: Tuple[FrozenSet[Tuple[str, str]], ...],
-) -> Tuple[_Uri, ...]:
-    flat_uris: List[_Uri] = []
-    for _uri, _opts in zip(uris, opts):
-        storage_options = dict(_opts)
-        flat_uris += [
-            _Uri(uri=s, storage_options=_opts)
-            for s in CatalogueReader.rglob_stores(
-                _uri, backend=backend, **storage_options
-            )
-        ]
-    return tuple(flat_uris)
 
 
 def _norm_files(

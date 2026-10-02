@@ -32,7 +32,7 @@ from typing import (
     Union,
     cast,
 )
-from urllib.parse import unquote, urlsplit
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 import fsspec
 import pydantic
@@ -41,7 +41,6 @@ from typing_extensions import TypedDict
 from ...logger import logger
 from ...utils import Counter, SimpleQueueLike
 from ..config import BaseType, SchemaField
-
 
 CREDENTIAL_KEYS = frozenset(
     {
@@ -310,6 +309,14 @@ class BaseConnection(pydantic.BaseModel, abc.ABC):
             data["username"] = unquote(parts.username)
         if parts.password and not ({"password", "passwd"} & data.keys()):
             data["password"] = unquote(parts.password)
+        if parts.username or parts.password:
+            # The credentials now live in the (masked) fields, keep them out
+            # of the url and of a name that was derived from it.
+            netloc = parts.netloc.rpartition("@")[-1]
+            clean = urlunsplit(parts._replace(netloc=netloc))
+            for key in ("url", "uri", "path", "name"):
+                if data.get(key) == url:
+                    data[key] = clean
 
 
 class Stream(NamedTuple):
