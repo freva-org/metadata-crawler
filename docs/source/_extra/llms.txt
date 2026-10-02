@@ -1,0 +1,98 @@
+# metadata-crawler
+
+> metadata-crawler (CLI: `mdc` or `metadata-crawler`, Python package: `metadata_crawler`) harvests metadata from climate and earth-system datasets on POSIX file systems, S3-compatible object stores, OpenStack Swift and intake catalogues. It normalises the metadata according to a TOML "DRS" configuration, stores it in a source of truth (intake catalogue, MongoDB or PostgreSQL) and indexes it into search systems (Apache Solr, MongoDB). It is part of the Freva ecosystem (freva-org) and released under the BSD license.
+
+Install with `python -m pip install metadata-crawler` or `conda install -c conda-forge metadata-crawler`. Optional dependencies: `pymongo` (MongoDB), `sqlalchemy` and `psycopg` (PostgreSQL), and the `vault` extra (`metadata-crawler[vault]`, pulls in `pyrage`) for age encrypted secrets.
+
+## Core concepts
+
+- Two-stage pipeline: `add` crawls data into a **source of truth** (a permanent store of all metadata), `<index system> index` copies the source of truth into a **search index**. The index can be rebuilt at any time; the source of truth is authoritative.
+- Sources of truth: intake catalogues (a YAML file plus gzipped JSONLines data files, local or on S3), MongoDB, PostgreSQL. The backend is derived from the store URL: `mongodb://`/`mongodb+srv://` is MongoDB, `postgresql://`/`postgres://` is PostgreSQL, `.yml`/`.yaml` paths are intake. Override with `--backend`/`-cb` (`intake`, `jsonlines`, `mongodb`, `postgresql`) or `MDC_BACKEND`.
+- Versions: metadata is written to two collections, `latest` (only the newest dataset versions) and `files` (all versions).
+- The DRS configuration (`drs_config.toml`, option `-c`) defines datasets (where data lives, `fs_type`, `storage_options`), dialects (how to parse paths and file names, e.g. CMIP6, CMIP5, CORDEX ship with the package), a schema of typed facets, and special rules. Dialects and datasets support inheritance and Jinja2 templating.
+- Database sources of truth do mark-and-sweep: records not seen in a crawl are removed after a grace period (`--sweep-grace-period`, `MDC_GRACE_DAYS`, default 5 days); disable with `--no-sweep` for partial crawls.
+- Named connections: stores can be defined once in `~/.config/metadata-crawler/connections.toml`, with credentials in a separate private `secrets.toml` (optionally age encrypted as `secrets.toml.age`). On the command line a store argument can then be a name (`mdc glance prod`).
+
+## Command line
+
+- `mdc add STORE -c drs_config.toml [-ds DATASET ...] [-d PATH ...]` crawl datasets (`-ds/--data-set`, repeat the flag for several, wildcards allowed) or explicit paths (`-d/--data-object`) into a source of truth.
+- `mdc remove STORE -f KEY VALUE [-f KEY VALUE ...] [--dry-run]` delete entries from a source of truth. Same key: OR; different keys: AND. Keys and string values are lower-cased, values may contain `*` and `?`. Unknown keys and time facets are ignored; with no usable facet nothing is removed.
+- `mdc glance STORE [--json]` show the metadata (schema, counts, timestamp) of a source of truth.
+- `mdc solr index STORE ... --server HOST:PORT [--rotate --min-docs N --configset NAME]` and `mdc mongo index STORE ... --url URL --database DB [--rotate]` index one or more sources of truth (paths, URLs, globs or connection names). `--rotate` builds a fresh index and swaps it in atomically.
+- `mdc solr delete ...` / `mdc mongo delete ... -f KEY VALUE` delete from a search index (wildcards supported).
+- `mdc config -c drs_config.toml [--json]` print the merged DRS configuration.
+- `mdc init-config [--force]` write commented templates of `connections.toml` (mode 0640) and `secrets.toml` (mode 0600).
+- `mdc walk-intake CATALOGUE` traverse and print an intake catalogue.
+- Store options: `-s/--storage-option KEY VALUE` after the sub-command (repeatable, e.g. `-s username u -s password p`).
+- General options, accepted before or after the sub-command: `-v` (repeat for more), `--log-suffix`, `--mdc-config PATH`, `--mdc-secrets PATH`.
+
+## Python API
+
+- `from metadata_crawler import add, remove, index, delete, glance_metadata, get_config, init_config`; async variants: `async_add`, `async_remove`, `async_index`, `async_delete`.
+- `add(*config_files, store=..., data_set=[...] | data_object=[...], storage_options={...}, batch_size=..., no_sweep=False)`. Note: `store` is keyword-only; positional arguments are DRS config files.
+- `remove(store, facets=[("variable", "tas"), ("project", "cmip6")], dry_run=False, storage_options=None) -> int` returns the number of removed (or, with `dry_run`, matching) entries.
+- `index("solr", store, ..., server="localhost:8983")`, `index("mongo", store, ..., url=..., database=...)`; `delete(index_system, facets=[...], **backend_options)`.
+- Every `store` argument accepts a path, a URL or a connection object. Names are not resolved in Python; use the configuration explicitly:
+
+```python
+from metadata_crawler import add, glance_metadata
+from metadata_crawler.api.stores.postgresql import PostgresConnection
+from metadata_crawler.connections import read_configfiles
+
+with read_configfiles() as config:                 # reads and decrypts once
+    prod = config.get("prod", PostgresConnection)  # raises TypeError for other backends
+    add("drs_config.toml", store=prod, data_set="cmip6-fs")
+    glance_metadata(config["scratch"])
+    staging = config.resolve("prod", db_schema="staging")  # name or URL, with overrides
+# secrets are dropped here; using `config` afterwards raises RuntimeError
+```
+
+- Ad-hoc connections without files: `MongoConnection.from_url("mongodb://host/db", username="u", password="p")`, likewise `PostgresConnection` (`metadata_crawler.api.stores.postgresql`) and `IntakeConnection` (`metadata_crawler.api.stores.jsonlines`, extra keys are s3fs options).
+
+## Connection files
+
+- `connections.toml`: one table per named store. Keys: `url` (required; `uri` and `path` are synonyms; relative paths are relative to the file), `backend` (optional), `secrets` (optional: name of the secrets table to use), `description`. Backend keys: intake takes s3fs options (`endpoint_url`, `anon`, ...); PostgreSQL takes `host`, `port` (5432), `database` (`metadata`), `db_schema` (`metadata_crawler`) and rejects unknown keys; MongoDB takes `host`, `port`, `database` (`metadata`) and turns every other key into a URI option (`tls`, `replicaSet`, `authSource` defaulting to `admin`).
+- `secrets.toml`: tables merged into the connection of the same name (or the one referring to them via `secrets = "table"`). Keys: `username`/`user`, `password`/`passwd`, S3 `key` + `secret` (together) and `token`. Must not be readable by group or others, or it is rejected. Values are masked in logs and never written into catalogue metadata.
+- Precedence per key: connections.toml < secrets.toml < `-s` options and `MDC_STORAGE_OPTIONS`.
+- File lookup: `--mdc-config` > `MDC_CONFIG_PATH` > `~/.config/metadata-crawler/connections.toml`; `--mdc-secrets` > `MDC_SECRETS_PATH` > `~/.config/metadata-crawler/secrets.toml`. `XDG_CONFIG_HOME` moves `~/.config`. `secrets.toml.age` next to the secrets path is preferred over the plaintext file. Explicitly given files must exist; missing default files count as empty.
+- Decryption: identity from `MDC_AGE_IDENTITY` (SSH private key or age key file), else `~/.ssh/id_ed25519`, `~/.ssh/id_rsa`; passphrase from `MDC_SECRETS_PASSPHRASE`, else a prompt on a terminal. Passphrase-protected SSH keys are not supported.
+- CLI name resolution: an argument is treated as a name only if it has no `scheme://` and is not an existing path; unknown names are passed through unchanged (so `mdc add new.yml` and `mdc glance localhost -cb mongodb` keep working). Names cover metadata stores only, not index server options (`--server`, `--url`) and not dataset `storage_options` in the DRS config (use Jinja2 templating with environment variables there).
+
+## Environment variables
+
+- `MDC_STORAGE_OPTIONS`: comma separated `key:value` pairs, same as `-s`, e.g. `username:u,password:p`.
+- `MDC_CONFIG_PATH`, `MDC_SECRETS_PATH`: connections and secrets files.
+- `MDC_AGE_IDENTITY`, `MDC_SECRETS_PASSPHRASE`: decrypting `secrets.toml.age`.
+- `MDC_BACKEND`: default source-of-truth backend for URLs without a recognisable scheme.
+- `MDC_GRACE_DAYS`: sweep grace period in days.
+- `DRS_STORAGE_PASSWD`: password for storage backends (`mdc add -p` prompts for it).
+
+## Docs
+
+- [Overview and quick start](https://metadata-crawler.readthedocs.io/en/latest/index.html): features, TL;DR commands, workflow
+- [Usage](https://metadata-crawler.readthedocs.io/en/latest/chapter1-usage/index.html): the two-stage workflow, versions, sweeping
+- [Command-line interface](https://metadata-crawler.readthedocs.io/en/latest/chapter1-usage/sec1-cli.html): every sub-command with examples, index rotation, removal semantics
+- [Python API](https://metadata-crawler.readthedocs.io/en/latest/chapter1-usage/sec2-python.html): synchronous and asynchronous functions, library reference
+- [Named connections and secrets](https://metadata-crawler.readthedocs.io/en/latest/chapter1-usage/sec3-connections.html): connections.toml, secrets.toml, age encryption, precedence, Python usage
+
+## Configuration
+
+- [Configuration overview](https://metadata-crawler.readthedocs.io/en/latest/chapter2-config/index.html): layers of a drs_config.toml
+- [Datasets](https://metadata-crawler.readthedocs.io/en/latest/chapter2-config/sec1-datasets.html): root paths, fs_type, storage_options, defaults
+- [Dialects](https://metadata-crawler.readthedocs.io/en/latest/chapter2-config/sec2-dialects.html): DRS standards and how paths are parsed
+- [Path and data specs](https://metadata-crawler.readthedocs.io/en/latest/chapter2-config/sec3-specs.html): extracting facets from paths and file contents
+- [Special rules](https://metadata-crawler.readthedocs.io/en/latest/chapter2-config/sec4-special.html): conditionals and computed facets
+- [Schema and field options](https://metadata-crawler.readthedocs.io/en/latest/chapter2-config/sec5-schema.html): facet types such as `string`, `datetime[2]`, `float[4]`, `string[]`
+- [Jinja2 templating](https://metadata-crawler.readthedocs.io/en/latest/chapter2-config/sec6-templates.html): templated values, environment variables
+- [Inheritance](https://metadata-crawler.readthedocs.io/en/latest/chapter2-config/sec7-inheritance.html): reusing dialects and datasets
+
+## Extending
+
+- [API reference](https://metadata-crawler.readthedocs.io/en/latest/chapter3-api/index.html): plugin entry points (`metadata_crawler.storage_backends`, `metadata_crawler.index_backends`)
+- [Storage backends](https://metadata-crawler.readthedocs.io/en/latest/chapter3-api/sec1-storage-backends.html): implementing a `PathTemplate` for a new file system
+- [Index backends](https://metadata-crawler.readthedocs.io/en/latest/chapter3-api/sec2-index-backends.html): implementing a new search index
+
+## Optional
+
+- [What's new](https://metadata-crawler.readthedocs.io/en/latest/whatsnew.html): release notes; versions are calendar based (YYMM.minor.patch)
+- [Source code](https://github.com/freva-org/metadata-crawler): GitHub repository
