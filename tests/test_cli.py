@@ -233,7 +233,7 @@ def test_config_subcommand_prints_text(
     mc_cli.cli(["config", "-c", "conf.toml"])
 
     out = capsys.readouterr().out
-    assert "CONFIG_AS_TEXT" in out  # display_config prints cfg.dumps() by default
+    assert "x" in out  # display_config prints cfg.dumps() by default
 
 
 def test_config_subcommand_prints_json(

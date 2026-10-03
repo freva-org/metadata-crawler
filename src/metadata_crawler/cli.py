@@ -135,7 +135,6 @@ def walk_catalogue(
 
 
 def _flatten(inp: Union[List[str], List[List[str]]]) -> List[str]:
-
     out = []
     for item in inp:
         out += item if isinstance(item, list) else [item]
@@ -155,7 +154,6 @@ def _get_storage_option_from_env() -> List[Tuple[str, str]]:
 
 
 def _process_storage_option(option: str) -> Union[str, bool, int, float]:
-
     if option.lower() in ("false", "true", "yes", "y"):
         return option.lower() in ["true", "yes", "y"]
     try:
