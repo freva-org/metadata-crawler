@@ -18,6 +18,7 @@ from typing import (
     AsyncIterator,
     ClassVar,
     Dict,
+    FrozenSet,
     List,
     Literal,
     NamedTuple,
@@ -25,10 +26,13 @@ from typing import (
     Sequence,
     Set,
     Tuple,
+    Type,
     TypeAlias,
+    TypeVar,
     Union,
     cast,
 )
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 import fsspec
 import pydantic
@@ -38,8 +42,34 @@ from ...logger import logger
 from ...utils import Counter, SimpleQueueLike
 from ..config import BaseType, SchemaField
 
+CREDENTIAL_KEYS = frozenset(
+    {
+        "key",
+        "secret",
+        "token",
+        "username",
+        "user",
+        "password",
+        "passwd",
+        "secret_file",
+        "secretfile",
+        "os_password",
+        "os_auth_token",
+    }
+)
+
+
+INGESTER_GROUP = "metadata_crawler.ingester"
+"""Entry points of index systems; they define the connection models of their
+targets. Catalogue stores (intake, MongoDB, PostgreSQL) are built in."""
+_plugins_loaded = False
+
 BATCH_SECS_THRESHOLD = 20
 _GLOB_CHARS = frozenset("*?")
+
+ConnT = TypeVar("ConnT", bound="BaseConnection")
+LOCATION_KEYS = ("url", "path", "uri")
+
 
 MetadataRecord: TypeAlias = Dict[str, Any]
 """A single metadata record: key -> value of heterogeneous types."""
@@ -105,6 +135,197 @@ class StoreMetadata(pydantic.BaseModel):
     the_schema: Annotated[
         pydantic.JsonValue, pydantic.Field(serialization_alias="schema")
     ]
+
+
+class S3Options(pydantic.BaseModel):
+    """Options for s3fs. Unknown keys are passed on to s3fs unchanged."""
+
+    model_config = pydantic.ConfigDict(extra="allow", frozen=True)
+
+    endpoint_url: Optional[str] = None
+    anon: Optional[bool] = None
+    key: Optional[pydantic.SecretStr] = None
+    secret: Optional[pydantic.SecretStr] = None
+    token: Optional[pydantic.SecretStr] = None
+
+    @pydantic.model_validator(mode="after")
+    def _key_and_secret_together(self) -> "S3Options":
+        if (self.key is None) != (self.secret is None):
+            raise ValueError("S3 'key' and 'secret' must be given together")
+        return self
+
+    def options(self, *, reveal: bool = False) -> StorageOptions:
+        """Options for s3fs; secrets stay masked unless *reveal*."""
+        data = {**dict(self), **(self.model_extra or {})}
+        return {
+            key: BaseConnection._reveal(value) if reveal else value
+            for key, value in data.items()
+            if value is not None
+        }
+
+
+class Credentials(pydantic.BaseModel):
+    """Username and password, with the aliases the backends accept."""
+
+    model_config = pydantic.ConfigDict(populate_by_name=True)
+
+    username: Optional[str] = pydantic.Field(default=None, alias="user")
+    password: Optional[pydantic.SecretStr] = pydantic.Field(
+        default=None, alias="passwd"
+    )
+
+
+class BaseConnection(pydantic.BaseModel, abc.ABC):
+    """How to reach a store. Each store backend subclasses this."""
+
+    model_config = pydantic.ConfigDict(
+        extra="forbid", frozen=True, populate_by_name=True
+    )
+
+    backend: ClassVar[str]
+    """Name of the backend, as used in configs and catalogue metadata."""
+
+    schemes: ClassVar[FrozenSet[str]] = frozenset()
+    """URL schemes this backend claims, used when no backend is given."""
+
+    fallback: ClassVar[bool] = False
+    """Use this backend for URLs whose scheme no backend claims."""
+
+    _registry: ClassVar[Dict[str, Type["BaseConnection"]]] = {}
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        backend = cls.__dict__.get("backend")
+        if backend is None:  # an intermediate base class, not a backend
+            return
+        existing = BaseConnection._registry.get(backend)
+        if existing is not None and existing.__qualname__ != cls.__qualname__:
+            raise TypeError(
+                f"backend {backend!r} is already registered by {existing.__qualname__}"
+            )
+        BaseConnection._registry[backend] = cls
+
+    @classmethod
+    def registered(cls) -> Dict[str, Type["BaseConnection"]]:
+        """All known connection models, including those of index plugins."""
+        cls._load_plugins()
+        return dict(BaseConnection._registry)
+
+    @classmethod
+    def for_backend(cls, backend: str) -> Type["BaseConnection"]:
+        """Get the backend class that fits to a name."""
+        models = cls.registered()
+        try:
+            return models[backend]
+        except KeyError:
+            known = ", ".join(sorted(models)) or "none"
+            raise ValueError(f"unknown backend {backend!r} (known: {known})") from None
+
+    @classmethod
+    def for_url(cls, url: str) -> Type["BaseConnection"]:
+        """Get the model claiming the URL's scheme, or the fallback backend."""
+        import fsspec
+
+        scheme, path = fsspec.core.split_protocol(url)
+        scheme = scheme or "file"
+        models = cls.registered().values()
+        claiming = [m for m in models if scheme in m.schemes]
+        if len(claiming) > 1:
+            names = ", ".join(sorted(m.backend for m in claiming))
+            raise ValueError(
+                f"scheme {scheme!r} is claimed by several backends ({names}); "
+                "set 'backend' explicitly"
+            )
+        if claiming:
+            return claiming[0]
+        fallbacks = [m for m in models if m.fallback]
+        if len(fallbacks) != 1:
+            raise ValueError(f"no backend handles {url!r}; set 'backend' explicitly")
+        return fallbacks[0]
+
+    name: str
+    url: str = pydantic.Field(alias="uri")
+    description: Optional[str] = None
+    secrets: Optional[str] = pydantic.Field(
+        default=None,
+        description="Table in secrets.toml holding the credentials, "
+        "if not the one with the store's own name.",
+    )
+
+    @property
+    @abc.abstractmethod
+    def store_uri(self) -> str:
+        """Construrct the uri to the store of truth."""
+
+    @classmethod
+    def from_url(
+        cls: Type[ConnT],
+        url: Optional[str] = None,
+        **options: Any,
+    ) -> ConnT:
+        """Define an ad-hoc connection for a URL that isn't configured."""
+        return cls.model_validate({"name": url, "url": url, **options})
+
+    def storage_options(self, *, reveal: bool = False) -> StorageOptions:
+        """Backend options without the descriptive keys."""
+        return {}
+
+    def catalogue_options(self) -> StorageOptions:
+        """Options that are safe to write into catalogue metadata."""
+        return {
+            key: value
+            for key, value in self.storage_options().items()
+            if not isinstance(value, pydantic.SecretStr)
+        }
+
+    @classmethod
+    def _load_plugins(cls) -> None:
+        """Import the index plugins once; that registers their models.
+
+        A plugin whose dependencies are missing is skipped, so that it can't
+        break reading the connections of everything else.
+        """
+        global _plugins_loaded
+        if _plugins_loaded:
+            return
+        _plugins_loaded = True
+        from importlib.metadata import entry_points
+
+        for entry_point in entry_points(group=INGESTER_GROUP):
+            try:
+                entry_point.load()
+            except ImportError as error:
+                logger.debug("Skipping index plugin %s: %s", entry_point.name, error)
+
+    @staticmethod
+    def _reveal(value: Any) -> Any:
+        return (
+            value.get_secret_value() if isinstance(value, pydantic.SecretStr) else value
+        )
+
+    @staticmethod
+    def _url_defaults(data: Dict[str, Any], default_port: Optional[int]) -> None:
+        """Take host, port, database and credentials from the URL if not given."""
+        url = data.get("url") or data.get("uri") or data.get("path", "")
+        parts = urlsplit(str(url))
+        data.setdefault("host", parts.hostname or "localhost")
+        if parts.port or default_port:
+            data.setdefault("port", parts.port or default_port)
+        path = parts.path.strip("/")
+        if path:
+            data.setdefault("database", unquote(path))
+        if parts.username and not ({"username", "user"} & data.keys()):
+            data["username"] = unquote(parts.username)
+        if parts.password and not ({"password", "passwd"} & data.keys()):
+            data["password"] = unquote(parts.password)
+        if parts.username or parts.password:
+            # The credentials now live in the (masked) fields, keep them out
+            # of the url and of a name that was derived from it.
+            netloc = parts.netloc.rpartition("@")[-1]
+            clean = urlunsplit(parts._replace(netloc=netloc))
+            for key in ("url", "uri", "path", "name"):
+                if data.get(key) == url:
+                    data[key] = clean
 
 
 class Stream(NamedTuple):
@@ -442,22 +663,12 @@ class IndexStore(abc.ABC):
             # A DB store deons't need storage options to be encoded.
             return {}
         is_s3 = (path or "").startswith("s3://")
+        hidden = CREDENTIAL_KEYS | set(self._shadow_options)
         opts: StorageOptions = {
-            k: v
-            for k, v in self.storage_options.items()
-            if k not in self._shadow_options
+            k: v for k, v in self.storage_options.items() if k not in hidden
         }
-        shadow_keys = {
-            "key",
-            "secret",
-            "token",
-            "username",
-            "user",
-            "password",
-            "secret_file",
-            "secretfile",
-        }
-        opts |= {"anon": True} if is_s3 and not shadow_keys & opts.keys() else {}
+        if is_s3 and not CREDENTIAL_KEYS & self.storage_options.keys():
+            opts["anon"] = True
         return opts
 
     def write_catalogue_metadata(self, payload: Dict[str, Any]) -> None:

@@ -33,9 +33,11 @@ from typing import (
     AsyncIterator,
     ClassVar,
     Dict,
+    FrozenSet,
     Iterator,
     List,
     Literal,
+    Mapping,
     Optional,
     Tuple,
     Union,
@@ -43,10 +45,14 @@ from typing import (
 )
 from urllib.parse import parse_qs, urlparse
 
+import pydantic
+
 from ...logger import logger
 from ..config import BaseType, SchemaField
 from .base import (
     BackendWriter,
+    BaseConnection,
+    Credentials,
     FacetValue,
     IndexName,
     IndexStore,
@@ -69,6 +75,53 @@ _PG_ARRAY_TYPES = {
     BaseType.integer: "bigint[]",
     BaseType.float: "double precision[]",
 }
+
+
+class PostgresConnection(BaseConnection, Credentials):
+    """A PostgreSQL catalogue.
+
+    Host, port, database and credentials may be part of the URL; explicit
+    keys take precedence.
+    """
+
+    backend: ClassVar[str] = "postgresql"
+    schemes: ClassVar[FrozenSet[str]] = frozenset({"postgresql", "postgres"})
+
+    host: str = "localhost"
+    port: int = pydantic.Field(default=5432, ge=1, le=65535)
+    database: str = "metadata"
+    db_schema: str = "metadata_crawler"
+
+    @pydantic.model_validator(mode="before")
+    @classmethod
+    def _from_url(cls, data: Any) -> Any:
+        if isinstance(data, Mapping):
+            data = dict(data)
+            cls._url_defaults(data, default_port=5432)
+        return data
+
+    def storage_options(self, *, reveal: bool = False) -> StorageOptions:
+        """Define storage options of the database."""
+        opts: StorageOptions = {
+            "host": self.host,
+            "port": self.port,
+            "database": self.database,
+            "db_schema": self.db_schema,
+        }
+        if self.username:
+            opts["username"] = self.username
+        if self.password:
+            opts["password"] = self._reveal(self.password) if reveal else self.password
+        return opts
+
+    @property
+    def store_uri(self) -> str:
+        """URL for ``sqlalchemy.create_engine``."""
+        import sqlalchemy as sa
+
+        return sa.URL.create(
+            "postgresql+psycopg", host=self.host, port=self.port, database=self.database
+        ).render_as_string()
 
 
 # ------------------------------------------------------------------

@@ -3,8 +3,33 @@ What's new
 
 This document highlights major changes and additions across releases.
 
-v2609.0.0
+v2610.0.0
 ---------
+* Named connections: describe metadata stores once in
+  ``~/.config/metadata-crawler/connections.toml`` and use their names instead
+  of paths or URLs on the command line (``mdc glance prod``). In Python, pass
+  the connection objects from
+  :func:`metadata_crawler.connections.read_configfiles`.
+* Credentials live in a separate ``secrets.toml``, which must be private
+  (``chmod 600``) and can be encrypted with age (``secrets.toml.age``, needs
+  ``metadata-crawler[vault]``).
+* New ``mdc init-config`` command and :func:`metadata_crawler.init_config`
+  to create commented templates of both files.
+* New ``--mdc-config``/``--mdc-secrets`` options and ``MDC_CONFIG_PATH``/
+  ``MDC_SECRETS_PATH`` environment variables.
+* Index systems take named connections too: ``mdc solr index prod --server
+  solr-prod`` and ``mdc mongo index prod --url mongo-search``. Solr
+  connections authenticate with HTTP Basic auth or a Bearer token and support
+  ``ca_file`` and ``verify_ssl``. Index plugins support named connections
+  with a connection model, see :ref:`add_backends`.
+* Credentials are masked in logs and error messages and are no longer
+  written into catalogue metadata.
+* Fix ``-v``, ``--log-suffix`` and the new options being ignored when given
+  before the sub-command.
+* Fix ``mongodb+srv://`` URLs being rewritten to ``mongodb://``.
+* Fix the MongoDB index system never closing its client.
+* Fix the documented entry point groups for plugins: ``metadata_crawler.storage``
+  and ``metadata_crawler.ingester``.
 * Enable deleting subsets of metadata from the source of truth.
 
 v2608.2.0

@@ -7,10 +7,12 @@ import asyncio
 import inspect
 import os
 import sys
+from contextlib import ExitStack
 from functools import partial
 from json import dumps
 from pathlib import Path
 from typing import (
+    TYPE_CHECKING,
     Annotated,
     Any,
     Callable,
@@ -35,6 +37,7 @@ from metadata_crawler import (
     get_config,
     glance_metadata,
     index,
+    init_config,
     remove,
 )
 
@@ -45,6 +48,7 @@ from .api.metadata_stores import (
 )
 from .api.stores import IndexName
 from .backends.intake import IntakePath
+from .connections import ConfigFiles, read_configfiles
 from .logger import (
     THIS_NAME,
     apply_verbosity,
@@ -52,9 +56,53 @@ from .logger import (
 )
 from .utils import exception_handler, load_plugins
 
+if TYPE_CHECKING:
+    from .api.stores.base import BaseConnection
+
 StorageScalar = Union[str, int, float, bool]
 StorageOptions = Dict[str, StorageScalar]
 KwargValue = Union[str, int, float, Path, StorageOptions, List[str], List[int], None]
+
+
+STORE_KEYS = ("store", "metadata_stores")
+
+
+def _is_store_name(value: object) -> bool:
+    """Define a store name."""
+    if not isinstance(value, str) or not value:
+        return False
+    return "://" not in value and not os.path.exists(os.path.expanduser(value))
+
+
+def _needs_config(kwargs: Dict[str, Any], keys: Sequence[str] = STORE_KEYS) -> bool:
+    for key in keys:
+        value = kwargs.get(key)
+        values = value if isinstance(value, (list, tuple)) else [value]
+        if any(_is_store_name(v) for v in values):
+            return True
+    return False
+
+
+def resolve_store_args(
+    kwargs: Dict[str, Any], cfg: ConfigFiles, keys: Sequence[str] = STORE_KEYS
+) -> None:
+    """Replace store (or index target) names by their connections, in place."""
+
+    def _one(value: Any) -> Any:
+        # Anything that isn't a configured name stays as it is: a catalogue
+        # that ``add`` is about to create, or a bare database host.
+        if _is_store_name(value) and value in cfg:
+            return cfg[value]
+        return value
+
+    for key in keys:
+        value = kwargs.get(key)
+        if value is None:
+            continue
+        if isinstance(value, (list, tuple)):
+            kwargs[key] = [_one(v) for v in value]
+        else:
+            kwargs[key] = _one(value)
 
 
 def walk_catalogue(
@@ -127,7 +175,7 @@ def display_config(
 ) -> None:
     """Display the config file."""
     cfg = get_config(*config, preserve_comments=no_comments is False)
-    if json is False:
+    if not json:
         print(cfg.dumps())
     else:
         print(dumps(cfg.merged_doc, indent=3))
@@ -187,6 +235,7 @@ class ArgParse:
             required=True,
         )
         self._add_config_parser()
+        self._add_init_config()
         self._add_walk_catalogue()
         self._add_crawler_subcommand()
         self._add_remove()
@@ -229,6 +278,20 @@ class ArgParse:
             default=self.verbose,
             help="Increase the verbosity level.",
         )
+
+    def _add_init_config(self) -> None:
+        parser = self.subparsers.add_parser(
+            "init-config",
+            description="Create the connections and secrets templates.",
+            help="Create the connections and secrets templates.",
+            formatter_class=ArgumentDefaultsRichHelpFormatter,
+            epilog=self.epilog,
+        )
+        parser.add_argument(
+            "--force", action="store_true", help="Replace existing files."
+        )
+        self._add_general_config_to_parser(parser)
+        parser.set_defaults(apply_func=init_config)
 
     def _add_crawler_subcommand(self) -> None:
         """Add sub command for crawling metadata."""
@@ -401,19 +464,48 @@ class ArgParse:
         parser.set_defaults(apply_func=add)
 
     def _add_general_config_to_parser(self, parser: argparse.ArgumentParser) -> None:
-        """Add the most common arguments to a given parser."""
+        """Add the most common arguments to a given parser.
+
+        The options are accepted before and after the sub command. Only the
+        main parser has defaults: argparse copies every attribute of a sub
+        parser's namespace over the main one, so a default there would replace
+        a value given before the sub command.
+        """
+        main = parser is self.parser
+
+        def default(value: Any) -> Any:
+            return value if main else argparse.SUPPRESS
+
         parser.add_argument(
             "-v",
             "--verbose",
             action="count",
-            default=self.verbose,
+            default=default(self.verbose),
             help="Increase the verbosity level.",
         )
         parser.add_argument(
             "--log-suffix",
             type=str,
             help="Add a suffix to the log file output.",
-            default=None,
+            default=default(None),
+        )
+        parser.add_argument(
+            "--mdc-config",
+            type=Path,
+            help=(
+                "Path to the connections file "
+                "(default: MDC_CONFIG_PATH or the user config directory)."
+            ),
+            default=default(os.getenv("MDC_CONFIG_PATH")),
+        )
+        parser.add_argument(
+            "--mdc-secrets",
+            type=Path,
+            help=(
+                "Path to the secrets file "
+                "(default: MDC_SECRETS_PATH or the user config directory)."
+            ),
+            default=default(os.getenv("MDC_SECRETS_PATH")),
         )
 
     def _add_remove(self) -> None:
@@ -619,7 +711,16 @@ class ArgParse:
                     # if we found a cli_meta, wire it up
                     if cli_meta:
                         arg_names = cli_meta["args"]
-                        add_kwargs = {k: v for k, v in cli_meta.items() if k != "args"}
+                        add_kwargs = {
+                            k: v
+                            for k, v in cli_meta.items()
+                            if k not in ("args", "connection")
+                        }
+                        if cli_meta.get("connection") and getattr(
+                            cls, "connection", None
+                        ):
+                            # The option also takes a connection name.
+                            parser.set_defaults(target_option=param_name)
 
                         # preserve any explicit default
                         if (
@@ -675,6 +776,7 @@ class ArgParse:
                 "storage-option",
                 "storage_option",
                 "shadow",
+                "target_option",
             )
         }
         storage_option_pairs: List[Tuple[str, str]] = _get_storage_option_from_env() + (
@@ -693,12 +795,15 @@ class ArgParse:
 
 def _run(
     parser: argparse.Namespace,
-    **kwargs: KwargValue,
+    **kwargs: Union[KwargValue, "BaseConnection"],
 ) -> None:
     """Apply the parsed method."""
     old_level = apply_verbosity(
         getattr(parser, "verbose", 0), suffix=getattr(parser, "log_suffix", None)
     )
+    mdc_config = cast(Optional[Path], kwargs.pop("mdc_config", None))
+    mdc_secrets = cast(Optional[Path], kwargs.pop("mdc_secrets", None))
+
     cfg_files = (
         cast(
             Optional[Sequence[Path]],
@@ -706,8 +811,20 @@ def _run(
         )
         or []
     )
+    # The option of an index system that may name a connection (--server, ...)
+    target_option = getattr(parser, "target_option", None)
+    keys = STORE_KEYS + ((target_option,) if target_option else ())
     try:
-        parser.apply_func(*cfg_files, **kwargs)
+        with ExitStack() as stack:
+            if parser.apply_func is init_config:
+                # Here the options say where to write the templates.
+                kwargs.update(store_path=mdc_config, secrets_path=mdc_secrets)
+            elif _needs_config(kwargs, keys):
+                cfg = stack.enter_context(
+                    read_configfiles(store_path=mdc_config, secrets_path=mdc_secrets)
+                )
+                resolve_store_args(kwargs, cfg, keys)
+            parser.apply_func(*cfg_files, **kwargs)
     except Exception as error:
         exception_handler(error)
     finally:

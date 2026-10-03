@@ -16,12 +16,12 @@ in your ``pyproject.toml`` file:
 
     .. code-block:: toml
 
-        # register a new index system
-        [project.entry-points."metadata_crawler.index_backends"]
-        mybackend = "my_package.my_index:MyIndexStore"
+        # register a new index system (mdc mybackend index ...)
+        [project.entry-points."metadata_crawler.ingester"]
+        mybackend = "my_package.my_index:MyIndex"
 
-        # register in your storage backend
-        [project.entry-points."metadata_crawler.storage_backends"]
+        # register your storage backend
+        [project.entry-points."metadata_crawler.storage"]
         foo = "my_package.foo_backend:FooBackend"
 
 

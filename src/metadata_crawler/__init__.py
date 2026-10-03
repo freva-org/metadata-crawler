@@ -24,12 +24,21 @@ from .api.metadata_stores import (
     IndexName,
 )
 from .api.stores.base import Facet
+from .connections import TemplateName, init_template
 from .data_collector import DataCollector
 from .logger import logger
-from .run import async_add, async_delete, async_index, async_remove
+from .run import (
+    StoreReader,
+    async_add,
+    async_delete,
+    async_index,
+    async_remove,
+)
+from .types import StoresInput
 from .utils.loop import get_async_model
 
 async_model = get_async_model()
+
 
 __all__ = [
     "logger",
@@ -40,6 +49,7 @@ __all__ = [
     "delete",
     "remove",
     "glance_metadata",
+    "init_config",
     "get_config",
     "async_index",
     "async_delete",
@@ -50,13 +60,14 @@ __all__ = [
 
 
 def glance_metadata(
-    store: Union[Path, str],
+    store: StoresInput,
     backend: Optional[CatalogueBackendType] = None,
     **storage_options: Any,
 ) -> Dict[str, Any]:
     """Inspect the meta data for a given table."""
+    s = StoreReader(store)
     return CatalogueReader.read_catalogue_metadata(
-        store, backend=backend, **storage_options
+        s.uri, backend=backend, **s.storage_options(storage_options)
     )
 
 
@@ -102,7 +113,7 @@ def get_config(
 
 def index(
     index_system: str,
-    *metadata_stores: Union[Path, str, List[str], List[Path]],
+    *metadata_stores: StoresInput,
     batch_size: int = 2500,
     verbosity: int = 0,
     log_suffix: Optional[str] = None,
@@ -118,20 +129,20 @@ def index(
         The index store where the metadata is indexed.
     metadata_stores:
         Uri to the metadata store(s).
+
+        .. versionchanged:: 2610.0.0
+
+           This parameter accepts a metadata crawler config item.
+
     batch_size:
         If the index system supports batch-sizes, the size of the batches.
     verbosity:
         Set the verbosity level.
     log_suffix:
         Add a suffix to the log file output.
-    backend: str
+    backend:
         Backend to be used for the metadata store. If None given (default)
         the backend will be guessed from the storage uri
-
-        .. versionchanged:: 2605.0.0
-
-           Added ``"mongodb"`` and ``"postgresql"`` backends.
-
 
 
     Other Parameters
@@ -191,6 +202,7 @@ def delete(
         List of search facets (key, value) pairs. Search facets will be
         connected using logical AND.
 
+
     Other Parameters
     ^^^^^^^^^^^^^^^^
 
@@ -222,7 +234,7 @@ def delete(
 
 
 def remove(
-    store: Optional[Union[str, Path]] = None,
+    store: Optional[StoresInput] = None,
     storage_options: Optional[Dict[str, Any]] = None,
     verbosity: int = 0,
     log_suffix: Optional[str] = None,
@@ -231,7 +243,7 @@ def remove(
 ) -> int:
     """Remove metadata entries from the source of truth.
 
-    .. versionadded:: 2609.0.0
+    .. versionadded:: 2610.0.0
 
         This function deletes entries by facet from the source of truth for
         example the database or intake catalogue that is used to put metadata
@@ -243,6 +255,11 @@ def remove(
     store:
         Path or url of the source of truth where the collected metadata will be
         stored.
+
+        .. versionchanged:: 2610.0.0
+
+           This parameter accepts a metadata crawler config item.
+
     storage_options:
         Set additional storage options for adding metadata to the metadata store
     facets:
@@ -288,7 +305,7 @@ def remove(
 
 def add(
     *config_files: Union[Path, str, Dict[str, Any], TOMLDocument],
-    store: Optional[Union[str, Path]] = None,
+    store: Optional[StoresInput] = None,
     data_object: Optional[Union[str, List[str]]] = None,
     data_set: Optional[Union[str, List[str]]] = None,
     catalogue_backend: Optional[CatalogueBackendType] = None,
@@ -328,6 +345,11 @@ def add(
     store:
         Path to or url of the source of truth where the collected metadata will be
         stored.
+
+        .. versionchanged:: 2610.0.0
+
+           This parameter accepts a metadata crawler config item.
+
     data_ojbect:
         Instead of defining datasets that are to be crawled you can crawl
         data based on their directories. The directories must be a root dirs
@@ -360,8 +382,6 @@ def add(
         .. versionchanged:: 2605.0.0
 
            Added ``"mongodb"`` and ``"postgresql"`` backends.
-
-
 
     catalogue_backend:
         Alias for ``backend``
@@ -455,3 +475,37 @@ def add(
             **kwargs,
         )
     )
+
+
+def init_config(
+    force: bool = False,
+    store_path: Optional[Union[str, Path]] = None,
+    secrets_path: Optional[Union[str, Path]] = None,
+    **_: Any,
+) -> None:
+    """Create the connections and secrets templates.
+
+    Parameters
+    ^^^^^^^^^^
+    force:
+        Replace existing files.
+    store_path:
+        Where to write the connections file, default: ``MDC_CONFIG_PATH`` or
+        ``connections.toml`` in the user config directory.
+    secrets_path:
+        Where to write the secrets file, default: ``MDC_SECRETS_PATH`` or
+        ``secrets.toml`` in the user config directory.
+    """
+    targets: Dict[TemplateName, Optional[Union[str, Path]]] = {
+        "connections": store_path,
+        "secrets": secrets_path,
+    }
+    for name, target in targets.items():
+        try:
+            path = init_template(
+                name, Path(target).expanduser() if target else None, force=force
+            )
+        except FileExistsError as error:
+            print(f"Skipped: {error}")
+        else:
+            print(f"Created {path}")
