@@ -42,7 +42,8 @@
 #                  mongodb:// and mongodb+srv://         -> "mongodb"
 #                  anything else (paths, s3://, ...)     -> "intake"
 #                Index systems need it where the URL is ambiguous, e.g.
-#                "solr" for an http(s):// URL. Plugins may add backends.
+#                "solr" for an http(s):// URL. Index plugins may add
+#                backends.
 #   secrets      optional. Take the credentials from this table of
 #                  secrets.toml instead of the one named like the connection.
 #   description  optional.

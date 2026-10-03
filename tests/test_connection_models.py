@@ -164,17 +164,18 @@ class TestRegistry:
             BaseConnection.for_url("ftp://somewhere/x")
 
     def test_plugins_are_loaded_once(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        loaded: List[str] = []
+        """Index plugins define connection models; catalogue stores are built in."""
+        groups: List[str] = []
 
         class EntryPoint:
-            def __init__(self, group: str) -> None:
-                self.group = self.name = group
+            name = "plugin"
 
             def load(self) -> None:
-                loaded.append(self.group)
+                groups.append("loaded")
 
         def entry_points(group: str) -> List[EntryPoint]:
-            return [EntryPoint(group)]
+            groups.append(group)
+            return [EntryPoint()]
 
         import importlib.metadata
 
@@ -182,7 +183,7 @@ class TestRegistry:
         monkeypatch.setattr(base, "_plugins_loaded", False)
         BaseConnection.registered()
         BaseConnection.registered()
-        assert loaded == [base.PLUGIN_GROUP, base.INGESTER_GROUP]
+        assert groups == ["metadata_crawler.ingester", "loaded"]
 
     def test_broken_index_plugin_is_skipped(
         self, monkeypatch: pytest.MonkeyPatch
@@ -192,27 +193,6 @@ class TestRegistry:
         class EntryPoint:
             name = "broken"
 
-            def __init__(self, group: str) -> None:
-                self.group = group
-
-            def load(self) -> None:
-                if self.group == base.INGESTER_GROUP:
-                    raise ImportError("No module named 'nothing'")
-
-        import importlib.metadata
-
-        monkeypatch.setattr(
-            importlib.metadata, "entry_points", lambda group: [EntryPoint(group)]
-        )
-        monkeypatch.setattr(base, "_plugins_loaded", False)
-        assert "postgresql" in BaseConnection.registered()
-
-    def test_broken_store_plugin_is_an_error(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """A store plugin is what the user asked for; don't hide its error."""
-
-        class EntryPoint:
             def load(self) -> None:
                 raise ImportError("No module named 'nothing'")
 
@@ -222,8 +202,7 @@ class TestRegistry:
             importlib.metadata, "entry_points", lambda group: [EntryPoint()]
         )
         monkeypatch.setattr(base, "_plugins_loaded", False)
-        with pytest.raises(ImportError):
-            BaseConnection.registered()
+        assert "postgresql" in BaseConnection.registered()
 
 
 # ---------------------------------------------------------------------------

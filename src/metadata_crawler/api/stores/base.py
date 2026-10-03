@@ -59,9 +59,9 @@ CREDENTIAL_KEYS = frozenset(
 )
 
 
-PLUGIN_GROUP = "metadata_crawler.stores"
 INGESTER_GROUP = "metadata_crawler.ingester"
-"""Index systems define the connection models of their targets."""
+"""Entry points of index systems; they define the connection models of their
+targets. Catalogue stores (intake, MongoDB, PostgreSQL) are built in."""
 _plugins_loaded = False
 
 BATCH_SECS_THRESHOLD = 20
@@ -207,7 +207,7 @@ class BaseConnection(pydantic.BaseModel, abc.ABC):
 
     @classmethod
     def registered(cls) -> Dict[str, Type["BaseConnection"]]:
-        """All known connection models, including those of store plugins."""
+        """All known connection models, including those of index plugins."""
         cls._load_plugins()
         return dict(BaseConnection._registry)
 
@@ -280,10 +280,10 @@ class BaseConnection(pydantic.BaseModel, abc.ABC):
 
     @classmethod
     def _load_plugins(cls) -> None:
-        """Import store and index plugins once; that registers their models.
+        """Import the index plugins once; that registers their models.
 
-        An index plugin whose dependencies are missing is skipped, so that it
-        can't break reading the connections of everything else.
+        A plugin whose dependencies are missing is skipped, so that it can't
+        break reading the connections of everything else.
         """
         global _plugins_loaded
         if _plugins_loaded:
@@ -291,8 +291,6 @@ class BaseConnection(pydantic.BaseModel, abc.ABC):
         _plugins_loaded = True
         from importlib.metadata import entry_points
 
-        for entry_point in entry_points(group=PLUGIN_GROUP):
-            entry_point.load()
         for entry_point in entry_points(group=INGESTER_GROUP):
             try:
                 entry_point.load()
