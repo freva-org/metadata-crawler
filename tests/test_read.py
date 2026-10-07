@@ -131,6 +131,9 @@ class TestReadTemplate:
     def test_backends_implement_read(self, cls: type) -> None:
         assert "_read" in cls.__dict__
 
+    def test_default_get_args_is_empty(self, mongo_store: MongoDB) -> None:
+        assert mongo_store.get_args("latest") == {}
+
 
 # ---------------------------------------------------------------------------
 # JSONLines: reading real gzipped files
