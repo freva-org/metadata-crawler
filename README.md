@@ -278,6 +278,10 @@ PRs and issues welcome. Please add tests and keep examples minimal & reproducibl
 
 ### Checks and tests
 
+The full test suite uses the local Compose services (including seeded MinIO and
+Swift fixtures). Start them first with `just up` (or `docker compose up -d`),
+then run `tox -e test`.
+
 ```console
    tox -e types  # strict mypy checks
    tox -e lint   # Python/Rust formatting, style, spelling, and security checks

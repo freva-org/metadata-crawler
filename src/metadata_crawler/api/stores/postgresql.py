@@ -504,6 +504,7 @@ class PostgreSQL(IndexStore):
         self,
         index_name: str,
         *,
+        grouped: Optional[Dict[str, List[FacetValue]]] = None,
         parse_timestamps: bool = True,
     ) -> AsyncIterator[List[MetadataRecord]]:
         """Yield batches of metadata records from a PostgreSQL table.
@@ -529,9 +530,9 @@ class PostgreSQL(IndexStore):
         batch_size = self.batch_size
         url = self._url
 
-        def _open() -> Tuple[
-            "sa.Engine", Optional["sa.Connection"], Optional["sa.MappingResult"]
-        ]:
+        def _open() -> (
+            Tuple["sa.Engine", Optional["sa.Connection"], Optional["sa.MappingResult"]]
+        ):
             engine: sa.Engine = sa.create_engine(url, pool_pre_ping=True)
             sa_meta: sa.MetaData = sa.MetaData(schema=self._db_schema)
             sa_meta.reflect(bind=engine)
@@ -552,6 +553,9 @@ class PostgreSQL(IndexStore):
                 max_row_buffer=batch_size,
             )
             stmt = sa.select(table)
+            if grouped:
+                where, params = self._build_where(grouped)
+                stmt = stmt.where(sa.text(where)).params(**params)
             result = conn.execute(stmt)
             return engine, conn, result.mappings()
 

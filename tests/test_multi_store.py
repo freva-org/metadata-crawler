@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import os
 from pathlib import Path
-from typing import Any, AsyncIterator, Dict, List, Tuple
+from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 
 import mock
 import pytest
@@ -36,10 +36,12 @@ class FakeStore:
         self.batches = batches
         self.index_names = index_names
         self.schema: Dict[str, Any] = {}
-        self.read_calls: List[str] = []
+        self.read_calls: List[Tuple[str, Tuple[Tuple[str, Any], ...]]] = []
 
-    async def read(self, index_name: str) -> AsyncIterator[List[Dict[str, Any]]]:
-        self.read_calls.append(index_name)
+    async def read(
+        self, index_name: str, *facets: Tuple[str, Any]
+    ) -> AsyncIterator[List[Dict[str, Any]]]:
+        self.read_calls.append((index_name, facets))
         for batch in self.batches.get(index_name, []):
             yield batch
 
@@ -75,10 +77,10 @@ def stores(monkeypatch: pytest.MonkeyPatch) -> Dict[str, FakeStore]:
 
 
 def _batches(
-    index: BaseIndex, name: str, data_set: Optional[List[str]] = None
+    index: BaseIndex, name: str, facets: Optional[List[Tuple[str, Any]]] = None
 ) -> List[List[Dict[str, Any]]]:
     async def _main() -> List[List[Dict[str, Any]]]:
-        return [batch async for batch in index.get_metadata(name, data_set=data_set)]
+        return [batch async for batch in index.get_metadata(name, *(facets or []))]
 
     return asyncio.run(_main())
 
@@ -146,8 +148,8 @@ class TestChaining:
     ) -> None:
         index = Index(uri=["store-a", "store-b"])
         _batches(index, "files")
-        assert stores["store-a"].read_calls == ["files"]
-        assert stores["store-b"].read_calls == ["files"]
+        assert stores["store-a"].read_calls == [("files", ())]
+        assert stores["store-b"].read_calls == [("files", ())]
 
     def test_an_empty_store_does_not_end_the_stream(
         self, stores: Dict[str, FakeStore]
@@ -167,7 +169,7 @@ class TestChaining:
         _batches(index, "latest")
         assert sum(seen) == 4
 
-    def test_dataset_patterns_filter_records(
+    def test_facets_are_forwarded_to_every_store(
         self, stores: Dict[str, FakeStore]
     ) -> None:
         stores["store-a"].batches["latest"] = [
@@ -176,10 +178,9 @@ class TestChaining:
         stores["store-b"].batches["latest"] = [[{"dataset": "obs-b"}]]
 
         index = Index(uri=["store-a", "store-b"])
-        assert _batches(index, "latest", data_set=["obs-*"]) == [
-            [{"dataset": "obs-a"}],
-            [{"dataset": "obs-b"}],
-        ]
+        _batches(index, "latest", facets=[("dataset", "obs-*")])
+        assert stores["store-a"].read_calls == [("latest", (("dataset", "obs-*"),))]
+        assert stores["store-b"].read_calls == [("latest", (("dataset", "obs-*"),))]
 
 
 class TestIndexNames:

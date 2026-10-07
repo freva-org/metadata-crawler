@@ -373,6 +373,7 @@ class IndexStore(abc.ABC):
             raise ValueError("None of the given facets is valid.")
         async for record in self._read(
             index_name,
+            grouped=groups,
             parse_timestamps=parse_timestamps,
         ):
             yield record
@@ -390,6 +391,7 @@ class IndexStore(abc.ABC):
         self,
         index_name: str,
         *,
+        grouped: Optional[Dict[str, List[FacetValue]]] = None,
         parse_timestamps: bool = True,
     ) -> AsyncIterator[List[MetadataRecord]]:
         """Yield batches of metadata records from a specific table.
@@ -398,6 +400,8 @@ class IndexStore(abc.ABC):
         ^^^^^^^^^^
         index_name:
             The name of the index_name.
+        grouped:
+            Sanitized facet values to use when subsetting records.
         parse_timestamps:
             Parse timestamps to datetimes
 

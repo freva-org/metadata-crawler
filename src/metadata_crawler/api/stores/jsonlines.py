@@ -262,6 +262,7 @@ class JSONLines(IndexStore):
         self,
         index_name: str,
         *,
+        grouped: Optional[Dict[str, List[FacetValue]]] = None,
         parse_timestamps: bool = True,
     ) -> AsyncIterator[List[MetadataRecord]]:
         """Yield batches of metadata records from a specific table."""
@@ -274,10 +275,11 @@ class JSONLines(IndexStore):
             ),
         )
         pending: Optional[asyncio.Future[_Batch]] = None
+        predicate = self._make_predicate(grouped) if grouped else None
 
         def schedule() -> asyncio.Future[_Batch]:
             return asyncio.ensure_future(
-                asyncio.to_thread(self._read_batch, stream, ts_keys)
+                asyncio.to_thread(self._read_batch, stream, ts_keys, predicate)
             )
 
         try:

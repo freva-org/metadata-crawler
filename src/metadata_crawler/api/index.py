@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import abc
-from fnmatch import fnmatchcase
 from pathlib import Path
 from types import TracebackType
 from typing import (
@@ -24,7 +23,7 @@ from ..logger import logger
 from ..utils import Console, IndexProgress
 from .config import SchemaField
 from .metadata_stores import CatalogueReader
-from .stores import IndexStore
+from .stores import Facet, IndexStore
 
 
 class BaseIndex:
@@ -116,7 +115,7 @@ class BaseIndex:
         return names.pop() if names else ("", "")
 
     async def get_metadata(
-        self, index_name: str, data_set: Optional[Sequence[str]] = None
+        self, index_name: str, *facets: Facet
     ) -> AsyncIterator[List[Dict[str, Any]]]:
         """Get the metadata of an index in batches.
 
@@ -127,28 +126,16 @@ class BaseIndex:
         ^^^^^^^^^^
         index_name:
             Name of the index that should be read.
-        data_set:
-            Optional dataset-name patterns. Only records whose ``dataset``
-            facet matches one of these shell-style patterns are yielded.
+        facets:
+            Facet/value pairs used by metadata stores to subset records
+            before yielding them.
         """
         if not self._stores:
             return
-        patterns = [str(pattern) for pattern in data_set or []]
         num_items = 0
         for store in self._stores:
             logger.debug("Reading index %s from %s", index_name, store)
-            async for batch in store.read(index_name):
-                if patterns:
-                    batch = [
-                        record
-                        for record in batch
-                        if any(
-                            fnmatchcase(str(record.get("dataset", "")), pattern)
-                            for pattern in patterns
-                        )
-                    ]
-                    if not batch:
-                        continue
+            async for batch in store.read(index_name, *facets):
                 yield batch
                 self.progress.update(len(batch))
                 num_items += len(batch)

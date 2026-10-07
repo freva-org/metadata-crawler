@@ -332,6 +332,7 @@ class MongoDB(IndexStore):
         self,
         index_name: str,
         *,
+        grouped: Optional[Dict[str, List[FacetValue]]] = None,
         parse_timestamps: bool = True,
     ) -> AsyncIterator[List[MetadataRecord]]:
         """Yield batches of metadata records from a MongoDB collection."""
@@ -346,7 +347,7 @@ class MongoDB(IndexStore):
             db: "AsyncDatabase[MetadataRecord]" = client.get_default_database(
                 default="metadata"
             )
-            query: Dict[str, Any] = {}
+            query = self._build_query(grouped) if grouped else {}
             cursor = db[index_name].find(
                 query, {"_id": 0, self._epoch_key: 0}, batch_size=batch_size
             )

@@ -138,16 +138,16 @@ following example writes to a json.gz file and index named ``latest``:
        /tmp/catalog.yml \
        --server localhost:8983
 
-To index only selected datasets from a store (including PostgreSQL stores),
-use ``-ds`` / ``--data-set``. The option may be repeated and supports shell
-wildcards:
+To index a subset of a store (including PostgreSQL stores), use repeated
+``-f`` / ``--facets`` pairs. Any searchable metadata facet can be used;
+``dataset`` is only one example. Facet values support shell wildcards:
 
 .. code-block:: console
 
    metadata-crawler solr index \
        postgresql://username:password@server:5432/database \
        --server localhost:8983 \
-       -ds cmip6-* -ds obs-fs
+       -f dataset cmip6-* -f project CMIP6
 
 For MongoDB, supply the database URL and name:
 
