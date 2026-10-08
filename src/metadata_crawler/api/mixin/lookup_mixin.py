@@ -34,12 +34,27 @@ def _flatten_static(
 
 _flat: Dict[Key, Any] = {}
 
-_dir = os.getenv("MDC_LOOKUP_CACHE_DIR") or os.path.join(
-    user_cache_dir("metadata-crawler", "freva"), "lookup"
-)
-os.makedirs(_dir, exist_ok=True)
-_DC = Cache(_dir, size_limit=2 * 1024**3, eviction="least-recently-used", cull_limit=10)
-atexit.register(_DC.close)
+_DC: Cache | None = None
+
+
+def _get_cache() -> Cache:
+    """Return the lookup cache, creating it only when a lookup needs it."""
+    global _DC
+
+    if _DC is None:
+        cache_dir = os.getenv("MDC_LOOKUP_CACHE_DIR") or os.path.join(
+            user_cache_dir("metadata-crawler", "freva"), "lookup"
+        )
+        os.makedirs(cache_dir, exist_ok=True)
+        _DC = Cache(
+            cache_dir,
+            size_limit=2 * 1024**3,
+            eviction="least-recently-used",
+            cull_limit=10,
+        )
+        atexit.register(_DC.close)
+
+    return _DC
 
 
 class LookupMixin:
@@ -100,9 +115,10 @@ class LookupMixin:
         except KeyError:
             pass
         # 2) process-safe disk cache (key includes path)
-        val = _DC.get(tree)
+        cache = _get_cache()
+        val = cache.get(tree)
         if val is None:
             val = self.read_attr(attribute, path, **read_kws)
-            if not _DC.add(tree, val):
-                val = _DC.get(tree)
+            if not cache.add(tree, val):
+                val = cache.get(tree)
         return val
