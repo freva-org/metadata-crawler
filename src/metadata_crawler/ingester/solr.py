@@ -3,25 +3,156 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
 import os
+import ssl
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from types import TracebackType
-from typing import Annotated, Any, Dict, List, Optional, Tuple, Type, cast
+from typing import (
+    Annotated,
+    Any,
+    ClassVar,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+    cast,
+)
+from urllib.parse import urlsplit
 
 import aiohttp
 import orjson
+import pydantic
 
 from ..api.cli import cli_function, cli_parameter
 from ..api.index import BaseIndex
 from ..api.stores import IndexName
+from ..api.stores.base import BaseConnection, Credentials
 from ..logger import logger
+
+
+class SolrConnection(BaseConnection, Credentials):
+    """How to reach an Apache Solr server.
+
+    Define it in ``connections.toml`` with ``backend = "solr"`` (a Solr URL is
+    a plain ``http(s)://`` URL, which on its own means an intake catalogue)
+    and keep the credentials in ``secrets.toml``:
+
+    .. code-block:: toml
+
+        # connections.toml
+        [solr-prod]
+        backend = "solr"
+        url = "https://solr.example.org:8983"
+
+        # secrets.toml
+        [solr-prod]
+        username = "indexer"
+        password = "..."
+
+    Then ``mdc solr index prod --server solr-prod`` indexes into it, or in
+    Python ``index("solr", store, server=config["solr-prod"])``.
+
+    Without a scheme the URL defaults to ``http://``. A trailing ``/solr``
+    is optional.
+
+    Authentication, set in ``secrets.toml``:
+
+    * ``username`` and ``password``: HTTP Basic auth (Solr's
+      ``BasicAuthPlugin``, or a proxy in front of Solr);
+    * ``token``: sent as ``Authorization: Bearer <token>`` (Solr's
+      ``JWTAuthPlugin``, or a proxy that checks tokens).
+
+    Only one of the two can be used.
+
+    TLS, set in ``connections.toml``:
+
+    * ``ca_file``: CA bundle (PEM) to verify the server certificate with, e.g.
+      for an internal CA. Relative paths are relative to ``connections.toml``.
+    * ``verify_ssl = false``: don't verify the certificate at all. Only for
+      testing: the credentials are then sent to whoever answers.
+    """
+
+    backend: ClassVar[str] = "solr"
+
+    host: str = "localhost"
+    port: Optional[int] = pydantic.Field(default=None, ge=1, le=65535)
+    token: Optional[pydantic.SecretStr] = None
+    verify_ssl: bool = True
+    ca_file: Optional[str] = None
+
+    @pydantic.model_validator(mode="before")
+    @classmethod
+    def _from_url(cls, data: Any) -> Any:
+        if isinstance(data, Mapping):
+            data = dict(data)
+            for key in ("url", "uri"):
+                value = data.get(key)
+                if isinstance(value, str) and "://" not in value:
+                    data[key] = f"http://{value}"
+            explicit_database = "database" in data
+            cls._url_defaults(data, default_port=None)
+            if not explicit_database:
+                # The path (``/solr``) is not a database name.
+                data.pop("database", None)
+        return data
+
+    @pydantic.model_validator(mode="after")
+    def _one_way_to_authenticate(self) -> "SolrConnection":
+        if self.token is not None and (self.username or self.password):
+            raise ValueError(
+                f"solr connection {self.name!r}: use either token or "
+                "username/password, not both"
+            )
+        if self.ca_file and not self.verify_ssl:
+            raise ValueError(
+                f"solr connection {self.name!r}: ca_file has no effect with "
+                "verify_ssl = false"
+            )
+        return self
+
+    @property
+    def store_uri(self) -> str:
+        """``<scheme>://<host>[:<port>]`` of the server, without credentials."""
+        scheme = urlsplit(self.url).scheme or "http"
+        port = f":{self.port}" if self.port else ""
+        return f"{scheme}://{self.host}{port}"
+
+    def auth_headers(self) -> Dict[str, str]:
+        """Get the ``Authorization`` header for the requests, if any."""
+        if self.token is not None:
+            return {"Authorization": f"Bearer {self.token.get_secret_value()}"}
+        if not self.username:
+            return {}
+        password = self.password.get_secret_value() if self.password else ""
+        basic = base64.b64encode(f"{self.username}:{password}".encode()).decode()
+        return {"Authorization": f"Basic {basic}"}
+
+    def ssl(self) -> Union[bool, ssl.SSLContext]:
+        """TLS setting for aiohttp: ``False``, a context, or the default."""
+        if not self.verify_ssl:
+            return False
+        if self.ca_file:
+            path = os.path.expanduser(self.ca_file)
+            try:
+                return ssl.create_default_context(cafile=path)
+            except (OSError, ssl.SSLError) as error:
+                raise ValueError(
+                    f"solr connection {self.name!r}: can't use ca_file {path}: {error}"
+                ) from None
+        return True
 
 
 class SolrIndex(BaseIndex):
     """Ingest metadata into an apache solr server."""
+
+    connection = SolrConnection
 
     senteniel: Optional[bytes] = None
 
@@ -41,10 +172,28 @@ class SolrIndex(BaseIndex):
         self.producer_queue: asyncio.Queue[Tuple[str, Optional[bytes]]] = asyncio.Queue(
             maxsize=queue_max
         )
+        target = cast(Optional[SolrConnection], self.target)
+        self._headers: Dict[str, str] = target.auth_headers() if target else {}
+        self._ssl: Union[bool, ssl.SSLContext] = target.ssl() if target else True
         self.connector = aiohttp.TCPConnector(
             ttl_dns_cache=300,
             use_dns_cache=True,
+            ssl=self._ssl,
         )
+
+    def _session(self, **kwargs: Any) -> aiohttp.ClientSession:
+        """Open a client session with the target's auth and TLS settings."""
+        if "connector" not in kwargs:
+            kwargs["connector"] = aiohttp.TCPConnector(ssl=self._ssl)
+        return aiohttp.ClientSession(
+            timeout=self.timeout, headers=self._headers, **kwargs
+        )
+
+    def _server(self, server: Optional[str]) -> str:
+        """Get the solr server, either explicitly or via  target name."""
+        if server:
+            return server
+        return self.target.store_uri if self.target else ""
 
     def _ensure_uri(self, server: str) -> str:
         """Resolve and cache the base solr URI (``<scheme>://<host>:<port>/solr``)."""
@@ -143,7 +292,7 @@ class SolrIndex(BaseIndex):
         """
         if not cores:
             return
-        async with aiohttp.ClientSession(timeout=self.timeout) as admin:
+        async with self._session() as admin:
             status = await self._core_status(admin)
             for core in cores:
                 if status.get(core, {}).get("name"):
@@ -247,8 +396,12 @@ class SolrIndex(BaseIndex):
             cli_parameter(
                 "-sv",
                 "--server",
-                help="The <host>:<port> to the solr server",
+                help=(
+                    "The <host>:<port> of the solr server, or the name of a "
+                    "solr connection in connections.toml"
+                ),
                 type=str,
+                connection=True,
             ),
         ] = None,
         facets: Annotated[
@@ -290,8 +443,8 @@ class SolrIndex(BaseIndex):
                 value = value.lower()
             query.append(f"{key.lower()}:{value}")
         query_str = " AND ".join(query)
-        server = server or ""
-        async with aiohttp.ClientSession(timeout=self.timeout) as session:
+        server = self._server(server)
+        async with self._session() as session:
             logger.debug("Deleting entries matching %s", query_str)
             for core in (all_versions, latest_version):
                 url = await self.solr_url(server, core)
@@ -443,8 +596,12 @@ class SolrIndex(BaseIndex):
             cli_parameter(
                 "-sv",
                 "--server",
-                help="The <host>:<port> to the solr server",
+                help=(
+                    "The <host>:<port> of the solr server, or the name of a "
+                    "solr connection in connections.toml"
+                ),
                 type=str,
+                connection=True,
             ),
         ] = None,
         index_suffix: Annotated[
@@ -506,7 +663,7 @@ class SolrIndex(BaseIndex):
         ] = 0,
     ) -> None:
         """Add metadata to the apache solr metadata server."""
-        server = server or ""
+        server = self._server(server)
         suffix = index_suffix or ""
         if rotate and not suffix:
             suffix = datetime.now().strftime("_%Y%m%dT%H%M%S%f")
@@ -522,7 +679,7 @@ class SolrIndex(BaseIndex):
         created: List[str] = []
         if rotate:
             self._ensure_uri(server)
-            async with aiohttp.ClientSession(timeout=self.timeout) as admin:
+            async with self._session() as admin:
                 for core in self.index_names:
                     if await self._create_core(admin, core + suffix, configset):
                         created.append(core + suffix)
@@ -544,9 +701,7 @@ class SolrIndex(BaseIndex):
         max_failed_batches: int,
     ) -> None:
         """Stream every store into ``<core><suffix>`` and commit the result."""
-        async with aiohttp.ClientSession(
-            timeout=self.timeout, connector=self.connector
-        ) as session:
+        async with self._session(connector=self.connector) as session:
             # NB: no raise_for_status here. Every response is inspected
             # explicitly so solr's error body (which is what tells you about
             # schema drift) makes it into the log rather than being reduced to
@@ -576,7 +731,7 @@ class SolrIndex(BaseIndex):
             # actually visible (and warmed) before we count / flip.
             for core in self.index_names:
                 await self._commit(session, core + suffix)
-            async with aiohttp.ClientSession(timeout=self.timeout) as admin:
+            async with self._session() as admin:
                 for core in self.index_names:
                     logger.info(
                         "Core %s holds %i documents",
@@ -611,7 +766,7 @@ class SolrIndex(BaseIndex):
         time; a failure between the two leaves a mixed state (same exposure as
         the previous shell-script approach) and is surfaced as an error.
         """
-        async with aiohttp.ClientSession(timeout=self.timeout) as admin:
+        async with self._session() as admin:
             counts = {
                 core: await self._count_docs(admin, core + suffix)
                 for core in self.index_names

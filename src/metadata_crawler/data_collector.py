@@ -12,7 +12,6 @@ from typing import (
     AsyncIterator,
     Callable,
     Coroutine,
-    Dict,
     Iterator,
     Optional,
     Tuple,
@@ -20,8 +19,6 @@ from typing import (
     Union,
     cast,
 )
-
-import tomlkit
 
 from .api.config import CrawlerSettings, DRSConfig
 from .api.metadata_stores import CatalogueWriter
@@ -58,9 +55,7 @@ class DataCollector:
     def __init__(
         self,
         config: DRSConfig,
-        metadata_store: Optional[
-            Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument]
-        ],
+        metadata_store: Optional[Union[Path, str]],
         index_name: IndexName,
         *search_objects: CrawlerSettings,
         **kwargs: Any,

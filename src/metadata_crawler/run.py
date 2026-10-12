@@ -3,15 +3,15 @@
 import asyncio
 import os
 import time
+from copy import deepcopy
+from dataclasses import dataclass, field
 from fnmatch import fnmatch
-from functools import lru_cache
 from pathlib import Path
 from types import NoneType
 from typing import (
     Any,
     Collection,
     Dict,
-    FrozenSet,
     List,
     Optional,
     Sequence,
@@ -24,15 +24,22 @@ import tomlkit
 import yaml
 from rich.prompt import Prompt
 
-from .api.config import CrawlerSettings, Datasets, DRSConfig, strip_protocol
+from .api.config import (
+    ConfigMerger,
+    CrawlerSettings,
+    Datasets,
+    DRSConfig,
+    strip_protocol,
+)
 from .api.metadata_stores import (
     CatalogueBackendType,
     CatalogueReader,
 )
-from .api.stores import IndexName, IndexStore
-from .api.stores.base import Facet
+from .api.stores import IndexName
+from .api.stores.base import BaseConnection, Facet
 from .data_collector import DataCollector
 from .logger import apply_verbosity, get_level_from_verbosity, logger
+from .types import StoresInput, StoresSequence
 from .utils import (
     Console,
     EmptyCrawl,
@@ -43,37 +50,68 @@ from .utils import (
     timedelta_to_str,
 )
 
-FilesArg = Union[str, Path, Sequence[Union[str, Path]]]
+
+@dataclass
+class _Uri:
+    uri: str
+    storage_options: Dict[str, Any] = field(default_factory=dict, repr=False)
 
 
-@lru_cache(maxsize=None)
-def _norm_files_cached(
-    uris: Tuple[str, ...],
-    backend: Optional[CatalogueBackendType],
-    opts: FrozenSet[Tuple[str, str]],
-) -> Tuple[str, ...]:
-    storage_options = dict(opts)
-    flat_uris: Tuple[str, ...] = ()
-    for _uri in uris:
-        flat_uris += tuple(
-            CatalogueReader.rglob_stores(_uri, backend=backend, **storage_options)
+class StoreReader:
+    """Helper class for dealing with strings, paths and connection configs."""
+
+    def __init__(self, store: Optional[StoresInput]) -> None:
+
+        _store: Optional[BaseConnection] = (
+            store if isinstance(store, BaseConnection) else None
         )
-    return flat_uris
+        self._storage_options: Dict[str, Any] = {}
+        if _store:
+            self.uri: str = _store.store_uri
+            self._storage_options = _store.storage_options(reveal=True)
+        else:
+            self.uri = self._uri(cast(Union[str, Path], store))
+
+    def _uri(self, uri: Optional[Union[Path, str]]) -> str:
+        """Get the path or url to the store of truth."""
+        import fsspec
+
+        uri = uri or os.path.join(os.path.abspath("."), "data.yml")
+        store = f"{uri.expanduser().absolute()}" if isinstance(uri, Path) else uri
+        schema, path = fsspec.core.split_protocol(store)
+        schema = schema or "file"
+        path = os.path.expanduser(os.path.expandvars(path))
+        return f"{schema}://{path}" if schema != "file" else path
+
+    def storage_options(self, options: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Merge the storage options into one dict."""
+        cfg_options = deepcopy(self._storage_options or {})
+        ConfigMerger.merge_tables(cfg_options, options or {})
+        return cfg_options
 
 
 def _norm_files(
-    metadata_stores: Optional[Union[FilesArg, Sequence[FilesArg]]],
+    metadata_stores: Optional[StoresSequence],
     backend: Optional[CatalogueBackendType] = None,
     **storage_options: Any,
-) -> Tuple[str, ...]:
+) -> Tuple[_Uri, ...]:
     if metadata_stores is None:
-        return ("",)
-    raw: Tuple[str, ...] = (
-        (str(metadata_stores),)
-        if isinstance(metadata_stores, (str, Path))
-        else tuple(str(p) for p in metadata_stores)
+        return (_Uri(uri=""),)
+    stores: Sequence[StoresInput] = (
+        (metadata_stores,)
+        if isinstance(metadata_stores, (str, Path, BaseConnection))
+        else metadata_stores
     )
-    return _norm_files_cached(raw, backend, frozenset(storage_options.items()))
+    out: List[_Uri] = []
+    for reader in map(StoreReader, stores):
+        options = reader.storage_options(storage_options)
+        out.extend(
+            _Uri(uri=uri, storage_options=options)
+            for uri in CatalogueReader.rglob_stores(
+                reader.uri, backend=backend, **options
+            )
+        )
+    return tuple(out)
 
 
 def _match(match: str, items: Collection[str]) -> List[str]:
@@ -89,16 +127,14 @@ def _match(match: str, items: Collection[str]) -> List[str]:
 
 
 def _get_num_of_indexed_objects(
-    metadata_stores: Optional[Union[Sequence[FilesArg], FilesArg]],
+    stores: Sequence[_Uri],
     backend: Optional[CatalogueBackendType] = None,
-    storage_options: Optional[Dict[str, Any]] = None,
 ) -> int:
     num_objects = 0
-    storage_options = storage_options or {}
-    for _uri in _norm_files(metadata_stores, backend=backend, **storage_options):
+    for store in stores:
         try:
             cat = CatalogueReader.read_catalogue_metadata(
-                _uri, backend=backend, **storage_options
+                store.uri, backend=backend, **store.storage_options
             )
             num_objects += cat.get("indexed_objects", 0)
         except (FileNotFoundError, IsADirectoryError, yaml.parser.ParserError):
@@ -165,6 +201,15 @@ async def async_call(
             )
             raise ValueError(msg) from None
         storage_options = kwargs.pop("storage_options", {})
+        # A connection for the option that says where the index system is
+        # (--server, --url, ...) goes to the instance as its target; the
+        # method then falls back to it for everything not given explicitly.
+        target: Optional[BaseConnection] = None
+        target_option = (
+            cls.target_option(method) if hasattr(cls, "target_option") else None
+        )
+        if target_option and isinstance(kwargs.get(target_option), BaseConnection):
+            target = kwargs.pop(target_option)
         progress.start()
         # NB: *all* store uris are handed to a single ingester instance. The
         # ingester is responsible for reading them as one stream. Calling the
@@ -172,11 +217,13 @@ async def async_call(
         # performs - for blue/green targets that means one create + rotate per
         # store, which both throws away all but the last store's data and
         # collides on the second rotation of a reused index suffix.
+        extra: Dict[str, Any] = {"target": target} if target is not None else {}
         async with cls(
             batch_size=batch_size,
             uri=list(uris or []) or None,
             storage_options=storage_options,
             progress=progress,
+            **extra,
         ) as obj:
             func = getattr(obj, method)
             await func(**kwargs)
@@ -190,7 +237,7 @@ async def async_call(
 
 async def async_index(
     index_system: str,
-    *metadata_stores: FilesArg,
+    *metadata_stores: StoresInput,
     batch_size: int = 2500,
     verbosity: int = 0,
     log_suffix: Optional[str] = None,
@@ -204,6 +251,11 @@ async def async_index(
 
     index_system:
         The index server where the metadata is indexed.
+
+        .. versionchanged:: 2610.0.0
+
+           This parameter accepts a metadata crawler config item.
+
     metadata_stores:
         Uri to the metadata store(s).
     batch_size:
@@ -219,7 +271,6 @@ async def async_index(
         .. versionchanged:: 2605.0.0
 
            Added ``"mongodb"`` and ``"postgresql"`` backends.
-
 
 
     Other Parameters
@@ -242,22 +293,16 @@ async def async_index(
         )
     """
     storage_options: Dict[str, Any] = kwargs.get("storage_options", {})
-    _mdata: Optional[Union[FilesArg, Sequence[FilesArg]]] = kwargs.pop(
-        "metadata_stores", None
-    )
-    _mdata = metadata_stores or _mdata
+    _mdata: Optional[StoresSequence] = kwargs.pop("metadata_stores", None)
+    stores = _norm_files(metadata_stores or _mdata, backend=backend, **storage_options)
     await async_call(
         index_system,
         "index",
         batch_size=batch_size,
         verbosity=verbosity,
         log_suffix=log_suffix,
-        uris=_norm_files(_mdata, backend=backend, **storage_options),
-        num_objects=_get_num_of_indexed_objects(
-            _mdata,
-            backend=backend,
-            storage_options=storage_options,
-        ),
+        uris=[store.uri for store in stores],
+        num_objects=_get_num_of_indexed_objects(stores, backend=backend),
         **kwargs,
     )
 
@@ -311,7 +356,7 @@ async def async_delete(
 
 
 async def async_remove(
-    store: Optional[Union[str, Path]] = None,
+    store: Optional[StoresSequence] = None,
     storage_options: Optional[Dict[str, Any]] = None,
     verbosity: int = 0,
     log_suffix: Optional[str] = None,
@@ -320,7 +365,7 @@ async def async_remove(
 ) -> int:
     """Remove metadata entries from the source of truth.
 
-    .. versionadded:: 2609.0.0
+    .. versionadded:: 2610.0.0
 
         This function deletes entries by facet from the source of truth for
         example the database or intake catalogue that is used to put metadata
@@ -332,6 +377,11 @@ async def async_remove(
     store:
         Path or url of the source of truth where the collected metadata will be
         stored.
+
+        .. versionchanged:: 2610.0.0
+
+           This parameter accepts a metadata crawler config item.
+
     storage_options:
         Set additional storage options for adding metadata to the metadata store
     facets:
@@ -374,10 +424,14 @@ async def async_remove(
         Console.print("Deleting items:")
         removed = 0
         stores = 0
-        for _uri in IndexStore.normalise_uris(store):
+        store = store or []
+        if isinstance(store, (str, Path, BaseConnection)):
+            store = [store]
+        for s in store:
+            sr = StoreReader(s)
             reader = CatalogueReader(
-                store_url=_uri,
-                storage_options=storage_options,
+                store_url=sr.uri,
+                storage_options=sr.storage_options(storage_options),
             )
             _removed = await reader.store.remove(*facets, dry_run=dry_run)
             if _removed and not dry_run:
@@ -397,7 +451,7 @@ async def async_remove(
 
 async def async_add(
     *config_files: Union[Path, str, Dict[str, Any], tomlkit.TOMLDocument],
-    store: Optional[Union[str, Path, Dict[str, Any], tomlkit.TOMLDocument]] = None,
+    store: Optional[StoresInput] = None,
     data_object: Optional[Union[str, List[str]]] = None,
     data_set: Optional[Union[List[str], str]] = None,
     data_store_prefix: Optional[str] = None,
@@ -435,7 +489,12 @@ async def async_add(
     config_files:
         Path to the drs-config file / loaded configuration.
     store:
-        Path to the intake catalogue.
+        Path to the source of truth.
+
+        .. versionchanged:: 2610.0.0
+
+           This parameter accepts a metadata crawler config item.
+
     data_objects:
         Instead of defining datasets that are to be crawled you can crawl
         data based on their directories. The directories must be a root dirs
@@ -467,7 +526,6 @@ async def async_add(
 
            Added ``"mongodb"`` and ``"postgresql"`` backends.
 
-
     catalogue_backend:
         Alias for ``backend``
     no_sweep:
@@ -480,7 +538,6 @@ async def async_add(
 
         .. versionadded:: 2605.0.0
 
-
     sweep_grace_period:
         Number of days to keep records before they become eligible
         for sweeping. Records older than this grace period are
@@ -488,7 +545,6 @@ async def async_add(
         environment variable. Defaults to 5 days.
 
         .. versionadded:: 2605.0.0
-
 
     batch_size:
         Batch size that is used to collect the meta data. This can affect
@@ -571,9 +627,10 @@ async def async_add(
             data_set if isinstance(data_set, (NoneType, list)) else [str(data_set)]
         )
         cfg = DRSConfig.load(*config_files)
+        sr = StoreReader(store)
         async with DataCollector(
             cfg,
-            store,
+            sr.uri,
             IndexName(latest=latest_version, all=all_versions),
             *_get_search(cfg.datasets, data_object, data_set),
             batch_size=batch_size,
@@ -582,7 +639,7 @@ async def async_add(
             table=table or "",
             collection=collection or "",
             n_procs=n_procs,
-            storage_options=storage_options or {},
+            storage_options=sr.storage_options(storage_options),
             shadow=shadow,
             backend=backend,
             no_sweep=no_sweep,

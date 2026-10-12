@@ -137,7 +137,9 @@ myst_substitutions = {
     "rtd": "[Read the Docs](https://readthedocs.org/)",
     "version": __version__,
     "cli_main": get_cli_output(),
-    "cli_crawl": get_cli_output("crawl"),
+    "cli_add": get_cli_output("add"),
+    "cli_remove": get_cli_output("remove"),
+    "cli_init_config": get_cli_output("init-config"),
     "cli_config": get_cli_output("config"),
     "cli_walk": get_cli_output("walk-intake"),
     "cli_mongo": get_cli_output("mongo"),
@@ -214,6 +216,8 @@ html_context = {
 }
 
 html_static_path = ["_static"]
+# Files copied verbatim to the root of the site, e.g. /llms.txt
+html_extra_path = ["_extra"]
 
 # Add any paths that contain custom static files (such as style sheets)
 # relative to this directory. They are copied after the builtin static

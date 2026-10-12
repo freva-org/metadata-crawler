@@ -10,6 +10,7 @@ from fnmatch import fnmatch
 from itertools import islice
 from tempfile import TemporaryDirectory
 from typing import (
+    TYPE_CHECKING,
     Any,
     AsyncIterator,
     BinaryIO,
@@ -18,6 +19,7 @@ from typing import (
     Dict,
     List,
     Literal,
+    Mapping,
     Optional,
     Set,
     TextIO,
@@ -25,8 +27,10 @@ from typing import (
     Union,
     cast,
 )
+from urllib.parse import urlsplit
 
 import orjson
+import pydantic
 import yaml
 
 from ...logger import logger
@@ -34,16 +38,72 @@ from ...utils import parse_batch
 from ..config import BaseType, SchemaField
 from .base import (
     BackendWriter,
+    BaseConnection,
     FacetValue,
     IndexName,
     IndexStore,
     MetadataRecord,
+    S3Options,
     StorageOptions,
 )
 
 Record = Dict[str, Any]
 Predicate = Callable[[MetadataRecord], bool]
 _Batch = Tuple[List[MetadataRecord], bool]
+
+if TYPE_CHECKING:
+    from fsspec import AbstractFileSystem
+
+
+class IntakeConnection(BaseConnection):
+    """An intake catalogue (YAML plus JSONLines) on a file system or S3.
+
+    In the config, s3fs options are written flat next to ``url``; they are
+    collected into the ``s3`` block here.
+    """
+
+    backend: ClassVar[str] = "intake"
+    fallback: ClassVar[bool] = True
+
+    s3: S3Options = pydantic.Field(default_factory=S3Options)
+
+    @pydantic.model_validator(mode="before")
+    @classmethod
+    def _collect_s3_options(cls, data: Any) -> Any:
+        if not isinstance(data, Mapping):
+            return data
+        own = set(cls.model_fields) | {"user", "passwd", "uri"}
+        out = {k: v for k, v in data.items() if k in own}
+        s3 = dict(out.pop("s3", None) or {})
+        s3.update({k: v for k, v in data.items() if k not in own})
+        return {**out, "s3": s3}
+
+    @property
+    def is_remote(self) -> bool:
+        """Check if a file is local or on a remote file system."""
+        scheme = urlsplit(self.url).scheme
+        return bool(scheme) and scheme != "file"
+
+    @property
+    def store_uri(self) -> str:
+        """Define the storage uri."""
+        import fsspec
+
+        schema, path = fsspec.core.split_protocol(self.url)
+        schema = schema or "file"
+        path = os.path.expanduser(os.path.expandvars(path))
+        return f"{schema}://{path}" if schema != "file" else path
+
+    def storage_options(self, *, reveal: bool = False) -> StorageOptions:
+        """Storage options are automatically mapped to s3 options."""
+        return self.s3.options(reveal=reveal) if self.is_remote else {}
+
+    def filesystem(self) -> Tuple["AbstractFileSystem", str]:
+        """Get fsspec filesystem and path of the catalogue file."""
+        import fsspec
+
+        fs, path = fsspec.core.url_to_fs(self.url, **self.storage_options(reveal=True))
+        return fs, path
 
 
 class JSONLineWriter(BackendWriter):
