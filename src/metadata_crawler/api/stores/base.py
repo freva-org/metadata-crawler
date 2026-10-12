@@ -44,6 +44,7 @@ from ..config import BaseType, SchemaField
 
 CREDENTIAL_KEYS = frozenset(
     {
+        # Existing generic credentials
         "key",
         "secret",
         "token",
@@ -55,9 +56,29 @@ CREDENTIAL_KEYS = frozenset(
         "secretfile",
         "os_password",
         "os_auth_token",
+        # AWS/boto spellings; also used with MinIO, Ceph, etc.
+        "aws_access_key_id",
+        "aws_secret_access_key",
+        "aws_session_token",
+        "aws_security_token",
+        # Common aliases
+        "access_key",
+        "access_key_id",
+        "secret_key",
+        "secret_access_key",
+        "session_token",
+        "security_token",
+        # Token/API based authentication
+        "api_key",
+        "apikey",
+        "api_token",
+        "auth_token",
+        "bearer_token",
+        "oauth_token",
+        "refresh_token",
+        "client_secret",
     }
 )
-
 
 INGESTER_GROUP = "metadata_crawler.ingester"
 """Entry points of index systems; they define the connection models of their
