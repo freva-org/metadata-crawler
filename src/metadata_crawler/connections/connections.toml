@@ -1,0 +1,198 @@
+# =============================================================================
+# metadata-crawler connections
+# =============================================================================
+#
+# Named connections to catalogue stores and index systems. Wherever
+# metadata-crawler expects a store, or the server of an index system, a name
+# from this file works as well as a URL or path:
+#
+#     mdc glance prod
+#     mdc remove prod -f variable pr --dry-run
+#     mdc solr index prod --server solr-prod
+#
+# and in Python:
+#
+#     from metadata_crawler.connections import read_configfiles
+#
+#     with read_configfiles() as config:
+#         prod = config["prod"]
+#
+# -----------------------------------------------------------------------------
+# Where connections are defined
+# -----------------------------------------------------------------------------
+#
+# Settings come from three places, later ones win per key:
+#
+#     1. ~/.config/metadata-crawler/connections.toml   (this file)
+#          MDC_CONFIG_PATH or --mdc-config point to another file
+#     2. ~/.config/metadata-crawler/secrets.toml(.age)  your credentials
+#          MDC_SECRETS_PATH or --mdc-secrets point to another file
+#     3. -s/--storage-option on the command line
+#
+# XDG_CONFIG_HOME moves ~/.config. Relative paths in this file are relative
+# to the file itself, not to the directory you run the crawler from.
+#
+# -----------------------------------------------------------------------------
+# Keys every connection has
+# -----------------------------------------------------------------------------
+#
+#   url          required. Path or URL of the catalogue.
+#   backend      optional. Picked from the URL scheme if not given:
+#                  postgresql:// and postgres://        -> "postgresql"
+#                  mongodb:// and mongodb+srv://         -> "mongodb"
+#                  anything else (paths, s3://, ...)     -> "intake"
+#                Index systems need it where the URL is ambiguous, e.g.
+#                "solr" for an http(s):// URL. Index plugins may add
+#                backends.
+#   secrets      optional. Take the credentials from this table of
+#                  secrets.toml instead of the one named like the connection.
+#   description  optional.
+#
+# All other keys depend on the backend, see the sections below. Unknown keys
+# are an error for PostgreSQL; for intake and MongoDB they are passed on
+# (as s3fs options or as MongoDB URI options).
+#
+# -----------------------------------------------------------------------------
+# No credentials in this file
+# -----------------------------------------------------------------------------
+#
+# Usernames, passwords, keys, secrets and tokens belong in secrets.toml,
+# which must only be readable by you. Credentials are never written into
+# catalogue metadata, whichever file they come from.
+#
+# Everything below is commented out, so a fresh copy of this file has no
+# effect. Uncomment and adapt the connections you need.
+#
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# Intake catalogue on a local or shared file system
+# -----------------------------------------------------------------------------
+# The YAML file plus its data files (metadata-latest.json.gz, ...), which are
+# kept next to it.
+
+# [scratch]
+# url = "/work/ab1234/catalogues/scratch.yml"
+# description = "My test crawls"
+
+
+# -----------------------------------------------------------------------------
+# Intake catalogue on S3
+# -----------------------------------------------------------------------------
+# Every key besides the common ones is an s3fs option, e.g. endpoint_url,
+# anon, client_kwargs. They only apply when the url is not a local path.
+# key/secret (and token) go into secrets.toml under [waterpark]; key and
+# secret must be given together. Without them, access is anonymous or falls
+# back to your AWS profile.
+
+# [waterpark]
+# url = "s3://metadata/catalogues/waterpark.yml"
+# endpoint_url = "https://s3.example.org"
+# description = "Waterpark HEALPix data"
+
+# A read-only view of a public catalogue, no credentials needed:
+
+# [waterpark-public]
+# url = "s3://metadata/catalogues/waterpark.yml"
+# endpoint_url = "https://s3.example.org"
+# anon = true
+
+
+# -----------------------------------------------------------------------------
+# PostgreSQL catalogue
+# -----------------------------------------------------------------------------
+# host, port and database can be part of the url; explicit keys win.
+#
+#   host       default: from the url, else "localhost"
+#   port       default: from the url, else 5432
+#   database   default: from the url path, else "metadata"
+#   db_schema  default: "metadata_crawler"
+#
+# Username and password go into secrets.toml under [prod].
+
+# [prod]
+# url = "postgresql://db.example.org/metadata"
+# db_schema = "metadata_crawler"
+# description = "Production catalogue"
+
+# A second schema on the same server, sharing the credentials of [prod]:
+
+# [prod-staging]
+# url = "postgresql://db.example.org/metadata"
+# db_schema = "metadata_crawler_staging"
+# secrets = "prod"
+
+
+# -----------------------------------------------------------------------------
+# MongoDB catalogue
+# -----------------------------------------------------------------------------
+# host, port and database can be part of the url; explicit keys win.
+#
+#   host       default: from the url, else "localhost"
+#   port       default: from the url, else MongoDB's default
+#   database   default: from the url path, else "metadata"
+#
+# Every other key is added to the connection URI as a MongoDB option, e.g.
+# tls, replicaSet, authSource. With credentials, authSource defaults to
+# "admin". Username and password go into secrets.toml under [mongo].
+
+# [mongo]
+# url = "mongodb://mongo.example.org:27017/metadata"
+# tls = true
+# replicaSet = "rs0"
+
+
+# -----------------------------------------------------------------------------
+# Apache Solr index
+# -----------------------------------------------------------------------------
+# Used with: mdc solr index ... --server solr-prod
+# A Solr URL is a plain http(s):// URL, so backend = "solr" is required.
+#
+# Authentication goes into secrets.toml, one of:
+#   username + password   HTTP Basic auth (Solr's BasicAuthPlugin or a proxy)
+#   token                 Authorization: Bearer (JWTAuthPlugin or a proxy)
+#
+# TLS:
+#   ca_file               CA bundle (PEM) for a server certificate from an
+#                         internal CA; relative to this file
+#   verify_ssl = false    skip the certificate check; for testing only, the
+#                         credentials then go to whoever answers
+
+# [solr-prod]
+# backend = "solr"
+# url = "https://solr.example.org:8983"
+
+# A Solr behind a token-checking proxy, certificate from an internal CA:
+
+# [solr-internal]
+# backend = "solr"
+# url = "https://solr.internal.example.org"
+# ca_file = "certs/internal-ca.pem"
+
+
+# -----------------------------------------------------------------------------
+# MongoDB index
+# -----------------------------------------------------------------------------
+# Used with: mdc mongo index ... --url mongo-search
+# The same kind of connection as a MongoDB catalogue, so the same keys apply.
+# Its database is used unless --database is given.
+
+# [mongo-search]
+# url = "mongodb://mongo.example.org:27017/search"
+# secrets = "mongo"
+
+
+# -----------------------------------------------------------------------------
+# Local development (docker-compose.yaml of the repository)
+# -----------------------------------------------------------------------------
+# The compose services listen on localhost; both share the [dev] table in
+# secrets.toml.
+
+# [dev-pg]
+# url = "postgresql://localhost/metadata"
+# secrets = "dev"
+
+# [dev-mongo]
+# url = "mongodb://localhost:27017/metadata"
+# secrets = "dev"

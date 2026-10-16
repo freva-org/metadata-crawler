@@ -39,14 +39,14 @@ To implement a new backend:
     * ``path(path)`` should return a URI with scheme/authority as required by your backend.
     * ``uri(path)`` should return the raw URI (including bucket or container names as appropriate).
 3. **Register** your backend by adding it to the entry point group
-    * ``metadata_crawler.storage_backends`` in your ``setup.cfg`` or
+    * ``metadata_crawler.storage`` in your ``setup.cfg`` or
     * ``pyproject.toml``.  This allows the ``fs_type`` string in the configuration to resolve to your backend class.
 
     .. admonition:: pyproject.toml
 
         .. code-block:: toml
 
-            [project.entry-points."metadata_crawler.storage_backends"]
+            [project.entry-points."metadata_crawler.storage"]
             foo = "my_package.foo_backend:FooBackend"
 
 
@@ -96,7 +96,7 @@ hypothetical ``foo`` protocol:
 .. code-block:: toml
 
    # Then register in your packaging config:
-   [project.entry-points."metadata_crawler.storage_backends"]
+   [project.entry-points."metadata_crawler.storage"]
    foo = "my_package.foo_backend:FooBackend"
 
 Once registered, you can set ``fs_type = "foo"`` in a dataset
