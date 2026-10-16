@@ -66,3 +66,28 @@ def test_diskcache_reuse_across_instances(monkeypatch, tmp_path):
 
     # clean up cache
     lm._get_cache().clear()
+
+
+def test_lookup_uses_value_cached_by_another_process(monkeypatch, tmp_path):
+    """A concurrent writer can win the race between get() and add()."""
+    lm = _reload_with_cache_dir(tmp_path)
+    lm.LookupMixin.CMOR_STATIC = {}
+
+    class Cache:
+        def __init__(self):
+            self.get_calls = 0
+
+        def get(self, tree):
+            self.get_calls += 1
+            return None if self.get_calls == 1 else "cached value"
+
+        def add(self, tree, value):
+            return False
+
+    class Fake(lm.LookupMixin):
+        def read_attr(self, attribute: str, path: str, **k):
+            return "locally read value"
+
+    monkeypatch.setattr(lm, "_get_cache", lambda: Cache())
+
+    assert Fake().lookup("/p/file.nc", "units", "cmip6", "day", "tas") == "cached value"
