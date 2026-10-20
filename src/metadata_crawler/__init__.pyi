@@ -14,6 +14,7 @@ from .run import async_add as async_add
 from .run import async_delete as async_delete
 from .run import async_index as async_index
 from .run import async_remove as async_remove
+from .types import StoresInput, StoresSequence
 
 __all__ = [
     "logger",
@@ -23,6 +24,8 @@ __all__ = [
     "add",
     "delete",
     "remove",
+    "glance_metadata",
+    "init_config",
     "get_config",
     "async_index",
     "async_delete",
@@ -44,7 +47,7 @@ def get_config(
 def get_config(*, preserve_comments: bool) -> ConfigMerger[Any]: ...
 def index(
     index_system: str,
-    *catalogue_files: Path | str | list[str] | list[Path],
+    *metadata_stores: StoresSequence,
     batch_size: int = 2500,
     verbosity: int = 0,
     log_suffix: str | None = None,
@@ -59,7 +62,7 @@ def delete(
 ) -> None: ...
 def add(
     *config_files: Path | str | dict[str, Any] | TOMLDocument,
-    store: str | Path | None = None,
+    store: StoresInput | None = None,
     data_object: str | list[str] | None = None,
     data_set: str | list[str] | None = None,
     data_store_prefix: str = "metadata",
@@ -78,15 +81,21 @@ def add(
     **kwargs: Any,
 ) -> None: ...
 def glance_metadata(
-    store: Path | str,
+    store: StoresInput,
     backend: Optional[CatalogueBackendType] = None,
     **storage_options: Any,
 ) -> dict[str, Any]: ...
 def remove(
-    store: Optional[Union[str, Path]] = None,
+    store: Optional[StoresInput] = None,
     storage_options: Optional[Dict[str, Any]] = None,
     verbosity: int = 0,
     log_suffix: Optional[str] = None,
     dry_run: bool = False,
     facets: Optional[Sequence[Facet]] = None,
 ) -> int: ...
+def init_config(
+    force: bool = False,
+    store_path: Optional[Union[str, Path]] = None,
+    secrets_path: Optional[Union[str, Path]] = None,
+    **_: Any,
+) -> None: ...

@@ -20,7 +20,7 @@ The synchronous API functions return when the operation is finished
 and raise exceptions on error.  A typical workflow consists of
 
 1. **Crawling**: collect metadata from one or more files or datasets
-   into a permanet source of truth  (intake catalogue, database).
+   into a permanent source of truth (intake catalogue, database).
 2. **Indexing**: read entries from the source of truth and write them to the
    configured index backend (e.g. Apache Solr or MongoDB).
 3. **Deleting**: remove previously indexed entries matching a set
@@ -37,10 +37,9 @@ stores it in a metadata store, and indexes it to Apache Solr:
    add(
        "/path/to/drs_config.toml",
        "/path/to/second/drs_config.toml",
-       store="/tmp/catalog.jsonl",
+       store="/tmp/catalog.yml",
        data_object=["/path/to/data"],
        backend="jsonlines",
-       threads=8,
        batch_size=50,
    )
 
@@ -63,16 +62,17 @@ stores it in a metadata store, and indexes it to Apache Solr:
 
    # 4) optionally remove data from the source of truth so it is not indexed
    #    anymore
+   #    (same key: OR, different keys: AND; dry_run=True only counts)
    removed_items = remove(
-    "mongodb://mongo:secret@localhost:27017/metadata",
-    facets=[("project", "CMIP6"), ("institute", "MPI-M")],
+       "mongodb://mongo:secret@localhost:27017/metadata",
+       facets=[("project", "CMIP6"), ("institute", "MPI-M")],
    )
 
 
 .. versionchanged:: 2511.0.0
 
-   The catalogue argument ``store`` of the the :func:`add`
-   has been rearanged and is now a keyword argument:
+   The catalogue argument ``store`` of :func:`~metadata_crawler.add`
+   has been rearranged and is now a keyword argument:
    ``add("data.yaml", "drs-config.toml")`` becomes
    ``add("drs-config.toml", store="data.yaml")``. If the ``store`` keyword
    is omitted the output catalogue will be interpreted as config file.
@@ -85,7 +85,7 @@ stores it in a metadata store, and indexes it to Apache Solr:
     is needed. The backend is detected automatically from the URL scheme.
 
 
-.. versionadded:: 2609.0.0
+.. versionadded:: 2610.0.0
 
     Search facets can be used to create subset of the metadata added to the source
     of truth (databases or intake catalogues). Sometimes it might be necessary to
@@ -102,10 +102,9 @@ stores it in a metadata store, and indexes it to Apache Solr:
     add(
        "/path/to/drs_config.toml",
        "/path/to/second/drs_config.toml",
-       store="username:password@server/databasename",
+       store="mongodb://server:27017/databasename",
+       storage_options={"username": "user", "password": "secret"},
        data_object=["/path/to/data"],
-       backend="mongodb",
-       threads=8,
        batch_size=50,
     )
 
@@ -116,12 +115,29 @@ stores it in a metadata store, and indexes it to Apache Solr:
     add(
        "/path/to/drs_config.toml",
        "/path/to/second/drs_config.toml",
-       store="username:password@server/databasename",
+       store="postgresql://server:5432/databasename",
+       storage_options={"username": "user", "password": "secret"},
        data_object=["/path/to/data"],
-       backend="postgresql",
-       threads=8,
        batch_size=50,
     )
+
+The backend is derived from the URL scheme; ``backend=...`` is only needed
+when it can't be.
+
+**Named connections:**
+
+.. versionadded:: 2610.0.0
+
+Every function that takes a store also accepts a connection object, for
+example one defined in ``connections.toml`` (see :ref:`connections`):
+
+.. code-block:: python
+
+    from metadata_crawler.connections import read_configfiles
+
+    with read_configfiles() as config:
+        add("/path/to/drs_config.toml", store=config["prod"], data_set="cmip6-fs")
+        index("solr", config["prod"], server="localhost:8983")
 
 
 
@@ -144,10 +160,9 @@ other tasks:
    async def main():
        # crawl metadata from one or more data objects or datasets
        await async_add(
-           "/path/to/",
+           "/path/to/drs_config.toml",
            store="/tmp/catalog.yaml",
            data_set=["cmip6-fs", "obs-fs"],
-           threads=8,
            batch_size=50,
        )
 
@@ -159,7 +174,6 @@ other tasks:
            config_file="/path/to/drs_config.toml",
            url="mongodb://localhost:27017",
            database="metadata",
-           threads=8,
            batch_size=50,
        )
 
@@ -173,9 +187,9 @@ other tasks:
        # optionally remove data from the source of truth so it is not indexed
        #    anymore
        removed_items = await async_remove(
-        "mongodb://mongo:secret@localhost:27017/metadata",
-        facets=[("project", "CMIP6"), ("institute", "MPI-M")],
-        )
+           "mongodb://mongo:secret@localhost:27017/metadata",
+           facets=[("project", "CMIP6"), ("institute", "MPI-M")],
+       )
 
 
 
@@ -183,8 +197,8 @@ other tasks:
 
 .. versionchanged:: 2511.0.0
 
-   The catalogue argument ``store`` of the the :func:`async_add`
-   has been rearanged and is now a keyword argument:
+   The catalogue argument ``store`` of :func:`~metadata_crawler.async_add`
+   has been rearranged and is now a keyword argument:
    ``async_add("data.yaml", "drs-config.toml")`` becomes
    ``async_add("drs-config.toml", store="data.yaml")``. If the ``store`` keyword
    is omitted the output catalogue will be interpreted as config file.
@@ -196,7 +210,7 @@ other tasks:
     backends store catalogue metadata internally, so no YAML catalogue file
     is needed. The backend is detected automatically from the URL scheme.
 
-.. versionadded:: 2609.0.0
+.. versionadded:: 2610.0.0
 
     Search facets can be used to create subset of the metadata added to the source
     of truth (databases or intake catalogues). Sometimes it might be necessary to

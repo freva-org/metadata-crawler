@@ -283,8 +283,9 @@ class TestMetaDataGlance:
         self, store_cls, attr, url, db_storage_options
     ) -> None:
 
-        from metadata_crawler import glance_metadata
         from sqlalchemy.exc import NoSuchTableError, ProgrammingError
+
+        from metadata_crawler import glance_metadata
 
         with patch.object(store_cls, attr, "foo"):
             with pytest.raises((NoSuchTableError, ValueError, ProgrammingError)):

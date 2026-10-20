@@ -1,19 +1,28 @@
 """Test crawling s3 stores."""
 
+from pathlib import Path
 from typing import Any, Dict, List, Mapping, Tuple, cast
 
+import fsspec
+import intake
 import pytest
 from s3fs import S3FileSystem
 
+from metadata_crawler import add
 from metadata_crawler.api.storage_backend import MetadataType
 from metadata_crawler.backends.s3 import S3Path
 
 
-from pathlib import Path
+def assert_no_credentials(cat_file: str, storage_options: Dict[str, str]) -> None:
+    """The catalogue YAML must never contain the S3 credentials.
 
-import intake
-
-from metadata_crawler import add
+    Readers therefore pass them to every entry; the ``storage_options`` of
+    ``intake.open_catalog`` are only used to read the YAML itself.
+    """
+    with fsspec.open(cat_file, "rt", **storage_options) as stream:
+        text = stream.read()
+    assert storage_options["key"] not in text
+    assert storage_options["secret"] not in text
 
 
 class FakeS3Client:
@@ -127,8 +136,9 @@ def test_crawl_s3_obs(
         storage_options=storage_options,
         verbosity=5,
     )
+    assert_no_credentials(cat_file, storage_options)
     cat = intake.open_catalog(cat_file, storage_options=storage_options)
-    df = cat.latest.read()
+    df = cat.latest(storage_options=storage_options).read()
     assert len(df) > 0
     # path/uri must be stable, endpoint independent values -
     # not presigned/endpoint URLs that expire or hide the bucket.
@@ -156,8 +166,9 @@ def test_crawl_s3_dir(
         data_object=[inp_dir],
         storage_options=storage_options,
     )
+    assert_no_credentials(cat_file, storage_options)
     cat = intake.open_catalog(cat_file, storage_options=storage_options)
-    assert len(cat.latest.read()) > 0
+    assert len(cat.latest(storage_options=storage_options).read()) > 0
 
 
 def test_crawl_s3_single_file(
@@ -180,8 +191,9 @@ def test_crawl_s3_single_file(
         data_object=[inp_file],
         storage_options=storage_options,
     )
+    assert_no_credentials(cat_file, storage_options)
     cat = intake.open_catalog(cat_file, storage_options=storage_options)
-    assert len(cat.latest.read()) > 0
+    assert len(cat.latest(storage_options=storage_options).read()) > 0
 
 
 def test_crawl_s3_cmip6(drs_config_path: Path, storage_options: Dict[str, str]) -> None:
@@ -197,11 +209,12 @@ def test_crawl_s3_cmip6(drs_config_path: Path, storage_options: Dict[str, str]) 
         verbosity=5,
         storage_options=storage_options,
     )
+    assert_no_credentials(cat_file, storage_options)
     cat = intake.open_catalog(cat_file, storage_options=storage_options)
-    df = cat.latest.read()
+    df = cat.latest(storage_options=storage_options).read()
     assert len(df) > 0
     # There are versioned datasets so latest should not have all the entries
-    assert len(df) < len(cat.files.read())
+    assert len(df) < len(cat.files(storage_options=storage_options).read())
     assert df[0]["file"].startswith(endpoint_url)
     assert df[0]["uri"].startswith("s3://test/")
 

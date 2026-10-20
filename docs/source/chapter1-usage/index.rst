@@ -33,7 +33,7 @@ account (*latest* versions only).
    successive crawls.
 
 
-.. versionadded:: 2609.0.0
+.. versionadded:: 2610.0.0
     Search facets can be used to create subset of the metadata added to the source
     of truth (databases or intake catalogues). Sometimes it might be necessary to
     delete certain data from source of truth. To select datasets that should be
@@ -47,3 +47,4 @@ account (*latest* versions only).
 
    sec1-cli
    sec2-python
+   sec3-connections

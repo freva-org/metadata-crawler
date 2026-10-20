@@ -3,7 +3,7 @@
 import multiprocessing as mp
 from pathlib import Path
 from queue import Queue
-from tempfile import TemporaryDirectory, NamedTemporaryFile
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 from threading import Thread
 from typing import Any, Dict, Iterator
 
@@ -367,3 +367,46 @@ def mongo_store(schema: Dict[str, SchemaField]) -> MongoDB:
 def pg_store(schema: Dict[str, SchemaField]) -> PostgreSQL:
     """A read-mode PostgreSQL store; creating it does not connect."""
     return PostgreSQL("postgresql://localhost/metadata", IndexName(), schema, mode="r")
+
+
+# ---------------------------------------------------------------------------
+# Connection config: isolated config/secrets locations
+# ---------------------------------------------------------------------------
+
+_CONNECTION_ENV_VARS = (
+    "MDC_CONFIG_PATH",
+    "MDC_SECRETS_PATH",
+    "MDC_SECRETS_PASSPHRASE",
+    "MDC_AGE_IDENTITY",
+)
+
+
+@pytest.fixture()
+def config_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """An empty, private config directory; nothing touches the real home.
+
+    Returns the directory ``platformdirs`` resolves ``metadata-crawler`` to.
+    """
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    for name in _CONNECTION_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+    from platformdirs import user_config_dir
+
+    return Path(user_config_dir("metadata-crawler"))
+
+
+@pytest.fixture()
+def write_toml(tmp_path: Path) -> Any:
+    """Write a TOML file; secrets default to mode 0600."""
+
+    def _write(name: str, text: str, mode: int = 0o600) -> Path:
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+        path.chmod(mode)
+        return path
+
+    return _write

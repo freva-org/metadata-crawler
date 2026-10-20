@@ -6,6 +6,7 @@ import asyncio
 import re
 from datetime import datetime
 from functools import cached_property
+from types import TracebackType
 from typing import (
     TYPE_CHECKING,
     Annotated,
@@ -14,7 +15,9 @@ from typing import (
     List,
     Optional,
     Tuple,
+    Type,
     TypeAlias,
+    cast,
 )
 from urllib.parse import ParseResult, parse_qs, urlencode, urlparse, urlunparse
 
@@ -22,6 +25,7 @@ from pymongo import AsyncMongoClient, DeleteMany, UpdateOne
 
 from ..api.cli import cli_function, cli_parameter
 from ..api.index import BaseIndex
+from ..api.stores.mongodb import MongoConnection, _sanitise_uri
 from ..logger import logger
 
 if TYPE_CHECKING:
@@ -34,8 +38,25 @@ MetadataRecord: TypeAlias = Dict[str, Any]
 """A single metadata record: key -> value of heterogeneous types."""
 
 
+def _redact(uri: str) -> str:
+    """*uri* with the password masked, for logging."""
+    parsed = urlparse(uri)
+    if not parsed.password:
+        return uri
+    netloc = parsed.netloc.replace(f":{parsed.password}@", ":***@", 1)
+    return urlunparse(parsed._replace(netloc=netloc))
+
+
 class MongoIndex(BaseIndex):
-    """Ingest metadata into a mongoDB server."""
+    """Ingest metadata into a mongoDB server.
+
+    ``--url`` also accepts the name of a MongoDB connection from
+    ``connections.toml`` (the same kind of connection a MongoDB catalogue
+    uses). Its credentials and URI options are used, and its database unless
+    ``--database`` is given.
+    """
+
+    connection = MongoConnection
 
     def __post_init__(self) -> None:
         self._raw_uri = ""
@@ -76,7 +97,7 @@ class MongoIndex(BaseIndex):
     def client(self) -> AsyncMongoClient[MetadataRecord]:
         """Get the mongoDB client."""
         if self._client is None:
-            logger.debug("Creating async mongoDB client: %s", self.uri)
+            logger.debug("Creating async mongoDB client: %s", _redact(self.uri))
             self._client = AsyncMongoClient(self.uri)
         return self._client
 
@@ -103,9 +124,13 @@ class MongoIndex(BaseIndex):
             await self._bulk_upsert(chunk, db[col])
 
     async def _prep_db_connection(
-        self, database: str, url: str
+        self, database: Optional[str], url: Optional[str]
     ) -> "AsyncDatabase[MetadataRecord]":
-
+        """Connect to *url*/*database*; the target fills in what's missing."""
+        target = cast(Optional[MongoConnection], self.target)
+        if not url and target is not None:
+            url = _sanitise_uri(target.store_uri, **target.storage_options(reveal=True))
+        database = database or (target.database if target else None) or "metadata"
         await self.close()
         self._raw_uri = url or ""
         return self.client[database]
@@ -120,20 +145,26 @@ class MongoIndex(BaseIndex):
             Optional[str],
             cli_parameter(
                 "--url",
-                help="The <host>:<port> to the mngoDB server",
+                help=(
+                    "The URL of the mongoDB server, or the name of a mongodb "
+                    "connection in connections.toml"
+                ),
                 type=str,
+                connection=True,
             ),
         ] = None,
         database: Annotated[
-            str,
+            Optional[str],
             cli_parameter(
                 "--database",
                 "--db",
-                help="The DB name holding the metadata.",
+                help=(
+                    "The DB name holding the metadata (default: the database "
+                    "of the connection, else 'metadata')."
+                ),
                 type=str,
-                default="metadata",
             ),
-        ] = "metadata",
+        ] = None,
         index_suffix: Annotated[
             Optional[str],
             cli_parameter(
@@ -169,7 +200,7 @@ class MongoIndex(BaseIndex):
         ] = 1,
     ) -> None:
         """Add metadata to the mongoDB metadata server."""
-        db = await self._prep_db_connection(database, url or "")
+        db = await self._prep_db_connection(database, url)
         suffix = index_suffix or ""
         if rotate and not suffix:
             suffix = datetime.now().strftime("_%Y%m%dT%H%M%S%f")
@@ -213,10 +244,20 @@ class MongoIndex(BaseIndex):
             logger.info("Promoted %s -> %s", collection + suffix, collection)
 
     async def close(self) -> None:
-        """Close the mongoDB connection."""
-        self._client.close() if self._client is not None else None
+        """Close the mongoDB connection; the next use opens a new one."""
+        if self._client is not None:
+            await self._client.close()
+        self._client = None
         self._url = ""
         self._raw_uri = ""
+
+    async def __aexit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
+        await self.close()
 
     @cli_function(
         help="Remove metadata from the mongoDB metadata server.",
@@ -228,20 +269,26 @@ class MongoIndex(BaseIndex):
             Optional[str],
             cli_parameter(
                 "--url",
-                help="The <host>:<port> to the mngoDB server",
+                help=(
+                    "The URL of the mongoDB server, or the name of a mongodb "
+                    "connection in connections.toml"
+                ),
                 type=str,
+                connection=True,
             ),
         ] = None,
         database: Annotated[
-            str,
+            Optional[str],
             cli_parameter(
                 "--database",
                 "--db",
-                help="The DB name holding the metadata.",
+                help=(
+                    "The DB name holding the metadata (default: the database "
+                    "of the connection, else 'metadata')."
+                ),
                 type=str,
-                default="metadata",
             ),
-        ] = "metadata",
+        ] = None,
         facets: Annotated[
             Optional[List[Tuple[str, str]]],
             cli_parameter(
@@ -255,7 +302,7 @@ class MongoIndex(BaseIndex):
         ] = None,
     ) -> None:
         """Remove metadata from the mongoDB metadata server."""
-        db = await self._prep_db_connection(database, url or "")
+        db = await self._prep_db_connection(database, url)
         if not facets:
             logger.info("Nothing to delete")
             return

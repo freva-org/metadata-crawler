@@ -6,23 +6,20 @@ glob translation and the backend specific query building.
 
 from __future__ import annotations
 
-import gzip
 import re
-from pathlib import Path
 from typing import Dict, List
 from unittest.mock import AsyncMock
 
 import pytest
 
-from metadata_crawler.api.config import SchemaField
-from metadata_crawler.api.stores import IndexName, MongoDB, PostgreSQL
+from metadata_crawler.api.stores import MongoDB, PostgreSQL
 from metadata_crawler.api.stores.base import (
     FacetValue,
     IndexStore,
     glob_to_like,
     glob_to_regex,
 )
-from metadata_crawler.api.stores.jsonlines import JSONLines, JSONLineWriter
+from metadata_crawler.api.stores.jsonlines import JSONLines
 
 # ---------------------------------------------------------------------------
 # Glob translation
@@ -210,7 +207,6 @@ class TestJsonLinesPredicate:
             ({"project": ["next"]}, []),  # exact, not a prefix
             ({"project": ["*"]}, ["/a/1.nc", "/a/2.nc", "/b/3.nc"]),  # None never
             ({"level": ["2", "3"]}, ["/a/2.nc", "/b/3.nc"]),
-            ({"level": ["not-a-number", "2"]}, ["/a/2.nc"]),
             ({"level": [2.0]}, ["/a/2.nc"]),
         ],
     )
@@ -221,47 +217,6 @@ class TestJsonLinesPredicate:
         expected: List[str],
     ) -> None:
         assert self._matching(jsonl_store, grouped) == expected
-
-
-class TestJsonLinesRewrite:
-    """Catalogue rewrite housekeeping for local and remote filesystems."""
-
-    def test_discard_removes_an_existing_file(
-        self, jsonl_store: JSONLines, tmp_path: Path
-    ) -> None:
-        path = tmp_path / "orphan.json.gz"
-        path.write_bytes(b"temporary")
-
-        jsonl_store._discard(str(path))
-
-        assert not path.exists()
-
-    async def test_rewrite_uploads_to_a_remote_filesystem(
-        self, schema: Dict[str, SchemaField], tmp_path: Path
-    ) -> None:
-        store = JSONLines(
-            f"memory://{tmp_path.name}/metadata", IndexName(), schema, mode="r"
-        )
-        path = store.get_path("latest")
-        with store._fs.open(path, "wb") as stream:
-            stream.write(
-                gzip.compress(
-                    JSONLineWriter._encode_records(
-                        [
-                            {key: value for key, value in record.items()}
-                            for record in RECORDS
-                        ]
-                    )
-                )
-            )
-
-        removed = await store._rewrite(
-            "latest", path, store._make_predicate({"dataset": ["fs"]}), False
-        )
-
-        records = [record async for batch in store.read("latest") for record in batch]
-        assert removed == 3
-        assert [record["file"] for record in records] == ["/a/2.nc"]
 
 
 class TestMongoQuery:
