@@ -19,6 +19,7 @@ from typing import (
     List,
     Mapping,
     Optional,
+    Sequence,
     Tuple,
     Type,
     Union,
@@ -32,7 +33,7 @@ import pydantic
 
 from ..api.cli import cli_function, cli_parameter
 from ..api.index import BaseIndex
-from ..api.stores import IndexName
+from ..api.stores import Facet, IndexName
 from ..api.stores.base import BaseConnection, Credentials
 from ..logger import logger
 
@@ -553,6 +554,7 @@ class SolrIndex(BaseIndex):
         server: str,
         core: str,
         suffix: str,
+        facets: Sequence[Facet] = (),
     ) -> None:
         """Zero-copy-ish, backpressured, bounded-concurrency indexer.
 
@@ -563,7 +565,7 @@ class SolrIndex(BaseIndex):
         base_url = await self.solr_url(server, core + suffix)
         update_url = base_url.split("?", 1)[0]  # guard
         loop = asyncio.get_running_loop()
-        async for body in self.get_metadata(core):
+        async for body in self.get_metadata(core, *facets):
             enc = await loop.run_in_executor(self.cpu_pool, self._encode_payload, body)
             await self.producer_queue.put((update_url, enc))
         # NB: no commit here. Producers only enqueue; the bodies are POSTed
@@ -591,6 +593,17 @@ class SolrIndex(BaseIndex):
     async def index(
         self,
         *,
+        facets: Annotated[
+            Optional[List[Facet]],
+            cli_parameter(
+                "-f",
+                "--facets",
+                type=str,
+                nargs=2,
+                action="append",
+                help="Only index records matching these facet-value globs.",
+            ),
+        ] = None,
         server: Annotated[
             Optional[str],
             cli_parameter(
@@ -684,7 +697,9 @@ class SolrIndex(BaseIndex):
                     if await self._create_core(admin, core + suffix, configset):
                         created.append(core + suffix)
         try:
-            await self._index(server, suffix, http_workers, max_failed_batches)
+            await self._index(
+                server, suffix, http_workers, max_failed_batches, facets=facets or ()
+            )
             if rotate:
                 await self._rotate(suffix, min_docs)
         except BaseException:
@@ -699,6 +714,7 @@ class SolrIndex(BaseIndex):
         suffix: str,
         http_workers: int,
         max_failed_batches: int,
+        facets: Sequence[Facet] = (),
     ) -> None:
         """Stream every store into ``<core><suffix>`` and commit the result."""
         async with self._session(connector=self.connector) as session:
@@ -717,6 +733,7 @@ class SolrIndex(BaseIndex):
                             server,
                             core,
                             suffix=suffix,
+                            facets=facets,
                         )
                     )
             for _ in range(http_workers):

@@ -162,6 +162,31 @@ entries.
 The command works for databases and intake catalogues alike.
 
 
+Removing metadata from a source of truth
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. versionadded:: 2609.0.0
+
+    Search facets can be used to create subset of the metadata added to the source
+    of truth (databases or intake catalogues). Sometimes it might be necessary to
+    delete certain data from source of truth. To select datasets that should be
+    deleted from an intake catalogue or database the ``remove`` sub command can
+    be used.
+
+
+.. code-block:: console
+
+   export MDC_STORAGE_OPTIONS="username:metadata,password:secret"
+   mdc remove mongodb://localhost:27017 -f variable tas -f time_frequency 1hr -f project cmip6
+
+To select the subsets the ``--facet/-f`` flags can be used. One facet has to have
+two entries representing the facet *key* and the corresponding target *value*.
+Multiple facet *keys* (e.g variable, time_frequency ...) will be combined using
+logical OR while multiple facet values are combined with logical AND.
+
+The function works for databases and intake catalogues alike.
+
+
 Indexing
 ^^^^^^^^
 
