@@ -13,7 +13,10 @@ def _reload_with_cache_dir(tmp_path):
 
 
 def test_static_cmor_fastpath(monkeypatch, tmp_path):
-    lm = _reload_with_cache_dir(tmp_path)
+    cache_dir = tmp_path / "lookup"
+    lm = _reload_with_cache_dir(cache_dir)
+    assert lm._DC is None
+    assert not cache_dir.exists()
 
     class Fake(lm.LookupMixin):
         calls = 0
@@ -29,9 +32,8 @@ def test_static_cmor_fastpath(monkeypatch, tmp_path):
     out = f.lookup("/p/file.nc", "attr", "tier")
     assert out == "STATIC"
     assert Fake.calls == 0
-
-    # clean up cache
-    lm._DC.clear()
+    assert lm._DC is None
+    assert not cache_dir.exists()
 
 
 def test_diskcache_reuse_across_instances(monkeypatch, tmp_path):
@@ -63,4 +65,29 @@ def test_diskcache_reuse_across_instances(monkeypatch, tmp_path):
     assert Fake.calls == 1  # unchanged
 
     # clean up cache
-    lm._DC.clear()
+    lm._get_cache().clear()
+
+
+def test_lookup_uses_value_cached_by_another_process(monkeypatch, tmp_path):
+    """A concurrent writer can win the race between get() and add()."""
+    lm = _reload_with_cache_dir(tmp_path)
+    lm.LookupMixin.CMOR_STATIC = {}
+
+    class Cache:
+        def __init__(self):
+            self.get_calls = 0
+
+        def get(self, tree):
+            self.get_calls += 1
+            return None if self.get_calls == 1 else "cached value"
+
+        def add(self, tree, value):
+            return False
+
+    class Fake(lm.LookupMixin):
+        def read_attr(self, attribute: str, path: str, **k):
+            return "locally read value"
+
+    monkeypatch.setattr(lm, "_get_cache", lambda: Cache())
+
+    assert Fake().lookup("/p/file.nc", "units", "cmip6", "day", "tas") == "cached value"
