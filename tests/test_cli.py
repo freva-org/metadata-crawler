@@ -332,6 +332,7 @@ def test_plugin_index_and_delete_wiring(monkeypatch: pytest.MonkeyPatch) -> None
     kw = rec.calls[-1].kwargs
     assert kw["pattern"] == "ua_*.nc"
     assert kw["index_system"] == "dummy"
+    assert "backend" not in kw
 
 
 def test_run_routes_exceptions_to_exception_handler(

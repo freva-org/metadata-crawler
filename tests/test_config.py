@@ -14,7 +14,7 @@ import xarray as xr
 from jinja2 import Template
 
 from metadata_crawler import add, index
-from metadata_crawler.api.config import DRSConfig
+from metadata_crawler.api.config import BaseType, DRSConfig
 from metadata_crawler.api.stores import DateTimeDecoder, DateTimeEncoder
 from metadata_crawler.backends.posix import PosixPath
 from metadata_crawler.backends.s3 import S3Path
@@ -61,6 +61,20 @@ cmor_table = "obs"
 dir_parts = ["foo"]
 file_parts = ["foo", "bar"]
 """
+
+
+@pytest.mark.parametrize(
+    ("base_type", "duckdb_type"),
+    [
+        (BaseType.string, "VARCHAR"),
+        (BaseType.integer, "BIGINT"),
+        (BaseType.float, "DOUBLE"),
+        (BaseType.timestamp, "TIMESTAMP"),
+    ],
+)
+def test_base_type_duckdb(base_type: BaseType, duckdb_type: str) -> None:
+    """Every schema base type has the expected DuckDB representation."""
+    assert base_type.duckdb == duckdb_type
 
 
 def test_bad_config() -> None:

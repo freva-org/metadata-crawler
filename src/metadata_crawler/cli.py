@@ -671,15 +671,16 @@ class ArgParse:
                     action="append",
                     nargs=2,
                 )
-                parser.add_argument(
-                    "--backend",
-                    "--catalogue-backend",
-                    "-cb",
-                    type=str,
-                    help="Source type of the storage backend.",
-                    choices=CatalogueBackends.__members__.keys(),
-                    default=os.getenv("MDC_BACKEND"),
-                )
+                if name == "index":
+                    parser.add_argument(
+                        "--backend",
+                        "--catalogue-backend",
+                        "-cb",
+                        type=str,
+                        help="Source type of the storage backend.",
+                        choices=CatalogueBackends.__members__.keys(),
+                        default=os.getenv("MDC_BACKEND"),
+                    )
                 params = inspect.signature(method).parameters
                 annotations = get_type_hints(method, include_extras=True)
                 for param_name, param in params.items():

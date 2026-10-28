@@ -5,6 +5,7 @@ import fsspec
 import pytest
 
 from metadata_crawler import add
+from metadata_crawler.api.metadata_stores import CatalogueReader
 from metadata_crawler.api.stores import IndexStore  # adjust import
 
 
@@ -22,6 +23,24 @@ class TestBackendSelection:
                 backend="foo",
                 data_object=[data_dir / "observations"],
             )
+
+
+class TestCataloguePrefix:
+    """Prefixes resolve relative to the catalogue, not the current directory."""
+
+    @pytest.mark.parametrize(
+        ("prefix", "store_url", "expected"),
+        [
+            ("s3://bucket/data", "s3://bucket/catalogue.yml", "s3://bucket/data"),
+            (
+                "metadata",
+                "s3://bucket/catalogue.yml",
+                "s3://bucket/metadata",
+            ),
+        ],
+    )
+    def test_resolve_prefix(self, prefix: str, store_url: str, expected: str) -> None:
+        assert CatalogueReader._resolve_prefix(prefix, store_url) == expected
 
 
 class TestGetFs:

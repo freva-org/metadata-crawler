@@ -25,7 +25,7 @@ from ..logger import logger
 from ..utils import Console, IndexProgress
 from .config import SchemaField
 from .metadata_stores import CatalogueReader
-from .stores import IndexStore
+from .stores import Facet, IndexStore
 from .stores.base import BaseConnection
 
 
@@ -168,7 +168,7 @@ class BaseIndex:
         return names.pop() if names else ("", "")
 
     async def get_metadata(
-        self, index_name: str
+        self, index_name: str, *facets: Facet
     ) -> AsyncIterator[List[Dict[str, Any]]]:
         """Get the metadata of an index in batches.
 
@@ -179,13 +179,16 @@ class BaseIndex:
         ^^^^^^^^^^
         index_name:
             Name of the index that should be read.
+        facets:
+            Facet/value pairs used by metadata stores to subset records
+            before yielding them.
         """
         if not self._stores:
             return
         num_items = 0
         for store in self._stores:
             logger.debug("Reading index %s from %s", index_name, store)
-            async for batch in store.read(index_name):
+            async for batch in store.read(index_name, *facets):
                 yield batch
                 self.progress.update(len(batch))
                 num_items += len(batch)

@@ -271,6 +271,11 @@ class TestMongoIndexTarget:
             assert mongo._client is not None
         assert mongo._client is None
 
+    async def test_filtered_indexing_cannot_rotate(self) -> None:
+        mongo = MongoIndex()
+        with pytest.raises(ValueError, match="--facets and --rotate"):
+            await mongo.index(facets=[("dataset", "obs-s3")], rotate=True)
+
     @pytest.mark.parametrize(
         "uri, shown",
         [

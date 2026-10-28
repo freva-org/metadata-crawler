@@ -195,6 +195,32 @@ For MongoDB, supply the database URL and name:
        --database metadata
 
 
+Selective indexing
+^^^^^^^^^^^^^^^^^^
+
+.. versionadded:: 2610.0.0
+
+   Use ``-f/--facets`` to index only metadata matching one or more facet
+   values. Values for the same facet are combined with logical **OR**, while
+   different facets are combined with logical **AND**. String values may use
+   the ``*`` and ``?`` wildcards.
+
+For example, this indexes records whose dataset is ``obs-s3`` or ``cmip6-s3``
+and whose variable is ``tas``:
+
+.. code-block:: console
+
+   metadata-crawler solr index /tmp/catalog.yml \
+       --server localhost:8983 \
+       -f dataset obs-s3 -f dataset cmip6-s3 -f variable tas
+
+.. warning::
+
+   ``--facets`` cannot be combined with ``--rotate`` or ``--blue-green``.
+   Facet-filtered indexing writes only a subset of metadata; rotating that
+   subset into production would replace the complete live index.
+
+
 Blue/green index rotation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
