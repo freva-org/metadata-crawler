@@ -676,6 +676,8 @@ class SolrIndex(BaseIndex):
         ] = 0,
     ) -> None:
         """Add metadata to the apache solr metadata server."""
+        if rotate and facets:
+            raise ValueError("--facets and --rotate cannot be used together")
         server = self._server(server)
         suffix = index_suffix or ""
         if rotate and not suffix:

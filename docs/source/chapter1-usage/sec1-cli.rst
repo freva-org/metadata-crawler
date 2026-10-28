@@ -162,31 +162,6 @@ entries.
 The command works for databases and intake catalogues alike.
 
 
-Removing metadata from a source of truth
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. versionadded:: 2609.0.0
-
-    Search facets can be used to create subset of the metadata added to the source
-    of truth (databases or intake catalogues). Sometimes it might be necessary to
-    delete certain data from source of truth. To select datasets that should be
-    deleted from an intake catalogue or database the ``remove`` sub command can
-    be used.
-
-
-.. code-block:: console
-
-   export MDC_STORAGE_OPTIONS="username:metadata,password:secret"
-   mdc remove mongodb://localhost:27017 -f variable tas -f time_frequency 1hr -f project cmip6
-
-To select the subsets the ``--facet/-f`` flags can be used. One facet has to have
-two entries representing the facet *key* and the corresponding target *value*.
-Multiple facet *keys* (e.g variable, time_frequency ...) will be combined using
-logical OR while multiple facet values are combined with logical AND.
-
-The function works for databases and intake catalogues alike.
-
-
 Indexing
 ^^^^^^^^
 
@@ -218,6 +193,32 @@ For MongoDB, supply the database URL and name:
        /tmp/catalog.yml /tmp/catalog-2.yml \
        --url mongodb://localhost:27017 \
        --database metadata
+
+
+Selective indexing
+^^^^^^^^^^^^^^^^^^
+
+.. versionadded:: 2610.0.0
+
+   Use ``-f/--facets`` to index only metadata matching one or more facet
+   values. Values for the same facet are combined with logical **OR**, while
+   different facets are combined with logical **AND**. String values may use
+   the ``*`` and ``?`` wildcards.
+
+For example, this indexes records whose dataset is ``obs-s3`` or ``cmip6-s3``
+and whose variable is ``tas``:
+
+.. code-block:: console
+
+   metadata-crawler solr index /tmp/catalog.yml \
+       --server localhost:8983 \
+       -f dataset obs-s3 -f dataset cmip6-s3 -f variable tas
+
+.. warning::
+
+   ``--facets`` cannot be combined with ``--rotate`` or ``--blue-green``.
+   Facet-filtered indexing writes only a subset of metadata; rotating that
+   subset into production would replace the complete live index.
 
 
 Blue/green index rotation

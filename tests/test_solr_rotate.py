@@ -27,6 +27,7 @@ import pytest
 from fake_solr import SolrState, serve
 
 from metadata_crawler import delete, index
+from metadata_crawler.ingester.solr import SolrIndex
 
 CATALOGUES = ("fs-cat.yml", "s3-cat.yml", "swift-cat.yml")
 DATASETS = {"fs": "obs-fs", "s3": "obs-s3", "swift": "obs-swift"}
@@ -500,6 +501,11 @@ class TestWithoutRotation:
         index("solr", *CATALOGUES, server=fake_solr, batch_size=20)
         datasets = {doc.get("dataset") for doc in solr_state.documents("latest")}
         assert set(DATASETS.values()) <= datasets
+
+    async def test_filtered_indexing_cannot_rotate(self) -> None:
+        with pytest.raises(ValueError, match="--facets and --rotate"):
+            async with SolrIndex() as solr:
+                await solr.index(facets=[("dataset", "obs-fs")], rotate=True)
 
     def test_dataset_selection_limits_indexed_documents(
         self, fake_solr: str, solr_state: SolrState, in_mock_dir: Path
