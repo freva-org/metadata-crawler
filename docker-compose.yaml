@@ -4,6 +4,11 @@ services:
     networks:
       - freva-rest
     image: ghcr.io/freva-org/freva-solr:latest
+    environment:
+      API_SOLR_STARTUP_TIMEOUT: ${API_SOLR_STARTUP_TIMEOUT:-90}
+    volumes:
+      - ./dev-env/start-solr.sh:/usr/local/bin/start-solr:ro
+    command: ["/usr/local/bin/start-solr"]
     ports:
       - "8983:8983"
     hostname: solr

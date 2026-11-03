@@ -14,6 +14,7 @@ from typing import (
     Dict,
     List,
     Optional,
+    Sequence,
     Tuple,
     Type,
     TypeAlias,
@@ -25,6 +26,7 @@ from pymongo import AsyncMongoClient, DeleteMany, UpdateOne
 
 from ..api.cli import cli_function, cli_parameter
 from ..api.index import BaseIndex
+from ..api.stores import Facet
 from ..api.stores.mongodb import MongoConnection, _sanitise_uri
 from ..logger import logger
 
@@ -115,12 +117,16 @@ class MongoIndex(BaseIndex):
         await collection.bulk_write(ops, ordered=False)
 
     async def _index_collection(
-        self, db: "AsyncDatabase[MetadataRecord]", collection: str, suffix: str = ""
+        self,
+        db: "AsyncDatabase[MetadataRecord]",
+        collection: str,
+        suffix: str = "",
+        facets: Sequence[Facet] = (),
     ) -> None:
         """Index a collection."""
         col = collection + suffix
         await db[col].create_index(self.unique_index, unique=True)
-        async for chunk in self.get_metadata(collection):
+        async for chunk in self.get_metadata(collection, *facets):
             await self._bulk_upsert(chunk, db[col])
 
     async def _prep_db_connection(
@@ -141,6 +147,17 @@ class MongoIndex(BaseIndex):
     async def index(
         self,
         *,
+        facets: Annotated[
+            Optional[List[Facet]],
+            cli_parameter(
+                "-f",
+                "--facets",
+                type=str,
+                nargs=2,
+                action="append",
+                help="Only index records matching these facet-value globs.",
+            ),
+        ] = None,
         url: Annotated[
             Optional[str],
             cli_parameter(
@@ -200,13 +217,19 @@ class MongoIndex(BaseIndex):
         ] = 1,
     ) -> None:
         """Add metadata to the mongoDB metadata server."""
+        if rotate and facets:
+            raise ValueError("--facets and --rotate cannot be used together")
         db = await self._prep_db_connection(database, url)
         suffix = index_suffix or ""
         if rotate and not suffix:
             suffix = datetime.now().strftime("_%Y%m%dT%H%M%S%f")
         async with asyncio.TaskGroup() as tg:
             for collection in self.index_names:
-                tg.create_task(self._index_collection(db, collection, suffix=suffix))
+                tg.create_task(
+                    self._index_collection(
+                        db, collection, suffix=suffix, facets=facets or ()
+                    )
+                )
         if rotate:
             await self._rotate(db, suffix, min_docs)
 

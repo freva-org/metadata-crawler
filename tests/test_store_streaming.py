@@ -72,6 +72,15 @@ def _read(store: PostgreSQL, index_name: str) -> List[List[Dict[str, Any]]]:
     return asyncio.run(_main())
 
 
+def _read_filtered(
+    store: PostgreSQL, index_name: str, grouped: Dict[str, List[str]]
+) -> List[List[Dict[str, Any]]]:
+    async def _main() -> List[List[Dict[str, Any]]]:
+        return [batch async for batch in store._read(index_name, grouped=grouped)]
+
+    return asyncio.run(_main())
+
+
 class TestStreamingRead:
     def test_every_row_is_returned(self, store: PostgreSQL) -> None:
         batches = _read(store, "latest")
@@ -125,6 +134,23 @@ class TestStreamingRead:
         _read(store, "latest")
 
         assert sizes and set(sizes) == {store.batch_size}
+
+    def test_grouped_facets_are_applied_to_the_select(
+        self, store: PostgreSQL, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The store's predicate becomes a parameterised streaming query."""
+        seen: List[Dict[str, List[str]]] = []
+
+        def _where(grouped: Dict[str, List[str]]) -> tuple[str, Dict[str, str]]:
+            seen.append(grouped)
+            return "project = :project", {"project": "CMIP6"}
+
+        monkeypatch.setattr(store, "_build_where", _where)
+
+        batches = _read_filtered(store, "latest", {"project": ["CMIP6"]})
+
+        assert seen == [{"project": ["CMIP6"]}]
+        assert sum(len(batch) for batch in batches) == ROWS
 
     def test_missing_table_yields_nothing(self, store: PostgreSQL) -> None:
         assert _read(store, "does_not_exist") == []
