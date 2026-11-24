@@ -36,7 +36,7 @@ from .api.metadata_stores import (
     CatalogueReader,
 )
 from .api.stores import IndexName
-from .api.stores.base import BaseConnection, Facet
+from .api.stores.base import BaseConnection, Facet, StorageOptions
 from .data_collector import DataCollector
 from .logger import apply_verbosity, get_level_from_verbosity, logger
 from .types import StoresInput, StoresSequence
@@ -176,6 +176,7 @@ async def async_call(
     index_system: str,
     method: str,
     uris: Optional[Sequence[str]] = None,
+    source_storage_options: Optional[Sequence[StorageOptions]] = None,
     batch_size: int = 2500,
     verbosity: int = 0,
     log_suffix: Optional[str] = None,
@@ -218,6 +219,8 @@ async def async_call(
         # store, which both throws away all but the last store's data and
         # collides on the second rotation of a reused index suffix.
         extra: Dict[str, Any] = {"target": target} if target is not None else {}
+        if source_storage_options is not None:
+            extra["source_storage_options"] = source_storage_options
         async with cls(
             batch_size=batch_size,
             uri=list(uris or []) or None,
@@ -302,6 +305,7 @@ async def async_index(
         verbosity=verbosity,
         log_suffix=log_suffix,
         uris=[store.uri for store in stores],
+        source_storage_options=[store.storage_options for store in stores],
         num_objects=_get_num_of_indexed_objects(stores, backend=backend),
         **kwargs,
     )
