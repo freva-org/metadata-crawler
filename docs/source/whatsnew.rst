@@ -100,14 +100,14 @@ v2511.1.1
 
 v2511.1.0
 ---------
-* cli ``add`` call, python ``add`` and ``async_add`` support multiple config
-  input files. Glob pattern are also supported
-* The catalogue argument has been rearanged and is now a keyword
-  argument: of the python funcdions ``add("data.yaml", "drs-config.toml")``
+* The CLI ``add`` command and the Python ``add`` and ``async_add`` functions
+  support multiple configuration input files. Glob patterns are also supported.
+* The catalogue argument has been rearranged and is now a keyword argument in
+  the Python functions: ``add("data.yaml", "drs-config.toml")``
   and ``async_add("data.yaml", "drs-config.toml")`` become
   ``add("drs-config.toml", store="data.yaml")`` and
   ``async_add("drs-config.toml", store="data.yaml")``.
-* Add rust based posix backend for faster posix fs crawling.
+* Add a Rust-based POSIX backend for faster POSIX filesystem crawling.
 
 .. warning::
 

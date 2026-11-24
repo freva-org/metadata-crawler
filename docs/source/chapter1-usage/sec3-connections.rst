@@ -127,6 +127,11 @@ The remaining keys depend on the backend:
        PostgreSQL. Every other key becomes a MongoDB URI option, for example
        ``tls``, ``replicaSet`` or ``authSource`` (default ``admin``).
 
+``db_schema`` is a PostgreSQL namespace within the database, similar to a
+directory. metadata-crawler creates its ``latest``, ``files`` and
+``_catalogue`` tables there. A database may have several schemas, for example
+``metadata_crawler`` and ``metadata_crawler_staging``.
+
 Storing credentials
 ^^^^^^^^^^^^^^^^^^^
 
@@ -162,6 +167,41 @@ access, encrypted or not:
 
    chmod 600 ~/.config/metadata-crawler/secrets.toml
 
+Command-line overrides
+^^^^^^^^^^^^^^^^^^^^^^
+
+``-s``/``--storage-option`` supplies a one-off store setting. The following
+is equivalent to a PostgreSQL connection and credentials in the TOML files,
+but is **not recommended for real credentials**:
+
+.. code-block:: console
+
+   mdc solr index 'postgresql://db.example.org:5432/metadata' \
+       --server solr.example.org:8983 \
+       -s username EXAMPLE_POSTGRES_USER \
+       -s password EXAMPLE_POSTGRES_PASSWORD \
+       -s db_schema metadata_crawler \
+       -f dataset general-reanalysis
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 60
+
+   * - TOML setting
+     - Command-line equivalent
+   * - ``url = "postgresql://HOST:5432/metadata"``
+     - The positional store argument
+   * - ``username = "user"``
+     - ``-s username user``
+   * - ``password = "password"``
+     - ``-s password password``
+   * - ``db_schema = "metadata_crawler"``
+     - ``-s db_schema metadata_crawler``
+
+Use ``connections.toml`` and ``secrets.toml`` for normal operation: they keep
+passwords out of shell history and command lines, and ``secrets.toml`` can be
+encrypted with age.
+
 Encrypting the secrets
 ^^^^^^^^^^^^^^^^^^^^^^
 
@@ -182,6 +222,16 @@ delete the plaintext. Decryption needs the ``vault`` extra:
    # with a passphrase
    age -p -o secrets.toml.age secrets.toml
 
+.. important::
+
+   This installs Python support for reading encrypted files. It does **not**
+   install the ``age`` or ``age-keygen`` commands; install age separately with
+   your system or Conda package manager, for example:
+
+   .. code-block:: console
+
+      conda install -c conda-forge age
+
 If both ``secrets.toml.age`` and ``secrets.toml`` exist, the encrypted file
 is used; a plaintext copy next to it is most likely left over from editing.
 The file is decrypted in memory only, once per command (or per
@@ -201,11 +251,36 @@ again:
 
    age -d -i ~/.ssh/id_ed25519 secrets.toml.age > "$XDG_RUNTIME_DIR/secrets.toml"
 
+For a dedicated age key, set its path before running ``mdc``:
+
+.. code-block:: console
+
+   export MDC_AGE_IDENTITY="$HOME/.config/metadata-crawler/age-key.txt"
+
 .. note::
 
    Encrypting to a key that lies unprotected on the same machine protects
    copies of the file (backups, accidental commits), not access to your
    account.
+
+.. important::
+
+   ``age`` encrypts ``secrets.toml`` while it is stored on disk. It does **not**
+   configure encryption for database connections. If you want to establish a
+   secure connection, configure PostgreSQL TLS separately, preferably
+   with ``sslmode=verify-full`` and a trusted CA certificate.
+
+   Set TLS options in the PostgreSQL URL in ``connections.toml``:
+
+   .. code-block:: toml
+
+      [prod]
+      url = "postgresql://db.example.org:5432/metadata?sslmode=verify-full&sslrootcert=/path/to/postgres-ca.crt"
+      db_schema = "metadata_crawler"
+
+   ``sslmode=require`` encrypts the connection but does not verify the
+   server's identity. Use it only when a trusted CA certificate is not yet
+   available.
 
 Which settings win
 ^^^^^^^^^^^^^^^^^^

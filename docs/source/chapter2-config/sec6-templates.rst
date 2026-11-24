@@ -31,7 +31,7 @@ all canonical facets plus the current dataset entry.  See the
 
 .. note::
 
-   Quoting matters: Remember that when defning templates that should serve as
+   Quoting matters: Remember that when defining templates that should serve as
    code and have to be evaluated the quoting of variables becomes important:
 
    ``'{{ test }}'`` is not ``{{ test }}``.
