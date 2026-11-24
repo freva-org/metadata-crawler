@@ -118,6 +118,36 @@ class TestUriNormalisation:
         assert index._store is None
         assert _batches(index, "latest") == []
 
+    def test_each_uri_uses_its_own_storage_options(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen: List[Tuple[str, Dict[str, Any]]] = []
+
+        class Reader:
+            def __init__(
+                self, store_url: str, storage_options: Dict[str, Any], **_: Any
+            ) -> None:
+                seen.append((store_url, storage_options))
+                self.store = FakeStore(store_url, {})
+
+        monkeypatch.setattr("metadata_crawler.api.index.CatalogueReader", Reader)
+        Index(
+            uri=["postgresql://one/db", "postgresql://two/db"],
+            source_storage_options=[
+                {"username": "one", "password": "first"},
+                {"username": "two", "password": "second"},
+            ],
+        )
+
+        assert seen == [
+            ("postgresql://one/db", {"username": "one", "password": "first"}),
+            ("postgresql://two/db", {"username": "two", "password": "second"}),
+        ]
+
+    def test_source_storage_options_must_match_uris(self) -> None:
+        with pytest.raises(ValueError, match="source_storage_options"):
+            Index(uri=["store-a", "store-b"], source_storage_options=[{}])
+
 
 # --------------------------------------------------------------------------- #
 # chaining
@@ -246,6 +276,32 @@ class TestAsyncCallUsesOneIngester:
         asyncio.run(run_module.async_call("fake", "index", uris=["a", "b", "c"]))
 
         assert constructed[0]["uri"] == ["a", "b", "c"]
+
+    def test_async_index_forwards_each_store_options(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        sources = (
+            run_module._Uri("postgresql://one/db", {"password": "first"}),
+            run_module._Uri("postgresql://two/db", {"password": "second"}),
+        )
+        captured: Dict[str, Any] = {}
+
+        async def capture(*args: Any, **kwargs: Any) -> None:
+            captured.update(kwargs)
+
+        monkeypatch.setattr(run_module, "_norm_files", lambda *args, **kwargs: sources)
+        monkeypatch.setattr(
+            run_module, "_get_num_of_indexed_objects", lambda *_, **__: 0
+        )
+        monkeypatch.setattr(run_module, "async_call", capture)
+
+        asyncio.run(run_module.async_index("fake", "xces"))
+
+        assert captured["uris"] == ["postgresql://one/db", "postgresql://two/db"]
+        assert captured["source_storage_options"] == [
+            {"password": "first"},
+            {"password": "second"},
+        ]
 
     def test_no_uris_passes_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """``delete`` runs without any store; the ingester gets ``uri=None``."""
