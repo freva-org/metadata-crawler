@@ -19,6 +19,7 @@ import yaml
 from pymongo import MongoClient
 
 from metadata_crawler import delete, index
+from metadata_crawler.cli import cli
 
 
 # --------------------------------------------------------------------------- #
@@ -249,6 +250,29 @@ def bg_mongo_db(mongo_server: Dict[str, str]) -> Iterator[Dict[str, str]]:
 # --------------------------------------------------------------------------- #
 class TestIngestSolr:
     """Ingest metadata from every backend into Solr."""
+
+    @pytest.mark.parametrize("db_cleanup", ["postgresql"], indirect=True)
+    def test_cli_named_postgres_credentials(
+        self, db_cleanup: str, db_storage_options: Dict[str, str],
+        solr_server: str, tmp_path: Path,
+    ) -> None:
+        """A named source must authenticate when the indexer reads its data."""
+        config = tmp_path / "connections.toml"
+        secrets = tmp_path / "secrets.toml"
+        config.write_text(
+            '[postgres_catalogue]\nurl = "postgresql://localhost:5432/'
+            + db_storage_options["database"] + '"\n'
+            + 'db_schema = "' + db_storage_options["db_schema"] + '"\n'
+        )
+        secrets.write_text(
+            '[postgres_catalogue]\nusername = "' + db_storage_options["username"] + '"\n'
+            + 'password = "' + db_storage_options["password"] + '"\n'
+        )
+        secrets.chmod(0o600)
+        with mock.patch.dict(os.environ, {"MDC_INTERACTIVE": "1"}, clear=False):
+            cli(["solr", "index", "postgres_catalogue", "--mdc-config", str(config),
+                 "--mdc-secrets", str(secrets), "--server", solr_server])
+        assert _solr_num_q(solr_server, "latest") > 0
 
     @pytest.mark.parametrize(
         "backend,db_cleanup",
