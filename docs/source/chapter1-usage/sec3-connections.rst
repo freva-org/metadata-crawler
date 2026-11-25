@@ -263,25 +263,6 @@ For a dedicated age key, set its path before running ``mdc``:
    copies of the file (backups, accidental commits), not access to your
    account.
 
-.. important::
-
-   ``age`` encrypts ``secrets.toml`` while it is stored on disk. It does **not**
-   configure encryption for database connections. If you want to establish a
-   secure connection, configure PostgreSQL TLS separately, preferably
-   with ``sslmode=verify-full`` and a trusted CA certificate.
-
-   Set TLS options in the PostgreSQL URL in ``connections.toml``:
-
-   .. code-block:: toml
-
-      [prod]
-      url = "postgresql://db.example.org:5432/metadata?sslmode=verify-full&sslrootcert=/path/to/postgres-ca.crt"
-      db_schema = "metadata_crawler"
-
-   ``sslmode=require`` encrypts the connection but does not verify the
-   server's identity. Use it only when a trusted CA certificate is not yet
-   available.
-
 Which settings win
 ^^^^^^^^^^^^^^^^^^
 
