@@ -26,7 +26,7 @@ from ..utils import Console, IndexProgress
 from .config import SchemaField
 from .metadata_stores import CatalogueReader
 from .stores import Facet, IndexStore
-from .stores.base import BaseConnection
+from .stores.base import BaseConnection, StorageOptions
 
 
 class BaseIndex:
@@ -82,6 +82,7 @@ class BaseIndex:
         uri: Optional[Union[str, Path, Sequence[Union[str, Path]]]] = None,
         batch_size: int = 2500,
         storage_options: Optional[Dict[str, Any]] = None,
+        source_storage_options: Optional[Sequence[StorageOptions]] = None,
         progress: Optional[IndexProgress] = None,
         target: Optional[BaseConnection] = None,
         **kwargs: Any,
@@ -89,11 +90,23 @@ class BaseIndex:
         self.target = self._check_target(target)
         self._stores: List[IndexStore] = []
         self.progress = progress or IndexProgress(total=-1)
-        for _uri in IndexStore.normalise_uris(uri):
+        uris = IndexStore.normalise_uris(uri)
+        if (
+            source_storage_options is not None
+            and len(source_storage_options) != len(uris)
+        ):
+            raise ValueError(
+                "source_storage_options must match the number of store URIs"
+            )
+        for num, _uri in enumerate(uris):
             _reader = CatalogueReader(
                 store_url=_uri,
                 batch_size=batch_size,
-                storage_options=storage_options,
+                storage_options=(
+                    source_storage_options[num]
+                    if source_storage_options is not None
+                    else storage_options
+                ),
             )
             self._stores.append(_reader.store)
         self.__post_init__()

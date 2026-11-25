@@ -381,9 +381,13 @@ _CONNECTION_ENV_VARS = (
 )
 
 
-@pytest.fixture()
+@pytest.fixture(autouse=True)
 def config_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """An empty, private config directory; nothing touches the real home.
+    """Isolate every test from the developer's real connection configuration.
+
+    This autouse fixture gives every test an empty, private config directory,
+    so no test can read or act on a developer's actual metadata-crawler
+    configuration (for example, ``~/.config/metadata-crawler``).
 
     Returns the directory ``platformdirs`` resolves ``metadata-crawler`` to.
     """
